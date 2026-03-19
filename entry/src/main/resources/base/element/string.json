@@ -1,0 +1,312 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "HarmonyDO - Linux.do 鸿蒙原生应用"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "HarmonyDO 鸿蒙原生应用"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "HarmonyDO"
+    },
+    {
+      "name": "app_name",
+      "value": "HarmonyDO"
+    },
+    {
+      "name": "tab_home",
+      "value": "首页"
+    },
+    {
+      "name": "tab_notifications",
+      "value": "通知"
+    },
+    {
+      "name": "tab_profile",
+      "value": "我的"
+    },
+    {
+      "name": "all_categories",
+      "value": "全部"
+    },
+    {
+      "name": "latest",
+      "value": "最新"
+    },
+    {
+      "name": "top",
+      "value": "热门"
+    },
+    {
+      "name": "search_hint",
+      "value": "搜索话题..."
+    },
+    {
+      "name": "search_hint_advanced",
+      "value": "搜索 @用户 #分类 tags:标签"
+    },
+    {
+      "name": "search_empty_hint",
+      "value": "输入关键词搜索"
+    },
+    {
+      "name": "recent_searches",
+      "value": "最近搜索"
+    },
+    {
+      "name": "clear",
+      "value": "清空"
+    },
+    {
+      "name": "clear_all",
+      "value": "清除全部"
+    },
+    {
+      "name": "advanced_search",
+      "value": "高级搜索"
+    },
+    {
+      "name": "reset",
+      "value": "重置"
+    },
+    {
+      "name": "filter_status",
+      "value": "状态"
+    },
+    {
+      "name": "filter_time_range",
+      "value": "时间范围"
+    },
+    {
+      "name": "filter_category",
+      "value": "分类"
+    },
+    {
+      "name": "filter_tags",
+      "value": "标签"
+    },
+    {
+      "name": "filter_all",
+      "value": "全部"
+    },
+    {
+      "name": "filter_no_limit",
+      "value": "不限"
+    },
+    {
+      "name": "filter_last_week",
+      "value": "最近一周"
+    },
+    {
+      "name": "filter_last_month",
+      "value": "最近一月"
+    },
+    {
+      "name": "filter_last_year",
+      "value": "最近一年"
+    },
+    {
+      "name": "filter_custom",
+      "value": "自定义"
+    },
+    {
+      "name": "search_more",
+      "value": "搜索更多"
+    },
+    {
+      "name": "selected_tags",
+      "value": "已选标签"
+    },
+    {
+      "name": "hot_tags",
+      "value": "热门标签"
+    },
+    {
+      "name": "apply_filter",
+      "value": "应用筛选"
+    },
+    {
+      "name": "search_more_tags",
+      "value": "搜索更多标签"
+    },
+    {
+      "name": "done",
+      "value": "完成"
+    },
+    {
+      "name": "custom_date_range",
+      "value": "自定义日期范围"
+    },
+    {
+      "name": "after_date",
+      "value": "之后"
+    },
+    {
+      "name": "before_date",
+      "value": "之前"
+    },
+    {
+      "name": "loading",
+      "value": "加载中..."
+    },
+    {
+      "name": "load_failed",
+      "value": "加载失败"
+    },
+    {
+      "name": "retry",
+      "value": "重试"
+    },
+    {
+      "name": "no_more_data",
+      "value": "没有更多了"
+    },
+    {
+      "name": "pull_to_refresh",
+      "value": "下拉刷新"
+    },
+    {
+      "name": "refreshing",
+      "value": "刷新中..."
+    },
+    {
+      "name": "replies",
+      "value": "回复"
+    },
+    {
+      "name": "views",
+      "value": "浏览"
+    },
+    {
+      "name": "likes",
+      "value": "点赞"
+    },
+    {
+      "name": "pinned",
+      "value": "置顶"
+    },
+    {
+      "name": "closed",
+      "value": "已关闭"
+    },
+    {
+      "name": "solved",
+      "value": "已解决"
+    },
+    {
+      "name": "topic_solution_banner_title",
+      "value": "此话题已解决"
+    },
+    {
+      "name": "topic_solution_banner_action",
+      "value": "查看最佳答案"
+    },
+    {
+      "name": "not_logged_in",
+      "value": "未登录"
+    },
+    {
+      "name": "login",
+      "value": "登录"
+    },
+    {
+      "name": "logout",
+      "value": "退出登录"
+    },
+    {
+      "name": "settings",
+      "value": "设置"
+    },
+    {
+      "name": "bookmarks",
+      "value": "书签"
+    },
+    {
+      "name": "drafts",
+      "value": "草稿"
+    },
+    {
+      "name": "my_topics",
+      "value": "我的话题"
+    },
+    {
+      "name": "badges",
+      "value": "徽章"
+    },
+    {
+      "name": "days_visited",
+      "value": "访问天数"
+    },
+    {
+      "name": "posts_read",
+      "value": "阅读帖子"
+    },
+    {
+      "name": "likes_received",
+      "value": "获得点赞"
+    },
+    {
+      "name": "posts_created",
+      "value": "发表回复"
+    },
+    {
+      "name": "appearance",
+      "value": "外观"
+    },
+    {
+      "name": "network_settings",
+      "value": "网络"
+    },
+    {
+      "name": "feature_settings",
+      "value": "功能"
+    },
+    {
+      "name": "login_required",
+      "value": "请先登录"
+    },
+    {
+      "name": "share_failed",
+      "value": "分享失败"
+    },
+    {
+      "name": "open_browser_failed",
+      "value": "无法打开浏览器"
+    },
+    {
+      "name": "copied_link",
+      "value": "已复制链接"
+    },
+    {
+      "name": "jump_to_post",
+      "value": "跳转楼层"
+    },
+    {
+      "name": "load_previous",
+      "value": "加载更早"
+    },
+    {
+      "name": "load_more",
+      "value": "加载更多"
+    },
+    {
+      "name": "empty_data",
+      "value": "暂无数据"
+    },
+    {
+      "name": "load_failed_tap_retry",
+      "value": "加载失败，点击重试"
+    },
+    {
+      "name": "topic_owner_unavailable",
+      "value": "无法获取题主"
+    },
+    {
+      "name": "permission_write_imagevideo_reason",
+      "value": "用于将生成的分享图片保存到系统相册"
+    }
+  ]
+}

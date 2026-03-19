@@ -1,0 +1,220 @@
+{
+  "color": [
+    {
+      "name": "start_window_background",
+      "value": "#FFFFFF"
+    },
+    {
+      "name": "primary",
+      "value": "#0088CC"
+    },
+    {
+      "name": "primary_dark",
+      "value": "#006699"
+    },
+    {
+      "name": "accent",
+      "value": "#E45735"
+    },
+    {
+      "name": "background",
+      "value": "#F5F5F5"
+    },
+    {
+      "name": "surface",
+      "value": "#FFFFFF"
+    },
+    {
+      "name": "on_surface",
+      "value": "#1A1A1A"
+    },
+    {
+      "name": "on_surface_secondary",
+      "value": "#666666"
+    },
+    {
+      "name": "on_surface_tertiary",
+      "value": "#999999"
+    },
+    {
+      "name": "divider",
+      "value": "#E8E8E8"
+    },
+    {
+      "name": "card_background",
+      "value": "#FFFFFF"
+    },
+    {
+      "name": "error",
+      "value": "#D32F2F"
+    },
+    {
+      "name": "success",
+      "value": "#388E3C"
+    },
+    {
+      "name": "solution_banner_background",
+      "value": "#EDF7EE"
+    },
+    {
+      "name": "solution_banner_border",
+      "value": "#B7DDBA"
+    },
+    {
+      "name": "solution_banner_icon_background",
+      "value": "#FFFFFF"
+    },
+    {
+      "name": "solution_banner_chip_background",
+      "value": "#DCEFDE"
+    },
+    {
+      "name": "warning",
+      "value": "#F57C00"
+    },
+    {
+      "name": "pinned_color",
+      "value": "#1E88E5"
+    },
+    {
+      "name": "closed_color",
+      "value": "#757575"
+    },
+    {
+      "name": "like_color",
+      "value": "#E45735"
+    },
+    {
+      "name": "tab_bar_background",
+      "value": "#FFFFFF"
+    },
+    {
+      "name": "tab_bar_indicator",
+      "value": "#0088CC"
+    },
+    {
+      "name": "tab_selected_pill",
+      "value": "#1A3366CC"
+    },
+    {
+      "name": "tab_glass_mask",
+      "value": "#CCFFFFFF"
+    },
+    {
+      "name": "tab_glass_tint",
+      "value": "#66FFFFFF"
+    },
+    {
+      "name": "tab_glass_stroke",
+      "value": "#33FFFFFF"
+    },
+    {
+      "name": "tab_glass_shadow",
+      "value": "#22000000"
+    },
+    {
+      "name": "tab_glass_divider",
+      "value": "#1F000000"
+    },
+    {
+      "name": "search_bar_background",
+      "value": "#EEEEEE"
+    },
+    {
+      "name": "nav_bar_background",
+      "value": "#FFFFFF"
+    },
+    {
+      "name": "badge_background",
+      "value": "#E45735"
+    },
+    {
+      "name": "badge_text",
+      "value": "#FFFFFF"
+    },
+    {
+      "name": "badge_gold",
+      "value": "#D4AF37"
+    },
+    {
+      "name": "badge_silver",
+      "value": "#9E9E9E"
+    },
+    {
+      "name": "badge_bronze",
+      "value": "#CD7F32"
+    },
+    {
+      "name": "image_preview_background",
+      "value": "#000000"
+    },
+    {
+      "name": "image_preview_top_bar",
+      "value": "#66000000"
+    },
+    {
+      "name": "skeleton_base",
+      "value": "#E0E0E0"
+    },
+    {
+      "name": "skeleton_highlight",
+      "value": "#F0F0F0"
+    },
+    {
+      "name": "panel_background",
+      "value": "#F0F0F5"
+    },
+    {
+      "name": "surface_variant",
+      "value": "#F5F5F5"
+    },
+    {
+      "name": "divider_light",
+      "value": "#EEEEEE"
+    },
+    {
+      "name": "search_background",
+      "value": "#F2F2F2"
+    },
+    {
+      "name": "tag_background",
+      "value": "#F0F0F0"
+    },
+    {
+      "name": "heat_high",
+      "value": "#FE7A15"
+    },
+    {
+      "name": "heat_med",
+      "value": "#CF7721"
+    },
+    {
+      "name": "heat_low",
+      "value": "#9B764F"
+    },
+    {
+      "name": "shadow_light",
+      "value": "#0A000000"
+    },
+    {
+      "name": "icon_secondary",
+      "value": "#999999"
+    },
+    {
+      "name": "badge_background_light",
+      "value": "#EBF4FA"
+    },
+    {
+      "name": "tag_purple",
+      "value": "#BD93F9"
+    },
+    {
+      "name": "seed_user_gradient_start",
+      "value": "#B85CFF"
+    },
+    {
+      "name": "seed_user_gradient_end",
+      "value": "#2ED573"
+    }
+  ]
+}

@@ -1,0 +1,128 @@
+{
+  "float": [
+    {
+      "name": "page_text_font_size",
+      "value": "50fp"
+    },
+    {
+      "name": "text_size_title",
+      "value": "20fp"
+    },
+    {
+      "name": "text_size_large",
+      "value": "18fp"
+    },
+    {
+      "name": "text_size_medium",
+      "value": "16fp"
+    },
+    {
+      "name": "text_size_normal",
+      "value": "14fp"
+    },
+    {
+      "name": "text_size_small",
+      "value": "12fp"
+    },
+    {
+      "name": "text_size_tiny",
+      "value": "10fp"
+    },
+    {
+      "name": "padding_large",
+      "value": "16vp"
+    },
+    {
+      "name": "padding_medium",
+      "value": "12vp"
+    },
+    {
+      "name": "padding_small",
+      "value": "8vp"
+    },
+    {
+      "name": "padding_tiny",
+      "value": "4vp"
+    },
+    {
+      "name": "border_radius_large",
+      "value": "16vp"
+    },
+    {
+      "name": "border_radius_medium",
+      "value": "12vp"
+    },
+    {
+      "name": "border_radius_small",
+      "value": "8vp"
+    },
+    {
+      "name": "border_radius_tiny",
+      "value": "4vp"
+    },
+    {
+      "name": "avatar_size_large",
+      "value": "48vp"
+    },
+    {
+      "name": "avatar_size_medium",
+      "value": "36vp"
+    },
+    {
+      "name": "avatar_size_small",
+      "value": "24vp"
+    },
+    {
+      "name": "icon_size_large",
+      "value": "28vp"
+    },
+    {
+      "name": "icon_size_medium",
+      "value": "24vp"
+    },
+    {
+      "name": "icon_size_small",
+      "value": "20vp"
+    },
+    {
+      "name": "card_elevation",
+      "value": "2vp"
+    },
+    {
+      "name": "tab_bar_height",
+      "value": "56vp"
+    },
+    {
+      "name": "bottom_bar_height",
+      "value": "56vp"
+    },
+    {
+      "name": "search_bar_height",
+      "value": "40vp"
+    },
+    {
+      "name": "avatar_size_topic",
+      "value": "34vp"
+    },
+    {
+      "name": "avatar_radius_topic",
+      "value": "17vp"
+    },
+    {
+      "name": "font_small",
+      "value": "11fp"
+    },
+    {
+      "name": "font_micro",
+      "value": "10fp"
+    },
+    {
+      "name": "tag_radius",
+      "value": "4vp"
+    },
+    {
+      "name": "card_radius",
+      "value": "10vp"
+    }
+  ]
+}
