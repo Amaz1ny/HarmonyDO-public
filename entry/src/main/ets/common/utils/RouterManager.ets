@@ -20,6 +20,12 @@ export class RouteConstants {
   static readonly PAGE_IMAGE_PREVIEW: string = 'ImagePreview';
   static readonly PAGE_WEB_VIEW: string = 'WebView';
   static readonly PAGE_CF_CHALLENGE: string = 'CfChallenge';
+  static readonly PAGE_TRUST_REQUIREMENTS: string = 'TrustRequirements';
+  static readonly PAGE_BROWSING_HISTORY: string = 'BrowsingHistory';
+  static readonly PAGE_METAVERSE: string = 'Metaverse';
+  static readonly PAGE_APPEARANCE: string = 'Appearance';
+  static readonly PAGE_PREFERENCES: string = 'Preferences';
+  static readonly PAGE_ABOUT: string = 'About';
 }
 
 /**
@@ -272,5 +278,29 @@ export class RouterManager {
       RouteConstants.PAGE_WEB_VIEW,
       new WebViewRouteParam(url, title) as Object
     );
+  }
+
+  static pushTrustRequirements(): void {
+    RouterManager.pushPath(RouteConstants.PAGE_TRUST_REQUIREMENTS);
+  }
+
+  static pushBrowsingHistory(): void {
+    RouterManager.pushPath(RouteConstants.PAGE_BROWSING_HISTORY);
+  }
+
+  static pushMetaverse(): void {
+    RouterManager.pushPath(RouteConstants.PAGE_METAVERSE);
+  }
+
+  static pushAppearance(): void {
+    RouterManager.pushPath(RouteConstants.PAGE_APPEARANCE);
+  }
+
+  static pushPreferences(): void {
+    RouterManager.pushPath(RouteConstants.PAGE_PREFERENCES);
+  }
+
+  static pushAbout(): void {
+    RouterManager.pushPath(RouteConstants.PAGE_ABOUT);
   }
 }

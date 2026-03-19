@@ -2,19 +2,19 @@
   "string": [
     {
       "name": "module_desc",
-      "value": "HarmonyDO - Linux.do 鸿蒙原生应用"
+      "value": "HarmonyDo - Linux.do 鸿蒙原生应用"
     },
     {
       "name": "EntryAbility_desc",
-      "value": "HarmonyDO 鸿蒙原生应用"
+      "value": "HarmonyDo 鸿蒙原生应用"
     },
     {
       "name": "EntryAbility_label",
-      "value": "HarmonyDO"
+      "value": "HarmonyDo"
     },
     {
       "name": "app_name",
-      "value": "HarmonyDO"
+      "value": "HarmonyDo"
     },
     {
       "name": "tab_home",

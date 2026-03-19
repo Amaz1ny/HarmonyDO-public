@@ -14,6 +14,7 @@ import { SearchFilterPanel } from '../components/search/SearchFilterPanel';
 import { DEFAULT_AVAILABLE_TAGS, TagSelectionSheet } from '../components/TagControls';
 import { HdsNavDestination } from '@kit.UIDesignKit';
 import { WindowManager } from '../../common/utils/WindowManager';
+import { AppSettingsService } from '../../services/storage/AppSettingsService';
 
 const TAG: string = 'SearchPage';
 const TOP_BAR_HEIGHT: number = 56;
@@ -758,7 +759,7 @@ export struct SearchPage {
           Circle()
             .width(8)
             .height(8)
-            .fill($r('app.color.primary'))
+            .fill(AppSettingsService.getInstance().getPrimaryColor())
             .position({ x: 28, y: 12 })
         }
       }
@@ -958,7 +959,7 @@ export struct SearchPage {
         } else {
           Text($r('app.string.clear'))
             .fontSize(13)
-            .fontColor($r('app.color.primary'))
+            .fontColor(AppSettingsService.getInstance().getPrimaryColor())
             .onClick(() => {
               this.clearRecentSearches();
             })
@@ -1094,7 +1095,7 @@ export struct SearchPage {
 
         Text($r('app.string.done'))
           .fontSize(14)
-          .fontColor($r('app.color.primary'))
+          .fontColor(AppSettingsService.getInstance().getPrimaryColor())
           .onClick(() => {
             this.applyDateRangeFromText();
           })

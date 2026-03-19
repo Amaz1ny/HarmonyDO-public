@@ -1,6 +1,7 @@
 import { ApiClient, PostEnqueuedError } from '../../services/network/ApiClient';
 import { Draft, DraftData } from '../../models/Draft';
 import { Post } from '../../models/Post';
+import { AppSettingsService } from '../../services/storage/AppSettingsService';
 import { WindowManager } from '../../common/utils/WindowManager';
 import { LoadingSpinner } from './LoadingSpinner';
 import { SmartAvatar } from './SmartAvatar';
@@ -98,7 +99,11 @@ export struct ReplyComposerSheet {
   private async persistDraft(): Promise<void> {
     if (this.topicId <= 0 || this.submitted) return;
     const apiClient: ApiClient = ApiClient.getInstance();
-    const trimmed: string = this.content.trim();
+    const spacedContent: string = AppSettingsService.getInstance().applyEditorSpacing(this.content);
+    if (spacedContent !== this.content) {
+      this.content = spacedContent;
+    }
+    const trimmed: string = spacedContent.trim();
     if (trimmed.length === 0) {
       await apiClient.deleteDraft(this.getDraftKey(), this.draftSequence);
       this.draftSequence = 0;
@@ -106,7 +111,7 @@ export struct ReplyComposerSheet {
     }
 
     const data: DraftData = new DraftData();
-    data.reply = this.content;
+    data.reply = spacedContent;
     data.replyToPostNumber = this.replyToPostNumber > 0 ? this.replyToPostNumber : null;
     data.action = 'reply';
     data.archetypeId = 'regular';
@@ -126,7 +131,11 @@ export struct ReplyComposerSheet {
   }
 
   private async submit(): Promise<void> {
-    const trimmed: string = this.content.trim();
+    const spacedContent: string = AppSettingsService.getInstance().applyEditorSpacing(this.content);
+    if (spacedContent !== this.content) {
+      this.content = spacedContent;
+    }
+    const trimmed: string = spacedContent.trim();
     if (trimmed.length === 0) {
       this.errorMessage = '请输入内容';
       return;
@@ -136,7 +145,7 @@ export struct ReplyComposerSheet {
     this.errorMessage = '';
     try {
       const apiClient: ApiClient = ApiClient.getInstance();
-      const post: Post = await apiClient.createReply(this.topicId, this.content, this.replyToPostNumber);
+      const post: Post = await apiClient.createReply(this.topicId, spacedContent, this.replyToPostNumber);
       this.submitted = true;
       await apiClient.deleteDraft(this.getDraftKey(), this.draftSequence);
       this.onSubmitted(post);

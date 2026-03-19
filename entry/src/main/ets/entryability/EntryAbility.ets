@@ -2,6 +2,7 @@ import { AbilityConstant, ConfigurationConstant, UIAbility, Want, common } from 
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { window } from '@kit.ArkUI';
 import { PreferencesUtil } from '../services/storage/PreferencesUtil';
+import { AppSettingsService } from '../services/storage/AppSettingsService';
 import { WindowManager } from '../common/utils/WindowManager';
 import { CfClearanceRefreshService } from '../services/network/CfClearanceRefreshService';
 import { AppContext } from '../common/utils/AppContext';
@@ -15,17 +16,23 @@ interface WindowStageLike {
 
 export default class EntryAbility extends UIAbility {
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
-    try {
-      this.context.getApplicationContext().setColorMode(ConfigurationConstant.ColorMode.COLOR_MODE_NOT_SET);
-    } catch (err) {
-      hilog.error(DOMAIN, 'testTag', 'Failed to set colorMode. Cause: %{public}s', JSON.stringify(err));
-    }
     hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onCreate');
     PreferencesUtil.init(this.context);
     try {
       AppContext.setUIAbilityContext(this.context as common.UIAbilityContext);
     } catch (_) {
     }
+    AppSettingsService.getInstance().ensureInit()
+      .then(() => {
+        AppSettingsService.getInstance().applyThemeModeToApplication();
+      })
+      .catch((err: Object) => {
+        hilog.error(DOMAIN, 'testTag', 'Init app settings failed. Cause: %{public}s', JSON.stringify(err));
+        try {
+          this.context.getApplicationContext().setColorMode(ConfigurationConstant.ColorMode.COLOR_MODE_NOT_SET);
+        } catch (_) {
+        }
+      });
   }
 
   onDestroy(): void {
@@ -83,6 +90,10 @@ export default class EntryAbility extends UIAbility {
         // 全局开启沉浸式：内容延伸到状态栏下（全面屏），并设置默认系统栏样式（浅色背景+深色图标）
         WindowManager.setWindowLayoutFullScreen(true);
         WindowManager.setSystemBarStyle('#00000000', '#FFFFFF', '#000000', '#000000');
+        AppSettingsService.getInstance().ensureInit().then(() => {
+          WindowManager.applyPortraitLock(AppSettingsService.getInstance().getFeatureSettings().portraitLock);
+        }).catch(() => {
+        });
         return;
       } catch (err) {
         hilog.error(DOMAIN, 'testTag', 'Init main window sync failed. Cause: %{public}s', JSON.stringify(err));
@@ -97,6 +108,10 @@ export default class EntryAbility extends UIAbility {
           // 全局开启沉浸式：内容延伸到状态栏下（全面屏），并设置默认系统栏样式（浅色背景+深色图标）
           WindowManager.setWindowLayoutFullScreen(true);
           WindowManager.setSystemBarStyle('#00000000', '#FFFFFF', '#000000', '#000000');
+          AppSettingsService.getInstance().ensureInit().then(() => {
+            WindowManager.applyPortraitLock(AppSettingsService.getInstance().getFeatureSettings().portraitLock);
+          }).catch(() => {
+          });
         })
         .catch((err: Object) => {
           hilog.error(DOMAIN, 'testTag', 'Init main window failed. Cause: %{public}s', JSON.stringify(err));

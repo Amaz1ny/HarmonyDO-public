@@ -701,6 +701,21 @@ export class ApiClient {
     return SiteResponse.fromJson(json);
   }
 
+  async getBrowsingHistory(page: number = 0): Promise<TopicListResponse> {
+    if (AppConstants.USE_MOCK_DATA) {
+      ApiClient.ensureMockData();
+      return ApiClient.mockGetTopicList(null, page);
+    }
+
+    const params: Record<string, Object> = {};
+    if (page > 0) {
+      params['page'] = page.toString();
+    }
+    const raw: string = await this.http.get(ApiConstants.READ_HISTORY, Object.keys(params).length > 0 ? params : null);
+    const json: Record<string, Object> = JSON.parse(raw) as Record<string, Object>;
+    return TopicListResponse.fromJson(json);
+  }
+
   private tryConfigureMessageBusFromSiteJson(json: Record<string, Object>): void {
     try {
       // /site.json 的 client_settings 包含 long_polling_base_url，用于 MessageBus 独立域名

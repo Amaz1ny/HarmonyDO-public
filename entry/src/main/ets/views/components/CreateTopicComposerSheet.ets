@@ -1,6 +1,7 @@
 import { ApiClient, PostEnqueuedError } from '../../services/network/ApiClient';
 import { Category, SiteResponse } from '../../models/Category';
 import { Draft, DraftData } from '../../models/Draft';
+import { AppSettingsService } from '../../services/storage/AppSettingsService';
 import { WindowManager } from '../../common/utils/WindowManager';
 import { LoadingSpinner } from './LoadingSpinner';
 import { ToastService } from '../../common/utils/ToastService';
@@ -159,8 +160,16 @@ export struct CreateTopicComposerSheet {
     if (this.submitted) {
       return;
     }
-    const title: string = this.title.trim();
-    const content: string = this.content.trim();
+    const draftTitle: string = AppSettingsService.getInstance().applyEditorSpacing(this.title);
+    const draftContent: string = AppSettingsService.getInstance().applyEditorSpacing(this.content);
+    if (draftTitle !== this.title) {
+      this.title = draftTitle;
+    }
+    if (draftContent !== this.content) {
+      this.content = draftContent;
+    }
+    const title: string = draftTitle.trim();
+    const content: string = draftContent.trim();
     const tags: string[] = this.parseTagsText(this.tagsText);
     if (title.length === 0 && content.length === 0 && tags.length === 0) {
       await ApiClient.getInstance().deleteDraft(this.getDraftKey(), this.draftSequence);
@@ -169,8 +178,8 @@ export struct CreateTopicComposerSheet {
     }
 
     const data: DraftData = new DraftData();
-    data.title = this.title;
-    data.reply = this.content;
+    data.title = draftTitle;
+    data.reply = draftContent;
     data.categoryId = this.selectedCategoryId > 0 ? this.selectedCategoryId : null;
     data.tags = tags.length > 0 ? tags : null;
     data.action = 'createTopic';
@@ -191,8 +200,16 @@ export struct CreateTopicComposerSheet {
   }
 
   private async submit(): Promise<void> {
-    const normalizedTitle: string = this.title.trim();
-    const normalizedContent: string = this.content.trim();
+    const normalizedTitleRaw: string = AppSettingsService.getInstance().applyEditorSpacing(this.title);
+    const normalizedContentRaw: string = AppSettingsService.getInstance().applyEditorSpacing(this.content);
+    if (normalizedTitleRaw !== this.title) {
+      this.title = normalizedTitleRaw;
+    }
+    if (normalizedContentRaw !== this.content) {
+      this.content = normalizedContentRaw;
+    }
+    const normalizedTitle: string = normalizedTitleRaw.trim();
+    const normalizedContent: string = normalizedContentRaw.trim();
     if (normalizedTitle.length < 5) {
       this.errorMessage = '标题至少需要 5 个字符';
       return;
@@ -211,7 +228,7 @@ export struct CreateTopicComposerSheet {
     try {
       const topicId: number = await ApiClient.getInstance().createTopic(
         normalizedTitle,
-        this.content,
+        normalizedContentRaw,
         this.selectedCategoryId,
         this.parseTagsText(this.tagsText)
       );

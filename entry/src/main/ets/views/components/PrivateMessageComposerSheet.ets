@@ -1,5 +1,6 @@
 import { ApiClient, PostEnqueuedError } from '../../services/network/ApiClient';
 import { Draft, DraftData } from '../../models/Draft';
+import { AppSettingsService } from '../../services/storage/AppSettingsService';
 import { WindowManager } from '../../common/utils/WindowManager';
 import { LoadingSpinner } from './LoadingSpinner';
 import { SmartAvatar } from './SmartAvatar';
@@ -106,8 +107,16 @@ export struct PrivateMessageComposerSheet {
     const target: string = this.targetUsername.trim();
     if (target.length === 0 || this.submitted) return;
     const apiClient: ApiClient = ApiClient.getInstance();
-    const title: string = this.title.trim();
-    const content: string = this.content.trim();
+    const spacedTitle: string = AppSettingsService.getInstance().applyEditorSpacing(this.title);
+    const spacedContent: string = AppSettingsService.getInstance().applyEditorSpacing(this.content);
+    if (spacedTitle !== this.title) {
+      this.title = spacedTitle;
+    }
+    if (spacedContent !== this.content) {
+      this.content = spacedContent;
+    }
+    const title: string = spacedTitle.trim();
+    const content: string = spacedContent.trim();
     if (title.length === 0 && content.length === 0) {
       await apiClient.deleteDraft(this.getDraftKey(), this.draftSequence);
       this.draftSequence = 0;
@@ -115,8 +124,8 @@ export struct PrivateMessageComposerSheet {
     }
 
     const data: DraftData = new DraftData();
-    data.title = this.title;
-    data.reply = this.content;
+    data.title = spacedTitle;
+    data.reply = spacedContent;
     data.action = 'privateMessage';
     data.archetypeId = 'private_message';
     data.recipients = [target];
@@ -139,8 +148,16 @@ export struct PrivateMessageComposerSheet {
 
   private async submit(): Promise<void> {
     const target: string = this.targetUsername.trim();
-    const title: string = this.title.trim();
-    const content: string = this.content.trim();
+    const spacedTitle: string = AppSettingsService.getInstance().applyEditorSpacing(this.title);
+    const spacedContent: string = AppSettingsService.getInstance().applyEditorSpacing(this.content);
+    if (spacedTitle !== this.title) {
+      this.title = spacedTitle;
+    }
+    if (spacedContent !== this.content) {
+      this.content = spacedContent;
+    }
+    const title: string = spacedTitle.trim();
+    const content: string = spacedContent.trim();
     if (target.length === 0) {
       this.errorMessage = '无效的用户名';
       return;

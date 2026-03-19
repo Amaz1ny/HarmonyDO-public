@@ -15,6 +15,12 @@ import { BookmarksPage } from '../views/pages/BookmarksPage';
 import { DraftsPage } from '../views/pages/DraftsPage';
 import { MyTopicsPage } from '../views/pages/MyTopicsPage';
 import { MyBadgesPage } from '../views/pages/MyBadgesPage';
+import { TrustLevelRequirementsPage } from '../views/pages/TrustLevelRequirementsPage';
+import { BrowsingHistoryPage } from '../views/pages/BrowsingHistoryPage';
+import { MetaversePage } from '../views/pages/MetaversePage';
+import { AppearancePage } from '../views/pages/AppearancePage';
+import { PreferencesPage } from '../views/pages/PreferencesPage';
+import { AboutPage } from '../views/pages/AboutPage';
 import { CfRefreshHost } from '../views/components/CfRefreshHost';
 import { Topic } from '../models/Topic';
 import { Category } from '../models/Category';
@@ -256,6 +262,18 @@ struct Index {
       LoginPage()
     } else if (name === RouteConstants.PAGE_CF_CHALLENGE) {
       CfChallengePage()
+    } else if (name === RouteConstants.PAGE_TRUST_REQUIREMENTS) {
+      TrustLevelRequirementsPage()
+    } else if (name === RouteConstants.PAGE_BROWSING_HISTORY) {
+      BrowsingHistoryPage()
+    } else if (name === RouteConstants.PAGE_METAVERSE) {
+      MetaversePage()
+    } else if (name === RouteConstants.PAGE_APPEARANCE) {
+      AppearancePage()
+    } else if (name === RouteConstants.PAGE_PREFERENCES) {
+      PreferencesPage()
+    } else if (name === RouteConstants.PAGE_ABOUT) {
+      AboutPage()
     }
   }
 

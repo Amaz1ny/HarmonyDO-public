@@ -28,6 +28,7 @@ interface WindowSystemBarLike {
   setWindowSystemBarEnable?: (names: SystemBarName[]) => Promise<void>;
   setWindowBackgroundColor?: (color: string) => void;
   getWindowAvoidArea?: (type: window.AvoidAreaType) => window.AvoidArea;
+  setPreferredOrientation?: (orientation: number) => Promise<void>;
 }
 
 export class WindowManager {
@@ -175,5 +176,28 @@ export class WindowManager {
       hilog.error(DOMAIN, TAG, 'getWindowAvoidArea failed. Cause: %{public}s', JSON.stringify(err));
       return 0;
     }
+  }
+
+  static applyPortraitLock(enabled: boolean): void {
+    const win: window.Window | null = WindowManager.mainWindow;
+    if (win === null) return;
+
+    const adapter: WindowSystemBarLike = win as WindowSystemBarLike;
+    if (adapter.setPreferredOrientation === undefined) return;
+
+    let value: number | undefined = undefined;
+    if (enabled) {
+      value = window.Orientation.PORTRAIT;
+    } else if (window.Orientation.AUTO_ROTATION !== undefined) {
+      value = window.Orientation.AUTO_ROTATION;
+    } else {
+      value = window.Orientation.UNSPECIFIED;
+    }
+    if (value === undefined) {
+      return;
+    }
+    adapter.setPreferredOrientation(value).catch((err: Object) => {
+      hilog.error(DOMAIN, TAG, 'setPreferredOrientation failed. Cause: %{public}s', JSON.stringify(err));
+    });
   }
 }

@@ -15,6 +15,7 @@ import { PillIconButton, PillMenuButton, SORT_FILTER_OPTIONS, SORT_FILTER_OPTION
 import { DEFAULT_AVAILABLE_TAGS, TagChip, TagSelectionSheet } from '../components/TagControls';
 import { WindowManager } from '../../common/utils/WindowManager';
 import { TopicTrackingService } from '../../services/messagebus/TopicTrackingService';
+import { AppSettingsService } from '../../services/storage/AppSettingsService';
 import { TopicListPreferences } from '../../services/storage/TopicListPreferences';
 import {
   FLOATING_TAB_BAR_HEIGHT_VP,
@@ -94,14 +95,19 @@ export struct TopicListPage {
   @Local previewCategory: Category | null = null;
   @Local previewParentCategory: Category | null = null;
   @Local isTopicPreviewVisible: boolean = false;
+  @Local enableLongPressPreview: boolean = true;
+  @Local allowHideBarOnScroll: boolean = true;
 
   // 标签筛选
   @Local selectedTags: string[] = [];
   @Local draftSelectedTags: string[] = [];
   @Local availableTags: string[] = DEFAULT_AVAILABLE_TAGS;
   private authStateListener: (() => void) | null = null;
+  private settingsListener: (() => void) | null = null;
 
   aboutToAppear(): void {
+    this.attachSettingsListener();
+    this.syncSettingsState();
     this.reportBarVisibility(true);
     this.attachAuthStateListener();
 
@@ -126,6 +132,37 @@ export struct TopicListPage {
     this.clearIncomingHighlightTimer();
     this.highlightedTopicIds = [];
     this.detachTrackingListener();
+    this.detachSettingsListener();
+  }
+
+  private attachSettingsListener(): void {
+    if (this.settingsListener !== null) {
+      return;
+    }
+    this.settingsListener = () => {
+      this.syncSettingsState();
+      this.reportBarVisibility(true);
+    };
+    AppSettingsService.getInstance().addListener(this.settingsListener);
+    AppSettingsService.getInstance().ensureInit().then(() => {
+      this.syncSettingsState();
+      this.reportBarVisibility(true);
+    }).catch(() => {
+    });
+  }
+
+  private detachSettingsListener(): void {
+    if (this.settingsListener === null) {
+      return;
+    }
+    AppSettingsService.getInstance().removeListener(this.settingsListener);
+    this.settingsListener = null;
+  }
+
+  private syncSettingsState(): void {
+    const featureSettings = AppSettingsService.getInstance().getFeatureSettings();
+    this.enableLongPressPreview = featureSettings.longPressPreview;
+    this.allowHideBarOnScroll = featureSettings.hideBarOnScroll;
   }
 
   private onPageResume(): void {
@@ -458,6 +495,9 @@ export struct TopicListPage {
   }
 
   private computeBarVisibility(): number {
+    if (!this.allowHideBarOnScroll) {
+      return 1;
+    }
     const raw: number = 1 - this.headerOffset / COLLAPSIBLE_HEIGHT;
     return this.clamp(raw, 0, 1);
   }
@@ -2024,6 +2064,7 @@ export struct TopicListPage {
                       topic: topic,
                       category: this.getCategory(topic),
                       isHighlighted: this.isTopicHighlighted(topic.id),
+                      enableLongPress: this.enableLongPressPreview,
                       onCardClick: (t: Topic) => {
                         this.onTopicClick(t);
                       },
@@ -2037,6 +2078,7 @@ export struct TopicListPage {
                       category: this.getCategory(topic),
                       opAvatarUrl: this.getOpAvatarUrl(topic),
                       isHighlighted: this.isTopicHighlighted(topic.id),
+                      enableLongPress: this.enableLongPressPreview,
                       onCardClick: (t: Topic) => {
                         this.onTopicClick(t);
                       },

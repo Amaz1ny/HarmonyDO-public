@@ -7,6 +7,8 @@ import { WindowManager } from '../../common/utils/WindowManager';
 import { RouterManager } from '../../common/utils/RouterManager';
 import { ToastService } from '../../common/utils/ToastService';
 import { AuthService } from '../../services/auth/AuthService';
+import { AppSettingsService } from '../../services/storage/AppSettingsService';
+import { PreferencesUtil } from '../../services/storage/PreferencesUtil';
 import { UserSummarySnapshotService } from '../../services/storage/UserSummarySnapshotService';
 import { CookieStore } from '../../services/network/CookieStore';
 import { ApiClient } from '../../services/network/ApiClient';
@@ -20,6 +22,7 @@ const TOP_BAR_HEIGHT: number = 56;
 const LOGIN_STATE_POLL_MS: number = 900;
 const NATIVE_USER_RETRY_COUNT: number = 3;
 const NATIVE_USER_RETRY_INTERVAL_MS: number = 400;
+const LAST_LOGIN_USERNAME_KEY: string = 'login.last_username';
 const LOGIN_PASSKEY_BLOCK_SCRIPT: string = `(function() {
   try {
     if (!location || location.origin !== '${AppConstants.BASE_URL}') {
@@ -171,6 +174,10 @@ export struct LoginPage {
     ApiClient.getInstance().resetCurrentUserSessionState();
     hilog.info(0x0000, TAG, 'LoginPage passkey/WebAuthn block enabled for %{public}s/login', AppConstants.BASE_URL);
     this.startLoginStatePolling();
+    AppSettingsService.getInstance().ensureInit().catch(() => {
+    });
+    PreferencesUtil.ensureInit().catch(() => {
+    });
     CookieStore.getInstance().init()
       .then(() => {
         CookieStore.getInstance().syncToWebView();
@@ -407,6 +414,7 @@ export struct LoginPage {
     auth.setCurrentUser(user);
     ApiClient.getInstance().setCachedCurrentUser(user);
     await auth.saveLoginInfo(cookieHeader, csrfToken, user.username);
+    await PreferencesUtil.putString(LAST_LOGIN_USERNAME_KEY, user.username);
     this.loginCompleted = true;
     this.finalizingLogin = false;
     this.stopLoginStatePolling();
@@ -494,6 +502,83 @@ export struct LoginPage {
     } catch (_) {
       this.isPageLoading = false;
       this.errorMessage = '刷新失败';
+    }
+  }
+
+  private escapeForJavaScriptString(value: string): string {
+    let next: string = value !== undefined && value !== null ? value : '';
+    next = next.replace(/\\/g, '\\\\');
+    next = next.replace(/'/g, "\\'");
+    next = next.replace(/\r/g, ' ');
+    next = next.replace(/\n/g, ' ');
+    return next;
+  }
+
+  private async tryAutoFillRememberedUsername(): Promise<void> {
+    if (this.currentPageUrl.indexOf('/login') < 0) {
+      return;
+    }
+    await AppSettingsService.getInstance().ensureInit();
+    if (!AppSettingsService.getInstance().getFeatureSettings().autoFillLogin) {
+      return;
+    }
+    await PreferencesUtil.ensureInit();
+    const rememberedUsername: string = await PreferencesUtil.getString(LAST_LOGIN_USERNAME_KEY, '');
+    const normalizedUsername: string = rememberedUsername.trim();
+    if (normalizedUsername.length === 0) {
+      return;
+    }
+    const escapedUsername: string = this.escapeForJavaScriptString(normalizedUsername);
+    const script: string = `(function() {
+      try {
+        var value = '${escapedUsername}';
+        if (!value) {
+          return 'empty';
+        }
+        var selectors = [
+          'input[name="login"]',
+          'input#login-account-name',
+          'input[autocomplete="username"]',
+          'input[type="email"]',
+          'input[type="text"]'
+        ];
+        var target = null;
+        for (var i = 0; i < selectors.length; i++) {
+          var candidate = document.querySelector(selectors[i]);
+          if (candidate) {
+            target = candidate;
+            break;
+          }
+        }
+        if (!target) {
+          return 'no-field';
+        }
+        if (target.value && target.value.trim().length > 0) {
+          return 'skip';
+        }
+        target.focus();
+        target.value = value;
+        try {
+          target.dispatchEvent(new Event('input', { bubbles: true }));
+        } catch (_) {
+        }
+        try {
+          target.dispatchEvent(new Event('change', { bubbles: true }));
+        } catch (_) {
+        }
+        return 'filled';
+      } catch (_) {
+        return 'error';
+      }
+    })();`;
+    try {
+      const raw: string = await this.controller.runJavaScript(script);
+      const result: string = this.normalizeJsStringResult(raw);
+      if (result === 'filled') {
+        hilog.info(0x0000, TAG, 'Auto filled remembered username on login page');
+      }
+    } catch (err) {
+      hilog.warn(0x0000, TAG, 'Auto fill remembered username failed: %{public}s', ApiClient.formatError(err));
     }
   }
 
@@ -615,6 +700,9 @@ export struct LoginPage {
               this.progress = 100;
               this.currentPageUrl = event.url;
               hilog.info(0x0000, TAG, 'LoginPage onPageEnd url=%{public}s', this.currentPageUrl);
+              this.tryAutoFillRememberedUsername().catch((err: Object) => {
+                hilog.warn(0x0000, TAG, 'Auto fill onPageEnd failed: %{public}s', ApiClient.formatError(err));
+              });
               this.inspectLoginState().catch((err: Object) => {
                 hilog.error(0x0000, TAG, 'inspectLoginState onPageEnd failed: %{public}s', JSON.stringify(err));
               });

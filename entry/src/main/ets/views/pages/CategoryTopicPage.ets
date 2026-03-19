@@ -14,6 +14,7 @@ import { DEFAULT_AVAILABLE_TAGS, TagChip, TagSelectionSheet } from '../component
 import { HdsNavDestination } from '@kit.UIDesignKit';
 import { WindowManager } from '../../common/utils/WindowManager';
 import { TopicTrackingService } from '../../services/messagebus/TopicTrackingService';
+import { AppSettingsService } from '../../services/storage/AppSettingsService';
 import { TopicListPreferences } from '../../services/storage/TopicListPreferences';
 
 const TAG: string = 'CategoryTopicPage';
@@ -48,12 +49,15 @@ export struct CategoryTopicPage {
   @Local previewCategory: Category | null = null;
   @Local previewParentCategory: Category | null = null;
   @Local isTopicPreviewVisible: boolean = false;
+  @Local enableLongPressPreview: boolean = true;
 
   private listScroller: Scroller = new Scroller();
   private trackingListener: (() => void) | null = null;
   private authStateListener: (() => void) | null = null;
+  private settingsListener: (() => void) | null = null;
 
   aboutToAppear(): void {
+    this.attachSettingsListener();
     this.attachAuthStateListener();
     this.bootstrapPage().catch((err: Object) => {
       hilog.error(0x0000, TAG, 'Bootstrap page failed: %{public}s', JSON.stringify(err));
@@ -74,6 +78,24 @@ export struct CategoryTopicPage {
       AuthService.getInstance().removeListener(this.authStateListener);
       this.authStateListener = null;
     }
+    if (this.settingsListener !== null) {
+      AppSettingsService.getInstance().removeListener(this.settingsListener);
+      this.settingsListener = null;
+    }
+  }
+
+  private attachSettingsListener(): void {
+    if (this.settingsListener !== null) {
+      return;
+    }
+    this.settingsListener = () => {
+      this.enableLongPressPreview = AppSettingsService.getInstance().getFeatureSettings().longPressPreview;
+    };
+    AppSettingsService.getInstance().addListener(this.settingsListener);
+    AppSettingsService.getInstance().ensureInit().then(() => {
+      this.enableLongPressPreview = AppSettingsService.getInstance().getFeatureSettings().longPressPreview;
+    }).catch(() => {
+    });
   }
 
   private attachAuthStateListener(): void {
@@ -735,6 +757,7 @@ export struct CategoryTopicPage {
                     CompactTopicCard({
                       topic: topic,
                       category: this.getCategory(topic),
+                      enableLongPress: this.enableLongPressPreview,
                       onCardClick: (t: Topic) => {
                         RouterManager.pushTopicDetail(t.id);
                       },
@@ -747,6 +770,7 @@ export struct CategoryTopicPage {
                       topic: topic,
                       category: this.getCategory(topic),
                       opAvatarUrl: this.getOpAvatarUrl(topic),
+                      enableLongPress: this.enableLongPressPreview,
                       onCardClick: (t: Topic) => {
                         RouterManager.pushTopicDetail(t.id);
                       },

@@ -7,6 +7,7 @@ import { ApiClient } from '../../services/network/ApiClient';
 import { UrlUtils } from '../../common/utils/UrlUtils';
 import { RouterManager } from '../../common/utils/RouterManager';
 import { WindowManager } from '../../common/utils/WindowManager';
+import { AppSettingsService } from '../../services/storage/AppSettingsService';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { ErrorView } from '../components/ErrorView';
 import { TopicCard } from '../components/TopicCard';
@@ -28,16 +29,40 @@ export struct MyTopicsPage {
   @Local previewTopic: Topic | null = null;
   @Local previewCategory: Category | null = null;
   @Local previewParentCategory: Category | null = null;
+  @Local enableLongPressPreview: boolean = true;
 
   private page: number = 0;
   private username: string = '';
   private categoryMap: Map<number, Category> = new Map();
+  private settingsListener: (() => void) | null = null;
 
   aboutToAppear(): void {
+    this.attachSettingsListener();
     if (this.topics.length === 0) {
       this.loadTopics(true, true).catch(() => {
       });
     }
+  }
+
+  aboutToDisappear(): void {
+    if (this.settingsListener !== null) {
+      AppSettingsService.getInstance().removeListener(this.settingsListener);
+      this.settingsListener = null;
+    }
+  }
+
+  private attachSettingsListener(): void {
+    if (this.settingsListener !== null) {
+      return;
+    }
+    this.settingsListener = () => {
+      this.enableLongPressPreview = AppSettingsService.getInstance().getFeatureSettings().longPressPreview;
+    };
+    AppSettingsService.getInstance().addListener(this.settingsListener);
+    AppSettingsService.getInstance().ensureInit().then(() => {
+      this.enableLongPressPreview = AppSettingsService.getInstance().getFeatureSettings().longPressPreview;
+    }).catch(() => {
+    });
   }
 
   private normalizeErrorMessage(err: Object): string {
@@ -231,6 +256,7 @@ export struct MyTopicsPage {
                         topic: topic,
                         category: this.getCategory(topic),
                         opAvatarUrl: this.getOpAvatarUrl(topic),
+                        enableLongPress: this.enableLongPressPreview,
                         onCardClick: (t: Topic) => {
                           RouterManager.pushTopicDetail(t.id, t.lastReadPostNumber);
                         },

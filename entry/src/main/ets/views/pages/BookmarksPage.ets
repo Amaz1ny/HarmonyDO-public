@@ -8,6 +8,7 @@ import { TimeUtils } from '../../common/utils/TimeUtils';
 import { UrlUtils } from '../../common/utils/UrlUtils';
 import { RouterManager } from '../../common/utils/RouterManager';
 import { WindowManager } from '../../common/utils/WindowManager';
+import { AppSettingsService } from '../../services/storage/AppSettingsService';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { ErrorView } from '../components/ErrorView';
 import { TopicCard } from '../components/TopicCard';
@@ -30,6 +31,7 @@ export struct BookmarksPage {
   @Local previewTopic: Topic | null = null;
   @Local previewCategory: Category | null = null;
   @Local previewParentCategory: Category | null = null;
+  @Local enableLongPressPreview: boolean = true;
 
   @Local isBookmarkSheetVisible: boolean = false;
   @Local editingTopic: Topic | null = null;
@@ -37,12 +39,35 @@ export struct BookmarksPage {
   private page: number = 0;
   private username: string = '';
   private categoryMap: Map<number, Category> = new Map();
+  private settingsListener: (() => void) | null = null;
 
   aboutToAppear(): void {
+    this.attachSettingsListener();
     if (this.topics.length === 0) {
       this.loadTopics(true, true).catch(() => {
       });
     }
+  }
+
+  aboutToDisappear(): void {
+    if (this.settingsListener !== null) {
+      AppSettingsService.getInstance().removeListener(this.settingsListener);
+      this.settingsListener = null;
+    }
+  }
+
+  private attachSettingsListener(): void {
+    if (this.settingsListener !== null) {
+      return;
+    }
+    this.settingsListener = () => {
+      this.enableLongPressPreview = AppSettingsService.getInstance().getFeatureSettings().longPressPreview;
+    };
+    AppSettingsService.getInstance().addListener(this.settingsListener);
+    AppSettingsService.getInstance().ensureInit().then(() => {
+      this.enableLongPressPreview = AppSettingsService.getInstance().getFeatureSettings().longPressPreview;
+    }).catch(() => {
+    });
   }
 
   private normalizeErrorMessage(err: Object): string {
@@ -477,6 +502,7 @@ export struct BookmarksPage {
         topic: topic,
         category: this.getCategory(topic),
         opAvatarUrl: this.getOpAvatarUrl(topic),
+        enableLongPress: this.enableLongPressPreview,
         onCardClick: (t: Topic) => {
           const targetPostNumber: number = t.bookmarkedPostNumber !== null
             ? t.bookmarkedPostNumber as number

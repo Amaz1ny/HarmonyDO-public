@@ -136,6 +136,9 @@ export class ApiConstants {
     return `/topics/created-by/${username}.json`;
   }
 
+  /** 获取浏览历史 */
+  static readonly READ_HISTORY: string = '/read.json';
+
   /** 获取用户徽章 */
   static userBadges(username: string): string {
     return `/user-badges/${username.toLowerCase()}.json`;
