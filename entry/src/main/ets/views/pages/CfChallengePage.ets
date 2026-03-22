@@ -21,6 +21,12 @@ interface RcInterceptPayload {
   sitekey: string;
 }
 
+interface ChallengePlatformResponsePayload {
+  url: string;
+  statusCode: number;
+  via: string;
+}
+
 interface ChallengePageSnapshot {
   href: string;
   title: string;
@@ -31,6 +37,7 @@ interface ChallengePageSnapshot {
 
 const NO_CHALLENGE_PRIMARY_DELAY_MS: number = 1500;
 const NO_CHALLENGE_RETRY_DELAY_MS: number = 3500;
+const NO_CHALLENGE_MAX_RETRY_COUNT: number = 2;
 
 @ComponentV2
 export struct CfChallengePage {
@@ -47,11 +54,14 @@ export struct CfChallengePage {
   private proxyRegistered: boolean = false;
   private callingRc: boolean = false;
   private rcInterceptTriggered: boolean = false;
+  private challengePlatformResponseSeen: boolean = false;
   private initialCfClearanceSnapshot: string = '';
   private checkingClearance: boolean = false;
+  private noChallengeRetryCount: number = 0;
 
   aboutToAppear(): void {
     ArkWebHelper.configureLinuxDoHostsUserAgent();
+    this.resetVerifySignals();
     if (this.bridge === null) {
       this.bridge = new CfChallengeBridge(this);
     }
@@ -99,6 +109,12 @@ export struct CfChallengePage {
       hilog.error(0x0000, TAG, 'Clear cf_clearance via WebCookieManager failed: %{public}s', JSON.stringify(err));
     }
     CookieStore.getInstance().syncToWebView();
+  }
+
+  private resetVerifySignals(): void {
+    this.rcInterceptTriggered = false;
+    this.challengePlatformResponseSeen = false;
+    this.noChallengeRetryCount = 0;
   }
 
   private logEnterReason(): void {
@@ -309,14 +325,38 @@ export struct CfChallengePage {
     }
 
     const notFoundHint: boolean = this.hasPageNotFoundHint(snapshot);
+    const shouldRetryWait: boolean = (notFoundHint || this.rcInterceptTriggered || this.challengePlatformResponseSeen)
+      && this.noChallengeRetryCount < NO_CHALLENGE_MAX_RETRY_COUNT;
+    if (shouldRetryWait) {
+      this.noChallengeRetryCount += 1;
+      hilog.warn(
+        0x0000,
+        TAG,
+        'No active challenge and no new cf_clearance yet, wait longer retry=%{public}d/%{public}d cookieHeaderLen=%{public}d title=%{public}s url=%{public}s notFound=%{public}s rcIntercept=%{public}s challengeResponse=%{public}s',
+        this.noChallengeRetryCount,
+        NO_CHALLENGE_MAX_RETRY_COUNT,
+        syncedHeader.length,
+        snapshot.title,
+        snapshot.href,
+        notFoundHint ? 'Y' : 'N',
+        this.rcInterceptTriggered ? 'Y' : 'N',
+        this.challengePlatformResponseSeen ? 'Y' : 'N'
+      );
+      this.scheduleNoChallengeCheck(NO_CHALLENGE_RETRY_DELAY_MS);
+      return;
+    }
+
     hilog.warn(
       0x0000,
       TAG,
-      'No active challenge and no new cf_clearance after delay, auto exit cookieHeaderLen=%{public}d title=%{public}s url=%{public}s notFound=%{public}s',
+      'No active challenge and no new cf_clearance after delay, auto exit cookieHeaderLen=%{public}d title=%{public}s url=%{public}s notFound=%{public}s rcIntercept=%{public}s challengeResponse=%{public}s retry=%{public}d',
       syncedHeader.length,
       snapshot.title,
       snapshot.href,
-      notFoundHint ? 'Y' : 'N'
+      notFoundHint ? 'Y' : 'N',
+      this.rcInterceptTriggered ? 'Y' : 'N',
+      this.challengePlatformResponseSeen ? 'Y' : 'N',
+      this.noChallengeRetryCount
     );
     this.onNoChallengeFailure();
   }
@@ -443,7 +483,7 @@ export struct CfChallengePage {
       this.controller.registerJavaScriptProxy(
         this.bridge as Object,
         'CfChallenge',
-        ['onRcIntercepted', 'onTurnstileError']
+        ['onRcIntercepted', 'onTurnstileError', 'onChallengePlatformResponse']
       );
       this.proxyRegistered = true;
     } catch (err) {
@@ -471,6 +511,8 @@ export struct CfChallengePage {
     window._hmCfSitekey = '${escaped}';
 
     var _originalFetch = window.fetch;
+    var _originalXhrOpen = XMLHttpRequest.prototype.open;
+    var _originalXhrSend = XMLHttpRequest.prototype.send;
     var _pending = {};
     var _rcId = 0;
 
@@ -486,6 +528,25 @@ export struct CfChallengePage {
         }
       } catch (e) {}
       return '';
+    }
+
+    function _extractUrl(input) {
+      if (typeof input === 'string') return input;
+      if (input && typeof input.url === 'string') return input.url;
+      return '';
+    }
+
+    function _notifyChallengeResponse(url, statusCode, via) {
+      try {
+        if (!url || url.indexOf('/cdn-cgi/challenge-platform/') === -1) return;
+        if (typeof CfChallenge === 'undefined' || !CfChallenge) return;
+        if (typeof CfChallenge.onChallengePlatformResponse !== 'function') return;
+        CfChallenge.onChallengePlatformResponse(JSON.stringify({
+          url: url,
+          statusCode: typeof statusCode === 'number' ? statusCode : 0,
+          via: via || ''
+        }));
+      } catch (e) {}
     }
 
     window._resolveRc = function(id, statusCode, body) {
@@ -504,13 +565,29 @@ export struct CfChallengePage {
       }
     };
 
-    window.fetch = function(url, options) {
-      var urlStr = '';
-      if (typeof url === 'string') {
-        urlStr = url;
-      } else if (url && typeof url.url === 'string') {
-        urlStr = url.url;
+    XMLHttpRequest.prototype.open = function(method, url) {
+      try {
+        this._hmCfUrl = _extractUrl(url);
+      } catch (e) {
+        this._hmCfUrl = '';
       }
+      return _originalXhrOpen.apply(this, arguments);
+    };
+
+    XMLHttpRequest.prototype.send = function() {
+      var self = this;
+      try {
+        if (self._hmCfUrl && self._hmCfUrl.indexOf('/cdn-cgi/challenge-platform/') !== -1) {
+          self.addEventListener('load', function() {
+            _notifyChallengeResponse(self._hmCfUrl, self.status || 0, 'xhr');
+          });
+        }
+      } catch (e) {}
+      return _originalXhrSend.apply(this, arguments);
+    };
+
+    window.fetch = function(url, options) {
+      var urlStr = _extractUrl(url);
 
       if (urlStr &&
           urlStr.indexOf('/cdn-cgi/challenge-platform/') !== -1 &&
@@ -563,7 +640,16 @@ export struct CfChallengePage {
         } catch (e) {}
         return p;
       }
-      return _originalFetch.apply(this, arguments);
+      var fetchResult = _originalFetch.apply(this, arguments);
+      if (urlStr && urlStr.indexOf('/cdn-cgi/challenge-platform/') !== -1) {
+        return Promise.resolve(fetchResult).then(function(resp) {
+          try {
+            _notifyChallengeResponse(urlStr, resp && typeof resp.status === 'number' ? resp.status : 0, 'fetch');
+          } catch (e) {}
+          return resp;
+        });
+      }
+      return fetchResult;
     };
   } catch (e) {}
 })();`;
@@ -661,6 +747,7 @@ export struct CfChallengePage {
       }
 
       this.syncCookiesFromResponseHeader(response.header);
+      this.handleChallengePlatformResponse(url, code, 'native_rc');
       this.resolveRcPromise(id, code, result);
 
       const cf: string | null = CookieStore.getInstance().getCookieValue('cf_clearance');
@@ -688,6 +775,25 @@ export struct CfChallengePage {
     if (message.length > 0) {
       this.errorMessage = message;
     }
+  }
+
+  onChallengePlatformResponse(payload: string): void {
+    if (this.finished) return;
+
+    let data: ChallengePlatformResponsePayload | null = null;
+    try {
+      const parsed: Object = JSON.parse(payload) as Object;
+      data = parsed as ChallengePlatformResponsePayload;
+    } catch (err) {
+      hilog.error(0x0000, TAG, 'Parse challenge platform payload failed: %{public}s', JSON.stringify(err));
+      return;
+    }
+    if (data === null) return;
+
+    const url: string = typeof data.url === 'string' ? data.url as string : '';
+    const statusCode: number = typeof data.statusCode === 'number' ? data.statusCode as number : 0;
+    const via: string = typeof data.via === 'string' ? data.via as string : '';
+    this.handleChallengePlatformResponse(url, statusCode, via);
   }
 
   onRcIntercepted(payload: string): void {
@@ -729,6 +835,27 @@ export struct CfChallengePage {
     this.callRcEndpoint(id, chlId, secondaryToken, effectiveSk).catch((err: Object) => {
       hilog.error(0x0000, TAG, 'callRcEndpoint failed: %{public}s', JSON.stringify(err));
     });
+  }
+
+  private handleChallengePlatformResponse(url: string, statusCode: number, via: string): void {
+    if (this.finished) return;
+    this.challengePlatformResponseSeen = true;
+    hilog.info(
+      0x0000,
+      TAG,
+      'Challenge platform response observed via=%{public}s status=%{public}d url=%{public}s',
+      via.length > 0 ? via : '-',
+      statusCode,
+      url.length > 0 ? url : '-'
+    );
+    this.checkClearanceCookie();
+    setTimeout(() => {
+      this.checkClearanceCookie();
+    }, 300);
+    setTimeout(() => {
+      this.checkClearanceCookie();
+    }, 1200);
+    this.scheduleNoChallengeCheck(NO_CHALLENGE_RETRY_DELAY_MS);
   }
 
   private getRequestUrl(request: WebResourceRequest): string {
@@ -776,8 +903,10 @@ export struct CfChallengePage {
     hilog.info(
       0x0000,
       TAG,
-      'Exit verify page, exitReason=success rcIntercept=%{public}s cfLen=%{public}d',
+      'Exit verify page, exitReason=success rcIntercept=%{public}s challengeResponse=%{public}s retry=%{public}d cfLen=%{public}d',
       this.rcInterceptTriggered ? 'Y' : 'N',
+      this.challengePlatformResponseSeen ? 'Y' : 'N',
+      this.noChallengeRetryCount,
       cfLen
     );
     // 先 pop 触发页面返回动画，再延迟一帧 resolve Promise
@@ -796,8 +925,10 @@ export struct CfChallengePage {
     hilog.warn(
       0x0000,
       TAG,
-      'Exit verify page, exitReason=no_active_challenge_no_new_cookie rcIntercept=%{public}s',
-      this.rcInterceptTriggered ? 'Y' : 'N'
+      'Exit verify page, exitReason=no_active_challenge_no_new_cookie rcIntercept=%{public}s challengeResponse=%{public}s retry=%{public}d',
+      this.rcInterceptTriggered ? 'Y' : 'N',
+      this.challengePlatformResponseSeen ? 'Y' : 'N',
+      this.noChallengeRetryCount
     );
     RouterManager.pop();
     setTimeout(() => {
@@ -813,8 +944,10 @@ export struct CfChallengePage {
     hilog.info(
       0x0000,
       TAG,
-      'Exit verify page, exitReason=cancel rcIntercept=%{public}s',
-      this.rcInterceptTriggered ? 'Y' : 'N'
+      'Exit verify page, exitReason=cancel rcIntercept=%{public}s challengeResponse=%{public}s retry=%{public}d',
+      this.rcInterceptTriggered ? 'Y' : 'N',
+      this.challengePlatformResponseSeen ? 'Y' : 'N',
+      this.noChallengeRetryCount
     );
     CfChallengeService.getInstance().complete(false);
     RouterManager.pop();
@@ -822,6 +955,7 @@ export struct CfChallengePage {
 
   private onRetry(): void {
     this.errorMessage = '';
+    this.resetVerifySignals();
     try {
       this.controller.refresh();
     } catch (err) {
@@ -1012,5 +1146,9 @@ class CfChallengeBridge {
 
   onTurnstileError(message: string): void {
     this.page.onTurnstileError(message);
+  }
+
+  onChallengePlatformResponse(payload: string): void {
+    this.page.onChallengePlatformResponse(payload);
   }
 }

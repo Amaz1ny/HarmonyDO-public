@@ -69,8 +69,10 @@ export struct TopicPreviewDialog {
   @Param topic: Topic = new Topic();
   @Param category: Category | null = null;
   @Param parentCategory: Category | null = null;
+  @Param secondaryActionLabel: string = '';
   @Event onClose: () => void = () => {};
   @Event onOpen: (topic: Topic) => void = () => {};
+  @Event onSecondaryAction: (topic: Topic) => void = (_: Topic) => {};
 
   @Local private previewCookedHtml: string = '';
   @Local private previewFallbackText: string = '';
@@ -368,10 +370,25 @@ export struct TopicPreviewDialog {
       .width(46)
       .height(42)
       .backgroundColor($r('app.color.surface_variant'))
-      .onClick(() => {
-        this.shareTopic().catch((_: Object) => {
-        });
-      })
+        .onClick(() => {
+          this.shareTopic().catch((_: Object) => {
+          });
+        })
+
+      if (this.secondaryActionLabel.trim().length > 0) {
+        Blank().width(10)
+
+        Button(this.secondaryActionLabel)
+          .type(ButtonType.Capsule)
+          .fontSize(14)
+          .height(42)
+          .backgroundColor($r('app.color.surface_variant'))
+          .fontColor($r('app.color.primary'))
+          .padding({ left: 16, right: 16 })
+          .onClick(() => {
+            this.onSecondaryAction(this.topic);
+          })
+      }
 
       Blank().width(10)
 

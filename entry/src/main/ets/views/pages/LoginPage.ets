@@ -7,11 +7,10 @@ import { WindowManager } from '../../common/utils/WindowManager';
 import { RouterManager } from '../../common/utils/RouterManager';
 import { ToastService } from '../../common/utils/ToastService';
 import { AuthService } from '../../services/auth/AuthService';
+import { AuthSessionService } from '../../services/auth/AuthSessionService';
 import { UserSummarySnapshotService } from '../../services/storage/UserSummarySnapshotService';
 import { CookieStore } from '../../services/network/CookieStore';
 import { ApiClient } from '../../services/network/ApiClient';
-import { PreloadedDataService } from '../../services/messagebus/PreloadedDataService';
-import { TopicTrackingService } from '../../services/messagebus/TopicTrackingService';
 import { User, UserSummary } from '../../models/User';
 
 const TAG: string = 'LoginPage';
@@ -168,6 +167,7 @@ export struct LoginPage {
 
   aboutToAppear(): void {
     ArkWebHelper.configureLinuxDoHostsUserAgent();
+    AuthSessionService.getInstance().advance('login_page_enter');
     ApiClient.getInstance().resetCurrentUserSessionState();
     hilog.info(0x0000, TAG, 'LoginPage passkey/WebAuthn block enabled for %{public}s/login', AppConstants.BASE_URL);
     this.startLoginStatePolling();
@@ -353,20 +353,6 @@ export struct LoginPage {
     return null;
   }
 
-  private async bootstrapLoggedInSession(): Promise<void> {
-    try {
-      await PreloadedDataService.getInstance().refresh(true);
-    } catch (err) {
-      hilog.warn(0x0000, TAG, 'Preloaded refresh after login failed: %{public}s', ApiClient.formatError(err));
-    }
-
-    try {
-      await TopicTrackingService.getInstance().start(true);
-    } catch (err) {
-      hilog.warn(0x0000, TAG, 'TopicTracking full start after login failed: %{public}s', ApiClient.formatError(err));
-    }
-  }
-
   private async prefetchSummarySnapshot(username: string): Promise<void> {
     const normalizedUsername: string = username.trim();
     if (normalizedUsername.length === 0) {
@@ -412,9 +398,6 @@ export struct LoginPage {
     this.stopLoginStatePolling();
     ToastService.show('登录成功');
     RouterManager.pop();
-    this.bootstrapLoggedInSession().catch((err: Object) => {
-      hilog.warn(0x0000, TAG, 'Post-login bootstrap failed: %{public}s', ApiClient.formatError(err));
-    });
   }
 
   private async inspectLoginState(): Promise<void> {

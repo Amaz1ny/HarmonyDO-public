@@ -20,6 +20,7 @@ import { Topic } from '../models/Topic';
 import { Category } from '../models/Category';
 import { User } from '../models/User';
 import { TopicTrackingService } from '../services/messagebus/TopicTrackingService';
+import { PreloadedDataService } from '../services/messagebus/PreloadedDataService';
 import { AuthService } from '../services/auth/AuthService';
 import {
   RouterManager,
@@ -40,6 +41,9 @@ import {
   FLOATING_TAB_BAR_MARGIN_BOTTOM_VP
 } from '../common/constants/LayoutConstants';
 import { SmartAvatar } from '../views/components/SmartAvatar';
+import { hilog } from '@kit.PerformanceAnalysisKit';
+
+const TAG: string = 'Index';
 
 /**
  * 应用主页面 -
@@ -60,17 +64,16 @@ struct Index {
   @Local currentTabUsername: string = '';
 
   private authStateListener: (() => void) | null = null;
+  private backgroundSessionSyncId: number = 0;
+  private backgroundSessionBootstrapped: boolean = false;
+  private lastBackgroundLoggedIn: boolean | null = null;
 
   aboutToAppear(): void {
     RouterManager.init(this.pathStack);
     this.attachAuthStateListener();
     this.syncProfileTabUser().catch(() => {
     });
-    // 全局常驻：游客态也启动 /latest + /new 订阅，让首页“查看 X 个新的或更新的话题”在其它页也能持续累加
-    try {
-      TopicTrackingService.getInstance().start(false);
-    } catch (_) {
-    }
+    this.syncBackgroundSessionSafely();
   }
 
   aboutToDisappear(): void {
@@ -103,6 +106,7 @@ struct Index {
     this.authStateListener = () => {
       this.syncProfileTabUser().catch(() => {
       });
+      this.syncBackgroundSessionSafely();
     };
     AuthService.getInstance().addListener(this.authStateListener);
   }
@@ -120,6 +124,52 @@ struct Index {
     await auth.init();
     this.currentTabUser = auth.getCurrentUser();
     this.currentTabUsername = auth.getCurrentUsername().trim();
+  }
+
+  private syncBackgroundSessionSafely(): void {
+    this.syncBackgroundSession().catch((err: Object) => {
+      this.backgroundSessionBootstrapped = false;
+      this.lastBackgroundLoggedIn = null;
+      hilog.warn(0x0000, TAG, 'Sync background session failed: %{public}s', JSON.stringify(err));
+    });
+  }
+
+  private async syncBackgroundSession(): Promise<void> {
+    const requestId: number = this.backgroundSessionSyncId + 1;
+    this.backgroundSessionSyncId = requestId;
+
+    const auth: AuthService = AuthService.getInstance();
+    await auth.init();
+    if (requestId !== this.backgroundSessionSyncId) {
+      return;
+    }
+
+    const loggedIn: boolean = auth.getIsLoggedIn();
+    if (this.backgroundSessionBootstrapped && this.lastBackgroundLoggedIn === loggedIn) {
+      return;
+    }
+
+    const tracking: TopicTrackingService = TopicTrackingService.getInstance();
+    const preloaded: PreloadedDataService = PreloadedDataService.getInstance();
+
+    tracking.stop();
+    await preloaded.clearSessionScopedState();
+    if (requestId !== this.backgroundSessionSyncId) {
+      return;
+    }
+
+    hilog.info(
+      0x0000,
+      TAG,
+      'Apply background session mode loggedIn=%{public}s',
+      loggedIn ? 'Y' : 'N'
+    );
+    await tracking.start(loggedIn);
+    if (requestId !== this.backgroundSessionSyncId) {
+      return;
+    }
+    this.backgroundSessionBootstrapped = true;
+    this.lastBackgroundLoggedIn = loggedIn;
   }
 
   private shouldShowProfileTabAvatar(): boolean {

@@ -4,6 +4,7 @@ import { HttpClient } from '../network/HttpClient';
 import { CfClearanceRefreshService } from '../network/CfClearanceRefreshService';
 import { MessageBusService } from './MessageBusService';
 import { PreferencesUtil } from '../storage/PreferencesUtil';
+import { AuthSessionService } from '../auth/AuthSessionService';
 
 const TAG: string = 'PreloadedDataService';
 const PRELOAD_PATH: string = '/latest';
@@ -97,6 +98,29 @@ export class PreloadedDataService {
     return this.topicTrackingStates;
   }
 
+  async clearSessionScopedState(): Promise<void> {
+    this.loaded = false;
+    this.inFlight = null;
+    this.configLoaded = false;
+    this.configInFlight = null;
+    this.configuredFromCache = false;
+    this.sharedSessionKey = null;
+    this.topicTrackingStateMeta = null;
+    this.topicTrackingStates = null;
+
+    try {
+      MessageBusService.getInstance().configure(this.longPollingBaseUrl, null);
+    } catch (_) {
+    }
+
+    try {
+      await PreferencesUtil.ensureInit();
+      await PreferencesUtil.delete(PREF_KEY_SHARED_SESSION_KEY);
+    } catch (err) {
+      hilog.warn(0x0000, TAG, 'Clear sharedSessionKey cache failed: %{public}s', JSON.stringify(err));
+    }
+  }
+
   /**
    * 仅加载 MessageBus 配置（避免解析 data-preloaded 大 JSON 导致 UI/消息处理卡顿）：
    * - meta.shared_session_key
@@ -159,14 +183,38 @@ export class PreloadedDataService {
     this.configuredFromCache = false;
   }
 
+  private captureAuthGeneration(): number {
+    return AuthSessionService.getInstance().captureGeneration();
+  }
+
+  private isAuthGenerationCurrent(authGeneration: number, stage: string): boolean {
+    const authSession: AuthSessionService = AuthSessionService.getInstance();
+    if (authSession.isCurrentGeneration(authGeneration)) {
+      return true;
+    }
+    hilog.info(
+      0x0000,
+      TAG,
+      'Skip stale preloaded result stage=%{public}s authGeneration=%{public}d currentGeneration=%{public}d',
+      stage,
+      authGeneration,
+      authSession.getGeneration()
+    );
+    return false;
+  }
+
   private async configureBusFromCacheIfNeeded(): Promise<void> {
     if (this.configuredFromCache) return;
     this.configuredFromCache = true;
+    const authGeneration: number = this.captureAuthGeneration();
 
     try {
       await PreferencesUtil.ensureInit();
       const cachedBaseRaw: string = await PreferencesUtil.getString(PREF_KEY_LONG_POLLING_BASE_URL, '');
       const cachedKeyRaw: string = await PreferencesUtil.getString(PREF_KEY_SHARED_SESSION_KEY, '');
+      if (!this.isAuthGenerationCurrent(authGeneration, 'configure_cache')) {
+        return;
+      }
 
       const cachedBase: string | null = cachedBaseRaw.length > 0 ? this.normalizePollingBaseUrl(cachedBaseRaw) : null;
       const cachedKey: string | null = cachedKeyRaw.length > 0 ? cachedKeyRaw.trim() : null;
@@ -362,6 +410,7 @@ export class PreloadedDataService {
   }
 
   private async loadConfigOnly(silent: boolean): Promise<void> {
+    const authGeneration: number = this.captureAuthGeneration();
     hilog.info(0x0000, TAG, 'Preload config-only %{public}s start, silent=%{public}s', PRELOAD_PATH, silent ? 'Y' : 'N');
     const httpClient: HttpClient = new HttpClient(AppConstants.BASE_URL);
 
@@ -390,6 +439,9 @@ export class PreloadedDataService {
       }
       html = '';
       hilog.warn(0x0000, TAG, 'Preload config-only html failed: %{public}s', htmlErrText.length > 0 ? htmlErrText : 'unknown');
+    }
+    if (!this.isAuthGenerationCurrent(authGeneration, 'config_only_after_http')) {
+      return;
     }
 
     if (html.length > 0) {
@@ -444,6 +496,9 @@ export class PreloadedDataService {
       } catch (_) {
         nextBase = null;
       }
+    }
+    if (!this.isAuthGenerationCurrent(authGeneration, 'config_only_before_apply')) {
+      return;
     }
 
     // 兜底：在 CF challenge（silent）导致 HTML 取不到时，给 linux.do 一个可靠的默认 long_polling_base_url
@@ -500,6 +555,7 @@ export class PreloadedDataService {
   }
 
   private async load(silent: boolean): Promise<void> {
+    const authGeneration: number = this.captureAuthGeneration();
     hilog.info(0x0000, TAG, 'Preload %{public}s start, silent=%{public}s', PRELOAD_PATH, silent ? 'Y' : 'N');
     const httpClient: HttpClient = new HttpClient(AppConstants.BASE_URL);
     const html: string = await httpClient.getText(
@@ -509,6 +565,9 @@ export class PreloadedDataService {
       60000,
       { silent: silent, caller: 'preloaded_latest' }
     );
+    if (!this.isAuthGenerationCurrent(authGeneration, 'full_after_http')) {
+      return;
+    }
 
     // data-discourse-setup（CDN / S3 CDN）
     this.extractCdnConfigFromHtml(html);
@@ -590,6 +649,9 @@ export class PreloadedDataService {
       }
       this.topicTrackingStates = list;
       hilog.info(0x0000, TAG, 'topicTrackingStates size=%{public}d', list.length);
+    }
+    if (!this.isAuthGenerationCurrent(authGeneration, 'full_before_apply')) {
+      return;
     }
 
     this.loaded = true;

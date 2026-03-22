@@ -2,6 +2,7 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 import { AppConstants } from '../../common/constants/AppConstants';
 import { PreloadedDataService } from './PreloadedDataService';
 import { MessageBusMessage, MessageBusService } from './MessageBusService';
+import { AuthSessionService } from '../auth/AuthSessionService';
 
 const TAG: string = 'TopicTrackingService';
 
@@ -99,6 +100,26 @@ export class TopicTrackingService {
       return MessageBusService.getInstance().hasEverSucceeded();
     } catch (_) {
     }
+    return false;
+  }
+
+  private captureAuthGeneration(): number {
+    return AuthSessionService.getInstance().captureGeneration();
+  }
+
+  private isAuthGenerationCurrent(authGeneration: number, stage: string): boolean {
+    const authSession: AuthSessionService = AuthSessionService.getInstance();
+    if (authSession.isCurrentGeneration(authGeneration)) {
+      return true;
+    }
+    hilog.info(
+      0x0000,
+      TAG,
+      'Skip stale topic tracking stage=%{public}s authGeneration=%{public}d currentGeneration=%{public}d',
+      stage,
+      authGeneration,
+      authSession.getGeneration()
+    );
     return false;
   }
 
@@ -282,6 +303,7 @@ export class TopicTrackingService {
   }
 
   private async startInternal(full: boolean): Promise<void> {
+    const authGeneration: number = this.captureAuthGeneration();
     // 1) 先把 incoming 通道拉起来（不依赖 preloaded，避免游客态等待 HTML 解析导致“新话题提示很慢”）
     this.ensureIncomingChannelsSubscribed(null);
     this.started = true;
@@ -289,7 +311,7 @@ export class TopicTrackingService {
 
     if (!full) {
       // 游客态同样尝试后台加载 preloaded：获取 shared_session_key / long_polling_base_url，提高 MessageBus 成功率
-      this.warmupBusConfiguration();
+      this.warmupBusConfiguration(authGeneration);
       return;
     }
 
@@ -300,6 +322,9 @@ export class TopicTrackingService {
       await preloaded.ensureLoaded(true);
     } catch (err) {
       hilog.warn(0x0000, TAG, 'Preloaded ensureLoaded failed(silent): %{public}s', JSON.stringify(err));
+      return;
+    }
+    if (!this.started || !this.isAuthGenerationCurrent(authGeneration, 'full_after_preloaded')) {
       return;
     }
 
@@ -341,16 +366,26 @@ export class TopicTrackingService {
     // 对齐 FluxDO：无论 meta 是否存在，都额外订阅 /latest 与 /new 以实时驱动“查看 X 个新的或更新的话题”
     this.ensureIncomingChannelsSubscribed(meta);
 
+    if (!this.started || !this.isAuthGenerationCurrent(authGeneration, 'full_before_finalize')) {
+      return;
+    }
     this.fullStarted = true;
     this.notify();
   }
 
-  private warmupBusConfiguration(): void {
+  private warmupBusConfiguration(authGeneration: number = -1): void {
+    if (authGeneration < 0) {
+      authGeneration = this.captureAuthGeneration();
+    }
+    if (!this.started) return;
     if (this.fullStarted) return;
     if (this.guestWarmupInFlight !== null) return;
 
     const preloaded: PreloadedDataService = PreloadedDataService.getInstance();
     if (preloaded.isLoaded()) {
+      if (!this.isAuthGenerationCurrent(authGeneration, 'warmup_loaded_cache')) {
+        return;
+      }
       this.warmupRetryAttempt = 0;
       try {
         const bus: MessageBusService = MessageBusService.getInstance();
@@ -363,10 +398,16 @@ export class TopicTrackingService {
 
     this.guestWarmupInFlight = preloaded.ensureConfigLoaded(true)
       .then(() => {
+        if (!this.started || this.fullStarted || !this.isAuthGenerationCurrent(authGeneration, 'warmup_after_config')) {
+          return;
+        }
         this.warmupRetryAttempt = 0;
         this.ensureIncomingChannelsSubscribed(preloaded.getTopicTrackingStateMeta());
       })
       .catch((err: Object) => {
+        if (!this.started || this.fullStarted || !this.isAuthGenerationCurrent(authGeneration, 'warmup_error')) {
+          return;
+        }
         let errText: string = '';
         try {
           errText = err !== null && err !== undefined ? err.toString() : JSON.stringify(err);

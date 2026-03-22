@@ -7,7 +7,7 @@ const TAG: string = 'CookieStore';
 const DEFAULT_COOKIE_PATH: string = '/';
 const DEFAULT_SYNC_URLS: string[] = ['https://linux.do', 'https://ping.linux.do'];
 
-interface CookieRecord {
+export interface CookieRecord {
   name: string;
   value: string;
   domain: string;
@@ -99,10 +99,24 @@ export class CookieStore {
     return out;
   }
 
+  getCookieRecord(name: string, url: string = AppConstants.BASE_URL): CookieRecord | null {
+    this.pruneExpiredRecords();
+    const selected: Map<string, CookieRecord> = this.collectSelectedCookies(url);
+    const record: CookieRecord | undefined = selected.get(name);
+    return record !== undefined ? this.cloneRecord(record) : null;
+  }
+
   upsert(name: string, value: string, url: string = AppConstants.BASE_URL): void {
     const record: CookieRecord | null = this.createHostOnlyRecord(name, value, url, false);
     if (record === null) return;
     this.upsertRecord(record);
+  }
+
+  restoreCookieRecord(record: CookieRecord | null): void {
+    if (record === null || record.value.trim().length === 0) {
+      return;
+    }
+    this.upsertRecord(this.cloneRecord(record));
   }
 
   delete(name: string): void {
@@ -373,6 +387,21 @@ export class CookieStore {
       sourceHost: host,
       expiresAt: 0,
       updatedAt: Date.now()
+    };
+  }
+
+  private cloneRecord(record: CookieRecord): CookieRecord {
+    return {
+      name: record.name,
+      value: record.value,
+      domain: record.domain,
+      path: record.path,
+      secure: record.secure,
+      httpOnly: record.httpOnly,
+      hostOnly: record.hostOnly,
+      sourceHost: record.sourceHost,
+      expiresAt: record.expiresAt,
+      updatedAt: record.updatedAt
     };
   }
 

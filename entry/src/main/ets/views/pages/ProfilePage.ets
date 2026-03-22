@@ -424,6 +424,12 @@ export struct ProfilePage {
 
   private async clearLocalAuth(showToast: boolean): Promise<void> {
     try {
+      await AuthService.getInstance().logout();
+    } catch (err) {
+      hilog.error(0x0000, TAG, 'Auth logout failed: %{public}s', JSON.stringify(err));
+    }
+
+    try {
       await CookieStore.getInstance().init();
     } catch (_) {
     }
@@ -458,12 +464,6 @@ export struct ProfilePage {
     try {
       webview.WebCookieManager.saveCookieAsync();
     } catch (_) {
-    }
-
-    try {
-      await AuthService.getInstance().logout();
-    } catch (err) {
-      hilog.error(0x0000, TAG, 'Auth logout failed: %{public}s', JSON.stringify(err));
     }
 
     this.applyLoggedOutState();

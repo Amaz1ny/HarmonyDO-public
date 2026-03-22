@@ -32,6 +32,7 @@ import { HtmlToMarkdown } from '../../common/utils/HtmlToMarkdown';
 import { PostRichContent } from '../components/PostRichContent';
 import { PostLinks } from '../components/PostLinks';
 import { ReplyComposerSheet } from '../components/ReplyComposerSheet';
+import { BookmarkEditSheet } from '../components/BookmarkEditSheet';
 import { UserStatusEmoji } from '../components/UserStatusEmoji';
 import { AppContext } from '../../common/utils/AppContext';
 import { PostShareImageParams, postShareImageBuilder } from '../components/PostShareImageCard';
@@ -118,6 +119,11 @@ export struct TopicDetailPage {
   @Local hasAcceptedAnswer: boolean = false;
   @Local acceptedAnswerPostNumber: number = 0;
   @Local isBookmarked: boolean = false;
+  @Local topicBookmarkId: number = 0;
+  @Local topicBookmarkName: string = '';
+  @Local topicBookmarkReminderAt: Date | null = null;
+  @Local isBookmarkSheetVisible: boolean = false;
+  @Local isBookmarkMutating: boolean = false;
   @Local expandedRepliesPostNumber: number = 0;
   @Local expandedRepliesLoading: boolean = false;
   @Local expandedRepliesErrorMessage: string = '';
@@ -328,6 +334,159 @@ export struct TopicDetailPage {
       this.isGuestMode = !loggedIn;
     } catch (_) {
       this.isGuestMode = true;
+    }
+  }
+
+  private async ensureLoggedInForAction(): Promise<boolean> {
+    const auth: AuthService = AuthService.getInstance();
+    try {
+      await auth.init();
+      const loggedIn: boolean = auth.getIsLoggedIn();
+      this.isGuestMode = !loggedIn;
+      return loggedIn;
+    } catch (_) {
+      this.isGuestMode = true;
+      return false;
+    }
+  }
+
+  private parseBookmarkIdValue(value: Object | null | undefined): number {
+    if (value === undefined || value === null) {
+      return 0;
+    }
+    const parsed: number = Number(value.toString());
+    if (isNaN(parsed) || parsed <= 0) {
+      return 0;
+    }
+    return parsed;
+  }
+
+  private parseBookmarkNameValue(value: Object | null | undefined): string {
+    if (value === undefined || value === null) {
+      return '';
+    }
+    return value.toString().trim();
+  }
+
+  private applyTopicBookmarkStateFromJson(json: Record<string, Object>): void {
+    let nextBookmarked: boolean = false;
+    const bookmarkedVal = json['bookmarked'];
+    if (bookmarkedVal !== undefined && bookmarkedVal !== null) {
+      nextBookmarked = bookmarkedVal as boolean;
+    }
+
+    let nextBookmarkId: number = this.parseBookmarkIdValue(json['bookmark_id']);
+    let nextBookmarkName: string = this.parseBookmarkNameValue(json['_bookmark_name']);
+    let nextBookmarkReminderAt: Date | null = null;
+
+    const bookmarkReminderVal = json['_bookmark_reminder_at'];
+    if (bookmarkReminderVal !== undefined && bookmarkReminderVal !== null) {
+      nextBookmarkReminderAt = TimeUtils.parseUtcTime(bookmarkReminderVal.toString());
+    }
+
+    const bookmarksVal = json['bookmarks'];
+    if (bookmarksVal !== undefined && bookmarksVal !== null && Array.isArray(bookmarksVal)) {
+      const bookmarksArray: Object[] = bookmarksVal as Object[];
+      for (let i = 0; i < bookmarksArray.length; i++) {
+        const item: Object = bookmarksArray[i];
+        if (item === undefined || item === null || typeof item !== 'object') {
+          continue;
+        }
+        const bookmarkObj: Record<string, Object> = item as Record<string, Object>;
+        const typeText: string = this.parseBookmarkNameValue(bookmarkObj['bookmarkable_type']);
+        if (typeText !== 'Topic') {
+          continue;
+        }
+        nextBookmarked = true;
+        nextBookmarkId = this.parseBookmarkIdValue(bookmarkObj['id']);
+        nextBookmarkName = this.parseBookmarkNameValue(bookmarkObj['name']);
+        const reminderVal = bookmarkObj['reminder_at'];
+        nextBookmarkReminderAt = reminderVal !== undefined && reminderVal !== null
+          ? TimeUtils.parseUtcTime(reminderVal.toString())
+          : null;
+        break;
+      }
+    }
+
+    if (!nextBookmarked) {
+      nextBookmarkId = 0;
+      nextBookmarkName = '';
+      nextBookmarkReminderAt = null;
+    }
+
+    this.isBookmarked = nextBookmarked;
+    this.topicBookmarkId = nextBookmarkId;
+    this.topicBookmarkName = nextBookmarkName;
+    this.topicBookmarkReminderAt = nextBookmarkReminderAt;
+  }
+
+  private openTopicBookmarkSheet(): void {
+    if (this.topicBookmarkId <= 0) {
+      return;
+    }
+    this.isBookmarkSheetVisible = true;
+  }
+
+  private closeTopicBookmarkSheet(): void {
+    this.isBookmarkSheetVisible = false;
+  }
+
+  private clearTopicBookmarkState(): void {
+    this.isBookmarked = false;
+    this.topicBookmarkId = 0;
+    this.topicBookmarkName = '';
+    this.topicBookmarkReminderAt = null;
+  }
+
+  private applyTopicBookmarkUpdate(name: string | null, reminderAt: Date | null, clearReminderAt: boolean): void {
+    this.isBookmarked = this.topicBookmarkId > 0;
+    this.topicBookmarkName = name !== null ? name : '';
+    this.topicBookmarkReminderAt = clearReminderAt ? null : reminderAt;
+  }
+
+  private getTopicBookmarkMenuLabel(): string {
+    if (this.isBookmarkMutating) {
+      return '处理中...';
+    }
+    return this.isBookmarked ? '编辑书签' : '添加书签';
+  }
+
+  private async handleTopicBookmarkAction(): Promise<void> {
+    if (this.isBookmarkMutating) {
+      return;
+    }
+    const loggedIn: boolean = await this.ensureLoggedInForAction();
+    if (!loggedIn) {
+      ToastService.showLoginRequired();
+      return;
+    }
+    if (this.isBookmarked) {
+      if (this.topicBookmarkId <= 0) {
+        ToastService.show('书签信息同步中，请稍后重试');
+        return;
+      }
+      this.openTopicBookmarkSheet();
+      return;
+    }
+    if (this.topicId <= 0) {
+      ToastService.show('无效的话题');
+      return;
+    }
+
+    this.isBookmarkMutating = true;
+    try {
+      const bookmarkId: number = await ApiClient.getInstance().bookmarkTopic(this.topicId);
+      this.isBookmarked = true;
+      this.topicBookmarkId = bookmarkId;
+      this.topicBookmarkName = '';
+      this.topicBookmarkReminderAt = null;
+      ToastService.show('已添加书签');
+      this.openTopicBookmarkSheet();
+    } catch (err) {
+      const message: string = ApiClient.formatError(err).replace('Error: ', '').trim();
+      ToastService.show(message.length > 0 && message !== 'Unknown error' ? message : '添加书签失败');
+    } finally {
+      this.isBookmarkMutating = false;
     }
   }
 
@@ -589,6 +748,9 @@ export struct TopicDetailPage {
     this.hasAcceptedAnswer = false;
     this.acceptedAnswerPostNumber = 0;
     this.isBookmarked = false;
+    this.topicBookmarkId = 0;
+    this.topicBookmarkName = '';
+    this.topicBookmarkReminderAt = null;
 
     this.replyCount = 0;
     this.postsCount = 0;
@@ -682,8 +844,7 @@ export struct TopicDetailPage {
       const closedVal = json['closed'];
       this.isClosed = closedVal !== undefined && closedVal !== null ? closedVal as boolean : false;
 
-      const bookVal = json['bookmarked'];
-      this.isBookmarked = bookVal !== undefined && bookVal !== null ? bookVal as boolean : false;
+      this.applyTopicBookmarkStateFromJson(json);
 
       const hasSummaryVal = json['has_summary'];
       this.hasSummary = hasSummaryVal !== undefined && hasSummaryVal !== null ? hasSummaryVal as boolean : false;
@@ -774,8 +935,13 @@ export struct TopicDetailPage {
       hilog.info(0x0000, TAG, 'Loaded topic %{public}d with %{public}d posts',
         this.topicId, this.posts.length);
     } catch (err) {
-      hilog.error(0x0000, TAG, 'Load topic detail failed: %{public}s', JSON.stringify(err));
-      this.errorMessage = '加载话题详情失败';
+      const errText: string = ApiClient.formatError(err);
+      hilog.error(0x0000, TAG, 'Load topic detail failed: %{public}s', errText);
+      if (errText.indexOf('Cloudflare verification') >= 0) {
+        this.errorMessage = 'Cloudflare 验证未完成，请重试';
+      } else {
+        this.errorMessage = '加载话题详情失败';
+      }
     } finally {
       this.isLoading = false;
       if (this.errorMessage.length === 0) {
@@ -2607,6 +2773,17 @@ export struct TopicDetailPage {
         }
         .width(0)
         .height(0)
+        .bindSheet($$this.isBookmarkSheetVisible, this.TopicBookmarkSheetBuilder, {
+          height: SheetSize.MEDIUM,
+          dragBar: false,
+          showClose: false,
+          backgroundColor: $r('app.color.surface')
+        })
+
+        Column() {
+        }
+        .width(0)
+        .height(0)
         .bindSheet($$this.isReplySheetVisible, this.ReplySheetBuilder, {
           height: SheetSize.LARGE,
           dragBar: false,
@@ -3021,11 +3198,11 @@ export struct TopicDetailPage {
         Row() {
           SymbolGlyph($r('sys.symbol.bookmark'))
             .fontSize(16)
-            .fontColor([$r('app.color.on_surface')])
+            .fontColor(this.isBookmarked ? [$r('app.color.primary')] : [$r('app.color.on_surface')])
             .margin({ right: 10 })
-          Text('书签')
+          Text(this.getTopicBookmarkMenuLabel())
             .fontSize(14)
-            .fontColor($r('app.color.on_surface'))
+            .fontColor(this.isBookmarked ? $r('app.color.primary') : $r('app.color.on_surface'))
         }
         .width('100%')
         .padding({ left: 12, right: 12 })
@@ -3036,7 +3213,9 @@ export struct TopicDetailPage {
       .height(44)
       .onChange((selected: boolean) => {
         if (selected) {
-          ToastService.showLoginRequired();
+          this.handleTopicBookmarkAction().catch((err: Object) => {
+            hilog.error(0x0000, TAG, 'Handle topic bookmark failed: %{public}s', JSON.stringify(err));
+          });
         }
       })
 
@@ -4078,6 +4257,26 @@ export struct TopicDetailPage {
     this.imageContextPostNumber = 0;
     this.imageContextUsername = '';
     this.imageContextAvatarTemplate = '';
+  }
+
+  @Builder
+  TopicBookmarkSheetBuilder() {
+    if (this.topicBookmarkId > 0) {
+      BookmarkEditSheet({
+        bookmarkId: this.topicBookmarkId,
+        initialName: this.topicBookmarkName,
+        initialReminderAt: this.topicBookmarkReminderAt,
+        onDismiss: () => {
+          this.closeTopicBookmarkSheet();
+        },
+        onUpdated: (name: string | null, reminderAt: Date | null, clearReminderAt: boolean) => {
+          this.applyTopicBookmarkUpdate(name, reminderAt, clearReminderAt);
+        },
+        onDeleted: () => {
+          this.clearTopicBookmarkState();
+        }
+      })
+    }
   }
 
   @Builder

@@ -219,6 +219,11 @@ export struct BookmarksPage {
     this.isBookmarkSheetVisible = true;
   }
 
+  private openBookmarkEditorFromPreview(topic: Topic): void {
+    this.closeTopicPreview();
+    this.openBookmarkEditor(topic);
+  }
+
   private closeBookmarkEditor(): void {
     this.isBookmarkSheetVisible = false;
     this.editingTopic = null;
@@ -521,11 +526,15 @@ export struct BookmarksPage {
           topic: this.previewTopic as Topic,
           category: this.previewCategory,
           parentCategory: this.previewParentCategory,
+          secondaryActionLabel: (this.previewTopic as Topic).bookmarkId !== null ? '编辑书签' : '',
           onClose: () => {
             this.closeTopicPreview();
           },
           onOpen: (topic: Topic) => {
             this.openTopicFromPreview(topic);
+          },
+          onSecondaryAction: (topic: Topic) => {
+            this.openBookmarkEditorFromPreview(topic);
           }
         })
       }

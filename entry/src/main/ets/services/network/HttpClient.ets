@@ -3,6 +3,7 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 import { AppConstants } from '../../common/constants/AppConstants';
 import { ApiConstants } from '../../common/constants/ApiConstants';
 import { AuthService } from '../auth/AuthService';
+import { AuthSessionService } from '../auth/AuthSessionService';
 import { CookieStore } from './CookieStore';
 import { CfChallengeService, CfChallengeDetectResult, CfVerifyContext } from './CfChallengeService';
 import { CfClearanceRefreshService } from './CfClearanceRefreshService';
@@ -27,7 +28,6 @@ export interface HttpBinaryResponse {
 export class HttpClient {
   private baseUrl: string;
   private csrfToken: string = '';
-  private cookies: string = '';
   private cookieStore: CookieStore = CookieStore.getInstance();
 
   constructor(baseUrl: string = AppConstants.BASE_URL) {
@@ -45,7 +45,11 @@ export class HttpClient {
    * 设置 Cookies
    */
   setCookies(cookies: string): void {
-    this.cookies = cookies;
+    const normalized: string = cookies.trim();
+    if (normalized.length === 0) {
+      return;
+    }
+    this.cookieStore.ingestCookieHeader(normalized);
   }
 
   /**
@@ -67,9 +71,6 @@ export class HttpClient {
     const cookieHeader: string = this.cookieStore.getCookieHeader();
     if (cookieHeader.length > 0) {
       headers['Cookie'] = cookieHeader;
-    } else if (this.cookies.length > 0) {
-      // 兼容旧逻辑（登录态后续会收口到 CookieStore）
-      headers['Cookie'] = this.cookies;
     }
 
     if (extraHeaders !== null) {
@@ -85,8 +86,12 @@ export class HttpClient {
     return headers;
   }
 
-  private syncCookiesFromResponseHeader(headerObj: Object | undefined | null): void {
+  private syncCookiesFromResponseHeader(headerObj: Object | undefined | null, requestGeneration: number): void {
     if (headerObj === undefined || headerObj === null) return;
+    if (!AuthSessionService.getInstance().isCurrentGeneration(requestGeneration)) {
+      hilog.warn(0x0000, TAG, 'Skip Set-Cookie sync for stale auth session generation=%{public}d', requestGeneration);
+      return;
+    }
     try {
       const headers: Record<string, Object> = headerObj as Record<string, Object>;
       const keys: string[] = Object.keys(headers);
@@ -119,16 +124,9 @@ export class HttpClient {
 
   private async syncAuthContext(): Promise<void> {
     try {
+      await this.cookieStore.init();
       const auth: AuthService = AuthService.getInstance();
       await auth.init();
-
-      const storedCookies: string = auth.getCookies().trim();
-      if (storedCookies.length > 0) {
-        this.cookies = storedCookies;
-        if (this.cookieStore.getCookieHeader().length === 0) {
-          this.cookieStore.ingestCookieHeader(storedCookies);
-        }
-      }
 
       const storedCsrf: string = auth.getCsrfToken().trim();
       if (storedCsrf.length > 0) {
@@ -149,12 +147,13 @@ export class HttpClient {
   }
 
   private hasAuthCookies(): boolean {
-    return this.cookieStore.getCookieHeader().length > 0 || this.cookies.trim().length > 0;
+    return this.cookieStore.getCookieHeader().length > 0;
   }
 
   private async fetchCsrfToken(connectTimeoutMs: number | null = null, readTimeoutMs: number | null = null): Promise<string> {
     await this.cookieStore.init();
     await this.syncAuthContext();
+    const requestGeneration: number = AuthSessionService.getInstance().captureGeneration();
 
     if (!this.hasAuthCookies()) {
       return '';
@@ -186,6 +185,10 @@ export class HttpClient {
       const csrfVal = json['csrf'];
       const csrf: string = csrfVal !== undefined && csrfVal !== null ? csrfVal.toString().trim() : '';
       if (csrf.length > 0) {
+        if (!AuthSessionService.getInstance().isCurrentGeneration(requestGeneration)) {
+          hilog.warn(0x0000, TAG, 'Ignore csrf token from stale auth session generation=%{public}d', requestGeneration);
+          return '';
+        }
         await this.persistCsrfToken(csrf);
         return csrf;
       }
@@ -339,6 +342,7 @@ export class HttpClient {
     connectTimeout: number | null = null,
     readTimeout: number | null = null
   ): Promise<Record<string, Object>> {
+    const requestGeneration: number = AuthSessionService.getInstance().captureGeneration();
     const httpRequest = http.createHttp();
     try {
       const req: Record<string, Object> = {};
@@ -366,7 +370,7 @@ export class HttpClient {
       });
 
       // 写回 Set-Cookie
-      this.syncCookiesFromResponseHeader(response.header);
+      this.syncCookiesFromResponseHeader(response.header, requestGeneration);
 
       const out: Record<string, Object> = {};
       out['code'] = response.responseCode as number;
@@ -384,6 +388,7 @@ export class HttpClient {
     connectTimeout: number | null = null,
     readTimeout: number | null = null
   ): Promise<Record<string, Object>> {
+    const requestGeneration: number = AuthSessionService.getInstance().captureGeneration();
     const httpRequest = http.createHttp();
     try {
       const req: Record<string, Object> = {};
@@ -408,7 +413,7 @@ export class HttpClient {
         throw new Error(`HTTP binary request failed: ${url}${errText.length > 0 ? `, ${errText}` : ''}`);
       });
 
-      this.syncCookiesFromResponseHeader(response.header);
+      this.syncCookiesFromResponseHeader(response.header, requestGeneration);
 
       const out: Record<string, Object> = {};
       out['code'] = response.responseCode as number;
@@ -431,7 +436,12 @@ export class HttpClient {
     guardOptions: CfGuardOptions | null = null,
     retryAttempt: number = 0
   ): Promise<Record<string, Object>> {
+    const requestGeneration: number = AuthSessionService.getInstance().captureGeneration();
     const resp: Record<string, Object> = await this.requestOnce(url, method, body, headers, connectTimeout, readTimeout);
+    if (!AuthSessionService.getInstance().isCurrentGeneration(requestGeneration)) {
+      hilog.warn(0x0000, TAG, 'Skip CF guard for stale auth session generation=%{public}d url=%{public}s', requestGeneration, url);
+      return resp;
+    }
     const codeVal = resp['code'];
     const code: number = codeVal !== undefined && codeVal !== null ? codeVal as number : 0;
     const resultVal = resp['result'];

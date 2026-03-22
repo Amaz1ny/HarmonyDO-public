@@ -24,6 +24,8 @@ export struct DraftsPage {
   @Local errorMessage: string = '';
   @Local loadMoreFailed: boolean = false;
   @Local deletingDraftKey: string = '';
+  @Local isDeleteConfirmVisible: boolean = false;
+  @Local pendingDeleteDraft: Draft | null = null;
 
   @Local isReplySheetVisible: boolean = false;
   @Local activeReplyDraft: Draft | null = null;
@@ -178,12 +180,30 @@ export struct DraftsPage {
     try {
       await ApiClient.getInstance().deleteDraft(draft.draftKey, draft.sequence);
       this.removeDraftLocally(draft.draftKey);
+      this.isDeleteConfirmVisible = false;
+      this.pendingDeleteDraft = null;
       ToastService.show('草稿已删除');
     } catch (err) {
       ToastService.show(this.normalizeErrorMessage(err));
     } finally {
       this.deletingDraftKey = '';
     }
+  }
+
+  private requestDeleteDraft(draft: Draft): void {
+    if (this.deletingDraftKey.length > 0) {
+      return;
+    }
+    this.pendingDeleteDraft = draft;
+    this.isDeleteConfirmVisible = true;
+  }
+
+  private dismissDeleteConfirm(): void {
+    if (this.deletingDraftKey.length > 0) {
+      return;
+    }
+    this.isDeleteConfirmVisible = false;
+    this.pendingDeleteDraft = null;
   }
 
   private handleReplySheetDismiss(submitted: boolean): void {
@@ -340,6 +360,8 @@ export struct DraftsPage {
         .backgroundColor($r('app.color.background'))
         .padding({ top: WindowManager.getSystemAvoidAreaTopVp() })
 
+        this.DeleteConfirmOverlay()
+
         Column() {
         }
         .width(0)
@@ -479,8 +501,7 @@ export struct DraftsPage {
             .margin({ left: 8 })
             .enabled(this.deletingDraftKey.length === 0 || this.deletingDraftKey === draft.draftKey)
             .onClick(() => {
-              this.deleteDraft(draft).catch(() => {
-              });
+              this.requestDeleteDraft(draft);
             })
         }
         .margin({ top: 12 })
@@ -495,6 +516,82 @@ export struct DraftsPage {
     .borderRadius(16)
     .margin({ bottom: 12 })
     .alignItems(VerticalAlign.Top)
+  }
+
+  @Builder
+  private DeleteConfirmOverlay() {
+    if (this.isDeleteConfirmVisible && this.pendingDeleteDraft !== null) {
+      Stack({ alignContent: Alignment.Center }) {
+        Column() {
+        }
+        .width('100%')
+        .height('100%')
+        .backgroundColor('#66000000')
+        .onClick(() => {
+          this.dismissDeleteConfirm();
+        })
+
+        Column() {
+          Text('删除草稿')
+            .fontSize(18)
+            .fontWeight(FontWeight.Bold)
+            .fontColor($r('app.color.on_surface'))
+            .width('100%')
+
+          Text('删除后无法恢复，确认继续吗？')
+            .fontSize(13)
+            .fontColor($r('app.color.on_surface_secondary'))
+            .width('100%')
+            .margin({ top: 8 })
+
+          Text((this.pendingDeleteDraft as Draft).displayTitle)
+            .fontSize(14)
+            .fontWeight(FontWeight.Medium)
+            .fontColor($r('app.color.on_surface'))
+            .width('100%')
+            .maxLines(2)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .margin({ top: 14 })
+
+          Row() {
+            Button('取消')
+              .type(ButtonType.Capsule)
+              .layoutWeight(1)
+              .height(44)
+              .enabled(this.deletingDraftKey.length === 0)
+              .backgroundColor($r('app.color.surface_variant'))
+              .fontColor($r('app.color.on_surface_secondary'))
+              .onClick(() => {
+                this.dismissDeleteConfirm();
+              })
+
+            Blank().width(12)
+
+            Button(this.deletingDraftKey === (this.pendingDeleteDraft as Draft).draftKey ? '删除中...' : '确认删除')
+              .type(ButtonType.Capsule)
+              .layoutWeight(1)
+              .height(44)
+              .enabled(this.deletingDraftKey.length === 0)
+              .backgroundColor($r('app.color.error'))
+              .fontColor(Color.White)
+              .onClick(() => {
+                this.deleteDraft(this.pendingDeleteDraft as Draft).catch(() => {
+                });
+              })
+          }
+          .width('100%')
+          .margin({ top: 20 })
+        }
+        .width('84%')
+        .constraintSize({ maxWidth: 420 })
+        .padding({ left: 20, right: 20, top: 20, bottom: 20 })
+        .backgroundColor($r('app.color.surface'))
+        .borderRadius(22)
+        .shadow({ radius: 18, color: '#26000000', offsetX: 0, offsetY: 10 })
+      }
+      .width('100%')
+      .height('100%')
+    }
   }
 
   @Builder

@@ -281,6 +281,149 @@ export class TopicListResponse {
   constructor() {
   }
 
+  private static parseNumber(value: Object | null | undefined): number {
+    if (value === undefined || value === null) {
+      return 0;
+    }
+    const parsed: number = Number(value.toString());
+    return isNaN(parsed) ? 0 : parsed;
+  }
+
+  private static injectPosterUsers(topics: Topic[], userMap: Map<number, TopicUser>): void {
+    if (userMap.size <= 0) {
+      return;
+    }
+    for (let i = 0; i < topics.length; i++) {
+      const topic: Topic = topics[i];
+      if (topic.posters.length === 0) {
+        continue;
+      }
+      for (let j = 0; j < topic.posters.length; j++) {
+        const poster: TopicPoster = topic.posters[j];
+        if (poster.user !== null) {
+          continue;
+        }
+        if (userMap.has(poster.userId)) {
+          poster.user = userMap.get(poster.userId) as TopicUser;
+        }
+      }
+    }
+  }
+
+  private static cloneBookmarkItem(bookmarkJson: Record<string, Object>): Record<string, Object> {
+    const out: Record<string, Object> = {};
+    const keys: string[] = Object.keys(bookmarkJson);
+    for (let i = 0; i < keys.length; i++) {
+      const key: string = keys[i];
+      const value = bookmarkJson[key];
+      if (value !== undefined) {
+        out[key] = value;
+      }
+    }
+    return out;
+  }
+
+  private static normalizeBookmarkTopic(
+    bookmarkJson: Record<string, Object>,
+    userMap: Map<number, TopicUser>
+  ): Record<string, Object> {
+    const topicJson: Record<string, Object> = TopicListResponse.cloneBookmarkItem(bookmarkJson);
+
+    const bookmarkId: number = TopicListResponse.parseNumber(bookmarkJson['id']);
+    if (bookmarkId > 0) {
+      topicJson['_bookmark_id'] = bookmarkId;
+    }
+
+    const topicId: number = TopicListResponse.parseNumber(bookmarkJson['topic_id']);
+    if (topicId > 0) {
+      topicJson['id'] = topicId;
+    }
+
+    const bookmarkName = bookmarkJson['name'];
+    if (bookmarkName !== undefined && bookmarkName !== null && bookmarkName.toString().trim().length > 0) {
+      topicJson['_bookmark_name'] = bookmarkName.toString().trim();
+    }
+
+    const reminderAt = bookmarkJson['reminder_at'];
+    if (reminderAt !== undefined && reminderAt !== null && reminderAt.toString().trim().length > 0) {
+      topicJson['_bookmark_reminder_at'] = reminderAt.toString();
+    }
+
+    const bookmarkableType = bookmarkJson['bookmarkable_type'];
+    if (bookmarkableType !== undefined && bookmarkableType !== null) {
+      topicJson['_bookmarkable_type'] = bookmarkableType.toString();
+      if (bookmarkableType.toString() === 'Post') {
+        const linkedPostNumber: number = TopicListResponse.parseNumber(bookmarkJson['linked_post_number']);
+        if (linkedPostNumber > 0) {
+          topicJson['_bookmarked_post_number'] = linkedPostNumber;
+        }
+      }
+    }
+
+    const highestPostNumber: number = TopicListResponse.parseNumber(bookmarkJson['highest_post_number']);
+    if (highestPostNumber > 0) {
+      if (topicJson['posts_count'] === undefined || topicJson['posts_count'] === null) {
+        topicJson['posts_count'] = highestPostNumber;
+      }
+      if (topicJson['reply_count'] === undefined || topicJson['reply_count'] === null) {
+        topicJson['reply_count'] = highestPostNumber > 0 ? highestPostNumber - 1 : 0;
+      }
+    }
+
+    if ((topicJson['last_posted_at'] === undefined || topicJson['last_posted_at'] === null) &&
+      bookmarkJson['bumped_at'] !== undefined && bookmarkJson['bumped_at'] !== null) {
+      topicJson['last_posted_at'] = bookmarkJson['bumped_at'].toString();
+    }
+
+    if (topicJson['like_count'] === undefined || topicJson['like_count'] === null) {
+      topicJson['like_count'] = 0;
+    }
+    if (topicJson['views'] === undefined || topicJson['views'] === null) {
+      topicJson['views'] = 0;
+    }
+
+    const userVal = bookmarkJson['user'];
+    if (userVal !== undefined && userVal !== null && typeof userVal === 'object' && !Array.isArray(userVal)) {
+      const userJson: Record<string, Object> = userVal as Record<string, Object>;
+      const user: TopicUser = TopicUser.fromJson(userJson);
+      if (user.id > 0) {
+        userMap.set(user.id, user);
+        if (topicJson['posters'] === undefined || topicJson['posters'] === null) {
+          const poster: Record<string, Object> = {};
+          poster['user_id'] = user.id;
+          poster['description'] = 'Original Poster';
+          poster['extras'] = 'latest';
+          topicJson['posters'] = [poster];
+        }
+        if ((topicJson['last_poster_username'] === undefined || topicJson['last_poster_username'] === null) &&
+          user.username.length > 0) {
+          topicJson['last_poster_username'] = user.username;
+        }
+      }
+    }
+
+    return topicJson;
+  }
+
+  private static parseBookmarkTopics(
+    bookmarksArray: Object[],
+    userMap: Map<number, TopicUser>
+  ): Topic[] {
+    const topics: Topic[] = [];
+    for (let i = 0; i < bookmarksArray.length; i++) {
+      const item: Object = bookmarksArray[i];
+      if (item === null || item === undefined || typeof item !== 'object' || Array.isArray(item)) {
+        continue;
+      }
+      const topicJson: Record<string, Object> = TopicListResponse.normalizeBookmarkTopic(
+        item as Record<string, Object>,
+        userMap
+      );
+      topics.push(Topic.fromJson(topicJson));
+    }
+    return topics;
+  }
+
   static fromJson(json: Record<string, Object>): TopicListResponse {
     const response = new TopicListResponse();
 
@@ -316,24 +459,46 @@ export class TopicListResponse {
           parsedTopics.push(Topic.fromJson(topicJson));
         }
 
-        // 注入 posters.user
-        if (userMap.size > 0) {
-          for (let i = 0; i < parsedTopics.length; i++) {
-            const t: Topic = parsedTopics[i];
-            if (t.posters.length === 0) continue;
-            for (let j = 0; j < t.posters.length; j++) {
-              const p: TopicPoster = t.posters[j];
-              if (p.user !== null) continue;
-              if (userMap.has(p.userId)) {
-                p.user = userMap.get(p.userId) as TopicUser;
-              }
-            }
-          }
-        }
+        TopicListResponse.injectPosterUsers(parsedTopics, userMap);
 
         response.topics = parsedTopics;
       }
+      return response;
     }
+
+    const userBookmarkListVal = json['user_bookmark_list'];
+    if (userBookmarkListVal !== undefined && userBookmarkListVal !== null && typeof userBookmarkListVal === 'object' &&
+      !Array.isArray(userBookmarkListVal)) {
+      const userBookmarkList: Record<string, Object> = userBookmarkListVal as Record<string, Object>;
+      const moreBookmarksUrl = userBookmarkList['more_bookmarks_url'];
+      response.moreTopicsUrl = moreBookmarksUrl !== undefined && moreBookmarksUrl !== null
+        ? moreBookmarksUrl.toString()
+        : null;
+
+      const perPageVal = userBookmarkList['per_page'];
+      if (perPageVal !== undefined && perPageVal !== null) {
+        const perPage: number = TopicListResponse.parseNumber(perPageVal);
+        response.perPage = perPage > 0 ? perPage : response.perPage;
+      }
+
+      const bookmarksVal = userBookmarkList['bookmarks'];
+      if (bookmarksVal !== undefined && bookmarksVal !== null && Array.isArray(bookmarksVal)) {
+        response.topics = TopicListResponse.parseBookmarkTopics(bookmarksVal as Object[], userMap);
+        TopicListResponse.injectPosterUsers(response.topics, userMap);
+      }
+      return response;
+    }
+
+    const bookmarksVal = json['bookmarks'];
+    if (bookmarksVal !== undefined && bookmarksVal !== null && Array.isArray(bookmarksVal)) {
+      const moreBookmarksUrl = json['more_bookmarks_url'];
+      response.moreTopicsUrl = moreBookmarksUrl !== undefined && moreBookmarksUrl !== null
+        ? moreBookmarksUrl.toString()
+        : null;
+      response.topics = TopicListResponse.parseBookmarkTopics(bookmarksVal as Object[], userMap);
+      TopicListResponse.injectPosterUsers(response.topics, userMap);
+    }
+
     return response;
   }
 }

@@ -1,7 +1,9 @@
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { PreferencesUtil } from '../storage/PreferencesUtil';
 import { ApiClient } from '../network/ApiClient';
+import { CookieStore } from '../network/CookieStore';
 import { User, UserStatus } from '../../models/User';
+import { AuthSessionService } from './AuthSessionService';
 
 const TAG: string = 'AuthService';
 
@@ -12,7 +14,7 @@ const TAG: string = 'AuthService';
  */
 export class AuthService {
   private static instance: AuthService | null = null;
-  private static readonly KEY_COOKIES: string = 'auth_cookies';
+  private static readonly LEGACY_KEY_COOKIES: string = 'auth_cookies';
   private static readonly KEY_CSRF_TOKEN: string = 'csrf_token';
   private static readonly KEY_USERNAME: string = 'username';
   private static readonly KEY_IS_LOGGED_IN: string = 'is_logged_in';
@@ -21,10 +23,10 @@ export class AuthService {
   private currentUser: User | null = null;
   private currentUsername: string = '';
   private isLoggedIn: boolean = false;
-  private cookies: string = '';
   private csrfToken: string = '';
   private listeners: (() => void)[] = [];
   private notifyScheduled: boolean = false;
+  private initialized: boolean = false;
 
   private constructor() {
   }
@@ -40,21 +42,50 @@ export class AuthService {
    * 初始化认证状态（从存储中恢复）
    */
   async init(): Promise<void> {
+    if (this.initialized) {
+      return;
+    }
     try {
       await PreferencesUtil.ensureInit();
       this.isLoggedIn = await PreferencesUtil.getBoolean(AuthService.KEY_IS_LOGGED_IN, false);
       this.currentUsername = await PreferencesUtil.getString(AuthService.KEY_USERNAME, '');
-      this.cookies = await PreferencesUtil.getString(AuthService.KEY_COOKIES, '');
+      const legacyCookies: string = await PreferencesUtil.getString(AuthService.LEGACY_KEY_COOKIES, '');
       this.csrfToken = await PreferencesUtil.getString(AuthService.KEY_CSRF_TOKEN, '');
       const currentUserRaw: string = await PreferencesUtil.getString(AuthService.KEY_CURRENT_USER, '');
       this.currentUser = this.parseStoredCurrentUser(currentUserRaw);
       if (this.currentUser !== null && this.currentUser.username.trim().length > 0) {
         this.currentUsername = this.currentUser.username;
       }
+      await this.migrateLegacyCookies(legacyCookies);
+      this.initialized = true;
 
       hilog.info(0x0000, TAG, 'Auth state restored, isLoggedIn: %{public}s', this.isLoggedIn.toString());
     } catch (err) {
       hilog.error(0x0000, TAG, 'Failed to restore auth state: %{public}s', JSON.stringify(err));
+    }
+  }
+
+  private async migrateLegacyCookies(legacyCookies: string): Promise<void> {
+    const normalized: string = legacyCookies.trim();
+    if (normalized.length === 0) {
+      return;
+    }
+
+    try {
+      const store: CookieStore = CookieStore.getInstance();
+      await store.init();
+      if (store.getCookieHeader().trim().length === 0) {
+        store.ingestCookieHeader(normalized);
+        hilog.info(0x0000, TAG, 'Migrated legacy auth cookies into CookieStore');
+      }
+    } catch (err) {
+      hilog.error(0x0000, TAG, 'Migrate legacy auth cookies failed: %{public}s', JSON.stringify(err));
+      return;
+    }
+
+    try {
+      await PreferencesUtil.delete(AuthService.LEGACY_KEY_COOKIES);
+    } catch (_) {
     }
   }
 
@@ -223,7 +254,7 @@ export class AuthService {
    * 获取 Cookies
    */
   getCookies(): string {
-    return this.cookies;
+    return CookieStore.getInstance().getCookieHeader();
   }
 
   /**
@@ -245,6 +276,7 @@ export class AuthService {
    * 保存登录信息
    */
   async saveLoginInfo(cookies: string, csrfToken: string, username: string): Promise<void> {
+    await this.init();
     const normalizedUsername: string = username.trim().toLowerCase();
     if (this.currentUser !== null) {
       const currentUsername: string = this.currentUser.username.trim().toLowerCase();
@@ -254,12 +286,24 @@ export class AuthService {
       }
     }
 
-    this.cookies = cookies;
+    const normalizedCookieHeader: string = cookies.trim();
+    if (normalizedCookieHeader.length > 0) {
+      try {
+        const store: CookieStore = CookieStore.getInstance();
+        await store.init();
+        if (store.getCookieHeader().trim().length === 0) {
+          store.ingestCookieHeader(normalizedCookieHeader);
+        }
+      } catch (err) {
+        hilog.error(0x0000, TAG, 'Backfill CookieStore from login info failed: %{public}s', JSON.stringify(err));
+      }
+    }
     this.csrfToken = csrfToken;
     this.isLoggedIn = true;
     this.currentUsername = username;
+    this.initialized = true;
 
-    await PreferencesUtil.putString(AuthService.KEY_COOKIES, cookies);
+    await PreferencesUtil.delete(AuthService.LEGACY_KEY_COOKIES);
     await PreferencesUtil.putString(AuthService.KEY_CSRF_TOKEN, csrfToken);
     await PreferencesUtil.putString(AuthService.KEY_USERNAME, username);
     await PreferencesUtil.putBoolean(AuthService.KEY_IS_LOGGED_IN, true);
@@ -289,11 +333,12 @@ export class AuthService {
     this.currentUser = null;
     this.currentUsername = '';
     this.isLoggedIn = false;
-    this.cookies = '';
     this.csrfToken = '';
+    this.initialized = true;
+    AuthSessionService.getInstance().advance('logout');
     ApiClient.getInstance().resetCurrentUserSessionState();
 
-    await PreferencesUtil.delete(AuthService.KEY_COOKIES);
+    await PreferencesUtil.delete(AuthService.LEGACY_KEY_COOKIES);
     await PreferencesUtil.delete(AuthService.KEY_CSRF_TOKEN);
     await PreferencesUtil.delete(AuthService.KEY_USERNAME);
     await PreferencesUtil.delete(AuthService.KEY_CURRENT_USER);

@@ -1,6 +1,6 @@
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { RouterManager, RouteConstants } from '../../common/utils/RouterManager';
-import { CookieStore } from './CookieStore';
+import { CookieRecord, CookieStore } from './CookieStore';
 import { CfClearanceRefreshService } from './CfClearanceRefreshService';
 
 const TAG: string = 'CfChallengeService';
@@ -44,6 +44,8 @@ export class CfChallengeService {
 
   private verifyContext: CfVerifyContext | null = null;
   private initialCfClearanceSnapshot: string | null = null;
+  private backupCfClearance: CookieRecord | null = null;
+  private clearanceConfirmed: boolean = false;
 
   private constructor() {
   }
@@ -146,15 +148,41 @@ export class CfChallengeService {
         ok ? 'Y' : 'N',
         ok ? (cf as string).length : 0
       );
-      if (ok) return true;
+      if (ok) {
+        this.clearanceConfirmed = true;
+        this.backupCfClearance = null;
+        return true;
+      }
       await this.sleep(CLEARANCE_CONFIRM_RETRY_INTERVAL_MS);
       CookieStore.getInstance().syncFromWebView();
     }
+    this.restoreBackupCfClearance('cf_clearance_confirm_timeout');
     return false;
+  }
+
+  private restoreBackupCfClearance(reason: string): void {
+    if (this.backupCfClearance === null) {
+      return;
+    }
+
+    CookieStore.getInstance().restoreCookieRecord(this.backupCfClearance);
+    CookieStore.getInstance().syncToWebView();
+    this.backupCfClearance = null;
+    this.clearanceConfirmed = false;
+    try {
+      CfClearanceRefreshService.getInstance().stop();
+    } catch (_) {
+    }
+    hilog.warn(0x0000, TAG, 'Restored previous cf_clearance, reason=%{public}s', reason);
   }
 
   private isInCooldown(): boolean {
     return this.cooldownUntil > Date.now();
+  }
+
+  private getCooldownRemainingMs(): number {
+    const remainingMs: number = this.cooldownUntil - Date.now();
+    return remainingMs > 0 ? remainingMs : 0;
   }
 
   private startCooldown(): void {
@@ -170,9 +198,32 @@ export class CfChallengeService {
    * 启动验证流程（如果已有验证在进行，复用同一个 Promise）
    */
   verify(): Promise<boolean> {
+    const ctx: CfVerifyContext | null = this.verifyContext;
     if (this.isInCooldown()) {
-      hilog.info(0x0000, TAG, 'Verify skipped: in cooldown');
-      return Promise.resolve(false);
+      const remainingMs: number = this.getCooldownRemainingMs();
+      const canBypassCooldown: boolean = ctx !== null && !ctx.silent;
+      if (!canBypassCooldown) {
+        const caller: string = ctx !== null ? ctx.caller : '-';
+        hilog.info(
+          0x0000,
+          TAG,
+          'Verify skipped: in cooldown remaining=%{public}d caller=%{public}s',
+          remainingMs,
+          caller
+        );
+        return Promise.resolve(false);
+      }
+      const caller: string = ctx !== null ? ctx.caller : '-';
+      const urlPath: string = ctx !== null ? ctx.urlPath : '-';
+      hilog.warn(
+        0x0000,
+        TAG,
+        'Verify cooldown bypassed for interactive request remaining=%{public}d caller=%{public}s path=%{public}s',
+        remainingMs,
+        caller,
+        urlPath
+      );
+      this.resetCooldown();
     }
 
     if (this.activePromise !== null) {
@@ -180,12 +231,14 @@ export class CfChallengeService {
     }
 
     this.completed = false;
+    this.clearanceConfirmed = false;
     this.activePromise = new Promise<boolean>((resolve) => {
       this.activeResolve = resolve;
     });
 
     // 记录验证开始时的 cf_clearance 快照（仅用于“旧值残留过滤”，严禁打印明文）
     this.initialCfClearanceSnapshot = CookieStore.getInstance().getCookieValue('cf_clearance');
+    this.backupCfClearance = CookieStore.getInstance().getCookieRecord('cf_clearance');
 
     // 参考安卓端：进入验证前先清理旧 cf_clearance，避免 CF 直接放行导致“验证被跳过”
     CookieStore.getInstance().delete('cf_clearance');
@@ -219,11 +272,15 @@ export class CfChallengeService {
       } catch (_) {
       }
     } else {
+      this.restoreBackupCfClearance('verify_failed_or_cancelled');
       this.startCooldown();
     }
 
     this.verifyContext = null;
     this.initialCfClearanceSnapshot = null;
+    if (!success || this.clearanceConfirmed) {
+      this.backupCfClearance = null;
+    }
 
     if (this.activeResolve !== null) {
       this.activeResolve(success);
