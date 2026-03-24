@@ -1466,10 +1466,10 @@ export struct ProfilePage {
         iconSymbol: $r('sys.symbol.info_circle'),
         iconBgColor: '#E8EAF6',
         iconColor: '#3949AB',
-        title: $r('app.string.profile_about_fluxdo'),
+        title: $r('app.string.profile_about_app'),
         subtitle: $r('app.string.profile_service_about_hint'),
         showDivider: false,
-        onClick: () => { this.showPendingToast('关于 FluxDO'); }
+        onClick: () => { this.showPendingToast('关于 HarmonyDO'); }
       })
     }
     .width('100%')

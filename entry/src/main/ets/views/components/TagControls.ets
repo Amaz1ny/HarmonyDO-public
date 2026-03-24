@@ -12,7 +12,7 @@ import { ErrorView } from './ErrorView';
 
 export const DEFAULT_AVAILABLE_TAGS: string[] = [
   'harmonyos',
-  'flutter',
+  'arkui',
   'bug',
   'resource',
   'ai',
