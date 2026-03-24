@@ -286,6 +286,32 @@ export struct LoginPage {
     return user;
   }
 
+  private isLoginLikeUrl(url: string): boolean {
+    const normalizedUrl: string = url.trim().toLowerCase();
+    if (normalizedUrl.length === 0 || normalizedUrl === 'about:blank') {
+      return true;
+    }
+    return normalizedUrl.indexOf('/login') >= 0;
+  }
+
+  private canFinalizeLoginFromWebState(
+    pageInfo: PageLoginInfo,
+    tToken: string | null,
+    forumSession: string | null
+  ): boolean {
+    const hasToken: boolean = tToken !== null && tToken.length > 0;
+    const hasForumSession: boolean = forumSession !== null && forumSession.length > 0;
+    const username: string = pageInfo.username.trim();
+    const pageUrl: string = pageInfo.pageUrl.trim().length > 0 ? pageInfo.pageUrl.trim() : this.currentPageUrl.trim();
+    if (!hasToken || !hasForumSession || username.length === 0) {
+      return false;
+    }
+    if (pageUrl.length === 0 || pageUrl === 'about:blank') {
+      return false;
+    }
+    return !this.isLoginLikeUrl(pageUrl);
+  }
+
   private async buildHydratedFallbackUser(username: string): Promise<User> {
     const normalizedUsername: string = username.trim();
     if (normalizedUsername.length === 0) {
@@ -318,6 +344,7 @@ export struct LoginPage {
   private async fetchCurrentUserWithRetry(fallbackUsername: string): Promise<User | null> {
     const normalizedFallbackUsername: string = fallbackUsername.trim();
     const maxAttempts: number = normalizedFallbackUsername.length > 0 ? 1 : NATIVE_USER_RETRY_COUNT;
+    let rateLimited: boolean = false;
     for (let i = 0; i < maxAttempts; i++) {
       try {
         const currentUser: User | null = await ApiClient.getInstance().getCurrentUser();
@@ -334,12 +361,7 @@ export struct LoginPage {
           ApiClient.formatError(err)
         );
         if (normalizedFallbackUsername.length > 0 && this.isRateLimitError(err)) {
-          hilog.warn(
-            0x0000,
-            TAG,
-            'Current user still rate limited after token, fallback to username hydration username=%{public}s',
-            normalizedFallbackUsername
-          );
+          rateLimited = true;
           break;
         }
       }
@@ -347,8 +369,13 @@ export struct LoginPage {
         await this.sleep(NATIVE_USER_RETRY_INTERVAL_MS);
       }
     }
-    if (normalizedFallbackUsername.length > 0) {
-      return await this.buildHydratedFallbackUser(normalizedFallbackUsername);
+    if (rateLimited && normalizedFallbackUsername.length > 0) {
+      hilog.warn(
+        0x0000,
+        TAG,
+        'Current user still rate limited after token, defer hydration username=%{public}s',
+        normalizedFallbackUsername
+      );
     }
     return null;
   }
@@ -382,14 +409,18 @@ export struct LoginPage {
     }
   }
 
-  private async applyLoginSuccess(user: User, cookieHeader: string, csrfToken: string): Promise<void> {
+  private async applyLoginSuccess(
+    user: User,
+    cookieHeader: string,
+    csrfToken: string,
+    allowNetworkWarmup: boolean = true
+  ): Promise<void> {
     const auth: AuthService = AuthService.getInstance();
     const previousUsername: string = auth.getCurrentUsername().trim().toLowerCase();
     const nextUsername: string = user.username.trim().toLowerCase();
     if (previousUsername.length > 0 && nextUsername.length > 0 && previousUsername !== nextUsername) {
       ApiClient.getInstance().resetCurrentUserSessionState();
     }
-    await this.prefetchSummarySnapshot(user.username);
     auth.setCurrentUser(user);
     ApiClient.getInstance().setCachedCurrentUser(user);
     await auth.saveLoginInfo(cookieHeader, csrfToken, user.username);
@@ -398,6 +429,11 @@ export struct LoginPage {
     this.stopLoginStatePolling();
     ToastService.show('登录成功');
     RouterManager.pop();
+    if (allowNetworkWarmup && user.username.trim().length > 0) {
+      setTimeout(() => {
+        void this.prefetchSummarySnapshot(user.username);
+      }, 1200);
+    }
   }
 
   private async inspectLoginState(): Promise<void> {
@@ -449,7 +485,25 @@ export struct LoginPage {
       const refreshedCookieHeader: string = store.syncFromWebView();
       const effectiveCookieHeader: string = refreshedCookieHeader.length > 0 ? refreshedCookieHeader : cookieHeader;
       const currentUser: User | null = await this.fetchCurrentUserWithRetry(pageInfo.username);
-      if (currentUser === null) {
+      let loginUser: User | null = currentUser;
+      let allowNetworkWarmup: boolean = true;
+      if (loginUser === null) {
+        if (!this.canFinalizeLoginFromWebState(pageInfo, tToken, forumSession)) {
+          hilog.warn(0x0000, TAG, 'Token exists but native current user is still unavailable, wait next poll');
+          return;
+        }
+        loginUser = this.buildFallbackUser(pageInfo.username);
+        allowNetworkWarmup = false;
+        const effectivePageUrl: string = pageInfo.pageUrl.trim().length > 0 ? pageInfo.pageUrl.trim() : this.currentPageUrl;
+        hilog.warn(
+          0x0000,
+          TAG,
+          'Native current user unavailable after token, finalize login from web state username=%{public}s pageUrl=%{public}s',
+          pageInfo.username,
+          effectivePageUrl
+        );
+      }
+      if (loginUser === null) {
         hilog.warn(0x0000, TAG, 'Token exists but native current user is still unavailable, wait next poll');
         return;
       }
@@ -457,7 +511,7 @@ export struct LoginPage {
       const effectiveCsrfToken: string = pageInfo.csrfToken.length > 0
         ? pageInfo.csrfToken
         : AuthService.getInstance().getCsrfToken();
-      await this.applyLoginSuccess(currentUser, effectiveCookieHeader, effectiveCsrfToken);
+      await this.applyLoginSuccess(loginUser, effectiveCookieHeader, effectiveCsrfToken, allowNetworkWarmup);
     } catch (err) {
       hilog.error(0x0000, TAG, 'Inspect login state failed: %{public}s', ApiClient.formatError(err));
     } finally {

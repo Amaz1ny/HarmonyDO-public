@@ -44,6 +44,7 @@ export struct CfChallengePage {
   @Local isLoading: boolean = true;
   @Local progress: number = 0;
   @Local errorMessage: string = '';
+  @Local verifyUrl: string = VERIFY_URL;
 
   private controller: webview.WebviewController = new webview.WebviewController('cf_challenge');
   private pollTimerId: number = -1;
@@ -58,9 +59,11 @@ export struct CfChallengePage {
   private initialCfClearanceSnapshot: string = '';
   private checkingClearance: boolean = false;
   private noChallengeRetryCount: number = 0;
+  private fallbackToBaseUrlUsed: boolean = false;
 
   aboutToAppear(): void {
     ArkWebHelper.configureLinuxDoHostsUserAgent();
+    this.verifyUrl = VERIFY_URL;
     this.resetVerifySignals();
     if (this.bridge === null) {
       this.bridge = new CfChallengeBridge(this);
@@ -115,6 +118,7 @@ export struct CfChallengePage {
     this.rcInterceptTriggered = false;
     this.challengePlatformResponseSeen = false;
     this.noChallengeRetryCount = 0;
+    this.fallbackToBaseUrlUsed = false;
   }
 
   private logEnterReason(): void {
@@ -325,6 +329,26 @@ export struct CfChallengePage {
     }
 
     const notFoundHint: boolean = this.hasPageNotFoundHint(snapshot);
+    if (notFoundHint
+      && !this.rcInterceptTriggered
+      && !this.challengePlatformResponseSeen
+      && !this.fallbackToBaseUrlUsed
+      && this.isChallengePlaceholderUrl(snapshot.href)) {
+      this.fallbackToBaseUrlUsed = true;
+      this.noChallengeRetryCount = 0;
+      this.isLoading = true;
+      this.progress = 0;
+      this.errorMessage = '';
+      this.verifyUrl = AppConstants.BASE_URL;
+      hilog.warn(
+        0x0000,
+        TAG,
+        'Verify placeholder page resolved to notFound without CF signals, fallback to base url from=%{public}s to=%{public}s',
+        snapshot.href,
+        this.verifyUrl
+      );
+      return;
+    }
     const shouldRetryWait: boolean = (notFoundHint || this.rcInterceptTriggered || this.challengePlatformResponseSeen)
       && this.noChallengeRetryCount < NO_CHALLENGE_MAX_RETRY_COUNT;
     if (shouldRetryWait) {
@@ -460,6 +484,15 @@ export struct CfChallengePage {
       || title.indexOf('page does not exist') >= 0
       || body.indexOf('page does not exist') >= 0
       || body.indexOf('not a public page') >= 0;
+  }
+
+  private isChallengePlaceholderUrl(url: string): boolean {
+    const normalizedUrl: string = url.trim().toLowerCase();
+    if (normalizedUrl.length === 0) {
+      return false;
+    }
+    const baseUrl: string = AppConstants.BASE_URL.trim().toLowerCase();
+    return normalizedUrl === `${baseUrl}/challenge` || normalizedUrl.indexOf('/challenge') >= 0;
   }
 
   private tryExtractSitekeyFromPage(): void {
@@ -1018,7 +1051,7 @@ export struct CfChallengePage {
         }
 
         Stack() {
-          Web({ src: VERIFY_URL, controller: this.controller })
+          Web({ src: this.verifyUrl, controller: this.controller })
             .width('100%')
             .height('100%')
             .javaScriptAccess(true)
