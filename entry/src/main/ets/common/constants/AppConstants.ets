@@ -32,5 +32,5 @@ export class AppConstants {
 
   /** User-Agent */
   static readonly USER_AGENT: string =
-    'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36';
+    'Mozilla/5.0 (Phone; OpenHarmony 6.1; Android 10) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36  ArkWeb/6.1.0.100 Mobile HuaweiBrowser/6.1.1.341';
 }

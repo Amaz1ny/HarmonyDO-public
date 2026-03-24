@@ -1,6 +1,21 @@
 {
   "app": {
-    "signingConfigs": [],
+    "signingConfigs": [
+      {
+        "name": "default",
+        "type": "HarmonyOS",
+        "material": {
+          // 开源分支不包含任何真实签名信息，请按本地环境自行配置
+          "certpath": "C:\\path\\to\\your\\debug.cer",
+          "keyAlias": "debugKey",
+          "keyPassword": "YOUR_KEY_PASSWORD",
+          "profile": "C:\\path\\to\\your\\debug.p7b",
+          "signAlg": "SHA256withECDSA",
+          "storeFile": "C:\\path\\to\\your\\debug.p12",
+          "storePassword": "YOUR_STORE_PASSWORD"
+        }
+      }
+    ],
     "products": [
       {
         "name": "default",

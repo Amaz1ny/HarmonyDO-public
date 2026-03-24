@@ -178,9 +178,6 @@ export class BadgeIconUtils {
       case 'arkui':
       case 'openharmony':
         return $r('sys.symbol.gearshape');
-      case 'flutter':
-      case 'dart':
-        return $r('sys.symbol.leaf');
       case 'news':
       case 'announcement':
         return $r('sys.symbol.bell');

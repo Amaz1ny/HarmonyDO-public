@@ -9,7 +9,7 @@ const TAG: string = 'PreferencesUtil';
  */
 export class PreferencesUtil {
   private static preferencesInstance: preferences.Preferences | null = null;
-  private static readonly STORE_NAME: string = 'fluxdo_preferences';
+  private static readonly STORE_NAME: string = 'harmonydo_preferences';
   private static initPromise: Promise<void> | null = null;
 
   /**

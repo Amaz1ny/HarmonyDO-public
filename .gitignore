@@ -13,6 +13,7 @@
 /.mcp/
 /.vscode/
 *.md
+!README.md
 .cxx
 /.clangd
 /.clang-format
