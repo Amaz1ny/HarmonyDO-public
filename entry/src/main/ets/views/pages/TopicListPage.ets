@@ -32,6 +32,7 @@ const TAB_ROW_HEIGHT: number = 36;
 const SORT_BAR_HEIGHT: number = 44;
 const COLLAPSIBLE_HEIGHT: number = SEARCH_BAR_HEIGHT + SORT_BAR_HEIGHT;
 const BAR_VISIBILITY_EPS: number = 0.01;
+const TAB_BAR_TOGGLE_DELTA: number = 50;
 const FAB_BOTTOM_MARGIN_VP: number = 16;
 
 // 游客态“查看新话题”轮询：Discourse 站点通常会把匿名 MessageBus poll 拉长到 ~25s（anon_polling_interval）
@@ -74,6 +75,8 @@ export struct TopicListPage {
   private listScroller: Scroller = new Scroller();
   private headerSnapTimerId: number = -1;
   private lastReportedBarVisibility: number = 1;
+  private _tabBarDelta: number = 0;
+  private _tabBarForceVisible: boolean = false;
   private createdTopicId: number = 0;
   private createTopicSheetRequestKey: string = '';
 
@@ -591,6 +594,9 @@ export struct TopicListPage {
   }
 
   private computeBarVisibility(): number {
+    if (this._tabBarForceVisible) {
+      return 1;
+    }
     const raw: number = 1 - this.headerOffset / COLLAPSIBLE_HEIGHT;
     return this.clamp(raw, 0, 1);
   }
@@ -2335,6 +2341,8 @@ export struct TopicListPage {
                   const consume: number = Math.min(offset, canCollapse);
                   this.headerOffset = this.headerOffset + consume;
                   remain = offset - consume;
+                  // Header 开始折叠时，清除强制显示标记
+                  this._tabBarForceVisible = false;
                 }
               } else if (offset < 0) {
                 // 仅在 List 已到顶时才展开 Header，避免中段滚动时 Header 误展开
@@ -2343,6 +2351,26 @@ export struct TopicListPage {
                   this.headerOffset = this.headerOffset - consume;
                   remain = offset + consume;
                 }
+              }
+
+              // 独立的 TabBar 方向检测：Header 完全折叠且不在顶部时，
+              // 根据滚动方向独立控制 TabBar 显隐
+              if (this.headerOffset >= COLLAPSIBLE_HEIGHT && !this.listAtTop) {
+                if ((this._tabBarDelta > 0 && offset < 0) || (this._tabBarDelta < 0 && offset > 0)) {
+                  this._tabBarDelta = offset;
+                } else {
+                  this._tabBarDelta = this._tabBarDelta + offset;
+                }
+
+                if (this._tabBarDelta < -TAB_BAR_TOGGLE_DELTA && !this._tabBarForceVisible) {
+                  this._tabBarDelta = 0;
+                  this._tabBarForceVisible = true;
+                } else if (this._tabBarDelta > TAB_BAR_TOGGLE_DELTA && this._tabBarForceVisible) {
+                  this._tabBarDelta = 0;
+                  this._tabBarForceVisible = false;
+                }
+              } else {
+                this._tabBarDelta = 0;
               }
 
               // Header 折叠状态变化 → 通知父级更新底部 TabBar 可见性

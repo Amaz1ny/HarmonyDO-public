@@ -87,7 +87,28 @@ export struct ReplyComposerSheet {
   }
 
   private getMinContentLength(): number {
-    return 20;
+    return 10;
+  }
+
+  /**
+   * CJK 字符计为 2 个有效字符（与 Discourse 服务端一致）
+   */
+  private getEffectiveLength(text: string): number {
+    let length: number = 0;
+    for (let i: number = 0; i < text.length; i++) {
+      const code: number = text.charCodeAt(i);
+      if ((code >= 0x4E00 && code <= 0x9FFF) ||
+        (code >= 0x3400 && code <= 0x4DBF) ||
+        (code >= 0x3040 && code <= 0x309F) ||
+        (code >= 0x30A0 && code <= 0x30FF) ||
+        (code >= 0xAC00 && code <= 0xD7AF) ||
+        (code >= 0xFF01 && code <= 0xFF5E)) {
+        length = length + 2;
+      } else {
+        length = length + 1;
+      }
+    }
+    return length;
   }
 
   private getToolbarHeight(): number {
@@ -223,8 +244,8 @@ export struct ReplyComposerSheet {
       this.isPreview = false;
       return;
     }
-    if (trimmed.length < this.getMinContentLength()) {
-      this.errorMessage = `回复内容至少需要 ${this.getMinContentLength()} 个字`;
+    if (this.getEffectiveLength(trimmed) < this.getMinContentLength()) {
+      this.errorMessage = '回复内容太短';
       this.isPreview = false;
       return;
     }

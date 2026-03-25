@@ -112,6 +112,27 @@ export struct CreateTopicComposerSheet {
     return 20;
   }
 
+  /**
+   * CJK 字符计为 2 个有效字符（与 Discourse 服务端一致）
+   */
+  private getEffectiveLength(text: string): number {
+    let length: number = 0;
+    for (let i: number = 0; i < text.length; i++) {
+      const code: number = text.charCodeAt(i);
+      if ((code >= 0x4E00 && code <= 0x9FFF) ||
+        (code >= 0x3400 && code <= 0x4DBF) ||
+        (code >= 0x3040 && code <= 0x309F) ||
+        (code >= 0x30A0 && code <= 0x30FF) ||
+        (code >= 0xAC00 && code <= 0xD7AF) ||
+        (code >= 0xFF01 && code <= 0xFF5E)) {
+        length = length + 2;
+      } else {
+        length = length + 1;
+      }
+    }
+    return length;
+  }
+
   private getToolbarHeight(): number {
     return 56 + WindowManager.getSystemAvoidAreaBottomVp();
   }
@@ -383,16 +404,16 @@ export struct CreateTopicComposerSheet {
       this.errorMessage = '请输入标题';
       return false;
     }
-    if (normalizedTitle.length < this.getMinTitleLength()) {
-      this.errorMessage = `标题至少需要 ${this.getMinTitleLength()} 个字`;
+    if (this.getEffectiveLength(normalizedTitle) < this.getMinTitleLength()) {
+      this.errorMessage = '标题太短';
       return false;
     }
     if (normalizedContent.length === 0) {
       this.errorMessage = '请输入内容';
       return false;
     }
-    if (normalizedContent.length < this.getMinContentLength()) {
-      this.errorMessage = `正文至少需要 ${this.getMinContentLength()} 个字`;
+    if (this.getEffectiveLength(normalizedContent) < this.getMinContentLength()) {
+      this.errorMessage = '正文内容太短';
       return false;
     }
     if (this.selectedCategoryId <= 0) {
