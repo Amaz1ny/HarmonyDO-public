@@ -53,8 +53,10 @@ import {
 const TAG: string = 'TopicDetailPage';
 const TITLE_SHOW_OFFSET: number = 160;
 const BOTTOM_BAR_HEIGHT: number = 56;
-const BOTTOM_BAR_TOGGLE_DELTA: number = 50;
+const BOTTOM_BAR_SHOW_DELTA: number = 24;
+const BOTTOM_BAR_HIDE_DELTA: number = 50;
 const BOTTOM_BAR_ANIM_DURATION: number = 180;
+const BOTTOM_BAR_SHOW_DELAY_MS: number = 1200;
 const BOTTOM_BAR_HIDE_EXTRA_TRANSLATE: number = 24;
 const PROGRESS_CAPSULE_HEIGHT: number = 32;
 const PROGRESS_BOTTOM_NO_BAR: number = 24;
@@ -128,8 +130,8 @@ export struct TopicDetailPage {
   @Local highlightPostNumber: number = 0;
   @Local highlightOpacity: number = 0;
   @Local timeTick: number = 0;
-  @Local showBottomBar: boolean = false;
-  @Local bottomBarVisibility: number = 0;
+  @Local showBottomBar: boolean = true;
+  @Local bottomBarVisibility: number = 1;
   @Local isSummaryMode: boolean = false;
   @Local isAuthorOnlyMode: boolean = false;
   @Local isClosed: boolean = false;
@@ -180,6 +182,8 @@ export struct TopicDetailPage {
   @Local scrollOffset: number = 0;
   private _bottomBarDelta: number = 0;
   private listScroller: Scroller = new Scroller();
+  private scrollSyncTimerId: number = -1;
+  private bottomBarShowTimerId: number = -1;
   private didScrollToInitial: boolean = false;
   private streamIndexMap: Map<number, number> = new Map();
   private readLaterListener: (() => void) | null = null;
@@ -307,6 +311,8 @@ export struct TopicDetailPage {
     this.closeShareImageSheet();
     this.closeExportSheet();
     this.closeReactionPicker();
+    this.clearScrollSyncTimer();
+    this.clearBottomBarShowTimer();
     this.clearReactionPickerAnimationTimer();
     this.clearHighlightTimer();
     this.clearLikeAnimationTimer();
@@ -2118,14 +2124,16 @@ export struct TopicDetailPage {
     this.clearLikeAnimationTimer();
     this.closeReactionPicker();
     this.clearReactionPickerAnimationTimer();
+    this.clearScrollSyncTimer();
+    this.clearBottomBarShowTimer();
 
     this.replyCount = 0;
     this.postsCount = 0;
     this.currentPostIndex = requestedPostNumber > 0 ? requestedPostNumber : 1;
     this.scrollOffset = 0;
     this.showTitle = false;
-    this.showBottomBar = false;
-    this.bottomBarVisibility = 0;
+    this.showBottomBar = true;
+    this.bottomBarVisibility = 1;
     this._bottomBarDelta = 0;
     this.expandedRepliesPostNumber = 0;
     this.expandedRepliesLoading = false;
@@ -2307,6 +2315,8 @@ export struct TopicDetailPage {
       hilog.error(0x0000, TAG, 'Load topic detail failed: %{public}s', errText);
       if (errText.indexOf('Cloudflare verification') >= 0) {
         this.errorMessage = 'Cloudflare 验证未完成，请重试';
+      } else if (ApiClient.isSslPeerCertificateError(err)) {
+        this.errorMessage = ApiClient.getTlsCertificateErrorMessage();
       } else {
         this.errorMessage = '加载话题详情失败';
       }
@@ -3615,6 +3625,33 @@ export struct TopicDetailPage {
     return -(this.getProgressBottomOffset() + PROGRESS_CAPSULE_HEIGHT);
   }
 
+  private scheduleScrollOffsetSync(): void {
+    if (this.scrollSyncTimerId >= 0) {
+      return;
+    }
+    this.scrollSyncTimerId = setTimeout(() => {
+      this.scrollSyncTimerId = -1;
+      const currentOffset = this.listScroller.currentOffset();
+      const yOffset: number = currentOffset.yOffset;
+      this.scrollOffset = Math.max(0, yOffset);
+      this.showTitle = this.scrollOffset > TITLE_SHOW_OFFSET;
+    }, 0);
+  }
+
+  private clearScrollSyncTimer(): void {
+    if (this.scrollSyncTimerId >= 0) {
+      clearTimeout(this.scrollSyncTimerId);
+      this.scrollSyncTimerId = -1;
+    }
+  }
+
+  private clearBottomBarShowTimer(): void {
+    if (this.bottomBarShowTimerId >= 0) {
+      clearTimeout(this.bottomBarShowTimerId);
+      this.bottomBarShowTimerId = -1;
+    }
+  }
+
   private setBottomBarVisible(visible: boolean): void {
     if (visible === this.showBottomBar) return;
 
@@ -3631,8 +3668,31 @@ export struct TopicDetailPage {
   }
 
   private setBottomBarVisibleInstant(visible: boolean): void {
+    this.clearBottomBarShowTimer();
     this.showBottomBar = visible;
     this.bottomBarVisibility = visible ? 1 : 0;
+  }
+
+  private hideBottomBar(): void {
+    this.clearBottomBarShowTimer();
+    this.setBottomBarVisible(false);
+  }
+
+  private showBottomBarImmediate(): void {
+    this.clearBottomBarShowTimer();
+    this.setBottomBarVisible(true);
+  }
+
+  private scheduleBottomBarShow(): void {
+    if (this.showBottomBar && this.bottomBarVisibility >= 1) {
+      this.clearBottomBarShowTimer();
+      return;
+    }
+    this.clearBottomBarShowTimer();
+    this.bottomBarShowTimerId = setTimeout(() => {
+      this.bottomBarShowTimerId = -1;
+      this.setBottomBarVisible(true);
+    }, BOTTOM_BAR_SHOW_DELAY_MS);
   }
 
   private hexWithAlpha(hex: string, alpha: number): string {
@@ -4084,8 +4144,8 @@ export struct TopicDetailPage {
                 .onReachStart(() => {
                   this.scrollOffset = 0;
                   this.showTitle = false;
-                  this.setBottomBarVisibleInstant(false);
                   this._bottomBarDelta = 0;
+                  this.showBottomBarImmediate();
                 })
                 .onReachEnd(() => {
                   this.loadMoreAfter();
@@ -4101,37 +4161,41 @@ export struct TopicDetailPage {
                   if (this.reactionPickerPostId > 0 && Math.abs(offset) > 0.1) {
                     this.closeReactionPicker();
                   }
-                  // 记录滚动偏移，用于控制 AppBar 标题显隐（offset 为每帧增量）
+                  // 先用增量预测，随后再异步同步 scroller.currentOffset()，避免边界回弹造成状态漂移。
                   const next: number = Math.max(0, this.scrollOffset + offset);
                   this.scrollOffset = next;
+                  this.scheduleScrollOffsetSync();
 
                   // 底部工具栏显隐：
                   // - 向上滚动（offset<0）→ 显示
                   // - 向下滚动（offset>0）→ 隐藏
                   if (next <= 0) {
                     this._bottomBarDelta = 0;
-                    if (this.showBottomBar) {
-                      this.setBottomBarVisible(false);
-                    }
+                    this.showBottomBarImmediate();
+                  } else if (offset < -0.01) {
+                    this._bottomBarDelta = 0;
+                    this.showBottomBarImmediate();
                   } else {
+                    this.clearBottomBarShowTimer();
                     // 方向改变时重置累计，避免轻微回弹导致阈值判断反复
-                    if ((this._bottomBarDelta > 0 && offset < 0) || (this._bottomBarDelta < 0 && offset > 0)) {
+                    if ((this._bottomBarDelta > 0 && offset <= 0) || (this._bottomBarDelta < 0 && offset > 0)) {
                       this._bottomBarDelta = offset;
                     } else {
                       this._bottomBarDelta = this._bottomBarDelta + offset;
                     }
 
-                    if (this._bottomBarDelta < -BOTTOM_BAR_TOGGLE_DELTA && !this.showBottomBar) {
+                    if (this._bottomBarDelta > BOTTOM_BAR_HIDE_DELTA && this.showBottomBar) {
                       this._bottomBarDelta = 0;
-                      this.setBottomBarVisible(true);
-                    } else if (this._bottomBarDelta > BOTTOM_BAR_TOGGLE_DELTA && this.showBottomBar) {
-                      this._bottomBarDelta = 0;
-                      this.setBottomBarVisible(false);
+                      this.hideBottomBar();
                     }
                   }
 
                   this.showTitle = next > TITLE_SHOW_OFFSET;
                   return { offsetRemain: offset };
+                })
+                .onScrollStop(() => {
+                  this._bottomBarDelta = 0;
+                  this.scheduleBottomBarShow();
                 })
               }
               .onRefreshing(() => {
@@ -4203,7 +4267,7 @@ export struct TopicDetailPage {
                   this.listScroller.scrollToIndex(0, true, ScrollAlign.START);
                   this.scrollOffset = 0;
                   this.showTitle = false;
-                  this.setBottomBarVisibleInstant(false);
+                  this.setBottomBarVisibleInstant(true);
                   this._bottomBarDelta = 0;
                 })
 

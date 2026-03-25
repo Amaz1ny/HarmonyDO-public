@@ -75,6 +75,17 @@ export class ApiClient {
     return 'Unknown error';
   }
 
+  static isSslPeerCertificateError(err: Object): boolean {
+    const text: string = ApiClient.formatError(err).toLowerCase();
+    return text.indexOf('2300060') >= 0
+      || text.indexOf('invalid ssl peer certificate') >= 0
+      || text.indexOf('ssl peer certificate or ssh remote key') >= 0;
+  }
+
+  static getTlsCertificateErrorMessage(): string {
+    return '网络证书校验失败，请检查代理/抓包证书，或使用当前调试构建的本地证书兼容模式';
+  }
+
   static extractRetryAfterSeconds(err: Object, fallbackSeconds: number = 0): number {
     const text: string = ApiClient.formatError(err);
     const patterns: RegExp[] = [

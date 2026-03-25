@@ -9,13 +9,22 @@ import { common } from '@kit.AbilityKit';
  */
 export class AppContext {
   private static uiAbilityContext: common.UIAbilityContext | null = null;
+  private static debugMode: boolean = false;
 
   static setUIAbilityContext(ctx: common.UIAbilityContext): void {
     AppContext.uiAbilityContext = ctx;
+    try {
+      AppContext.debugMode = ctx.applicationInfo.debug;
+    } catch (_) {
+      AppContext.debugMode = false;
+    }
   }
 
   static getUIAbilityContext(): common.UIAbilityContext | null {
     return AppContext.uiAbilityContext;
   }
-}
 
+  static isDebugMode(): boolean {
+    return AppContext.debugMode;
+  }
+}

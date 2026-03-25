@@ -33,6 +33,8 @@ const SORT_BAR_HEIGHT: number = 44;
 const COLLAPSIBLE_HEIGHT: number = SEARCH_BAR_HEIGHT + SORT_BAR_HEIGHT;
 const BAR_VISIBILITY_EPS: number = 0.01;
 const FAB_BOTTOM_MARGIN_VP: number = 16;
+const PULL_REFRESH_REARM_DELAY_MS: number = 160;
+const FLOATING_TAB_BAR_SHOW_DELAY_MS: number = 1200;
 
 // 游客态“查看新话题”轮询：Discourse 站点通常会把匿名 MessageBus poll 拉长到 ~25s（anon_polling_interval）
 // 为了更“实时”的体验，这里额外用 /latest.json 做轻量轮询并做指数退避，避免触发 CF 频控时刷屏/卡死
@@ -68,11 +70,18 @@ export struct TopicListPage {
   // Header 折叠
   @Local headerOffset: number = 0; // 0 展开，COLLAPSIBLE_HEIGHT 折叠
   @Local listAtTop: boolean = true;
+  @Local floatingTabBarVisibility: number = 1;
   @Local fabRefreshMode: boolean = false;
+  @Local pullRefreshArmed: boolean = true;
   @Local isHomeFabExpanded: boolean = false;
   @Local isCreateTopicSheetVisible: boolean = false;
   private listScroller: Scroller = new Scroller();
   private headerSnapTimerId: number = -1;
+  private pullRefreshArmTimerId: number = -1;
+  private floatingTabBarShowTimerId: number = -1;
+  private lastHeaderScrollDirection: number = 0;
+  private refreshGestureReady: boolean = true;
+  private isListTouchActive: boolean = false;
   private lastReportedBarVisibility: number = 1;
   private createdTopicId: number = 0;
   private createTopicSheetRequestKey: string = '';
@@ -135,9 +144,12 @@ export struct TopicListPage {
 
   aboutToDisappear(): void {
     this.clearHeaderSnapTimer();
+    this.clearPullRefreshArmTimer();
+    this.clearFloatingTabBarShowTimer();
     this.clearIncomingLoadTimer();
     this.clearIncomingPollTimer();
     this.clearIncomingHighlightTimer();
+    this.isListTouchActive = false;
     this.isHomeFabExpanded = false;
     this.highlightedTopicIds = [];
     this.detachTrackingListener();
@@ -517,9 +529,12 @@ export struct TopicListPage {
       this.currentPage = this.currentPage + 1;
       this.maybeArmIncomingBanner();
     } catch (err) {
-      hilog.error(0x0000, TAG, 'Load topics failed: %{public}s', JSON.stringify(err));
+      const errText: string = ApiClient.formatError(err);
+      hilog.error(0x0000, TAG, 'Load topics failed: %{public}s', errText);
       if (isRefresh) {
-        this.errorMessage = '加载失败，请下拉重试';
+        this.errorMessage = ApiClient.isSslPeerCertificateError(err)
+          ? ApiClient.getTlsCertificateErrorMessage()
+          : '加载失败，请下拉重试';
       }
     } finally {
       this.isLoading = false;
@@ -590,9 +605,36 @@ export struct TopicListPage {
     return this.isHomeFabLeftAligned() ? 0 : -72;
   }
 
+  private isListScrollerAtTop(): boolean {
+    if (!this.listAtTop) {
+      return false;
+    }
+    try {
+      const currentOffset = this.listScroller.currentOffset();
+      return currentOffset.yOffset <= 0.5;
+    } catch (_) {
+      return this.listAtTop;
+    }
+  }
+
+  private canTriggerRefreshFromScroll(): boolean {
+    return this.headerOffset <= 0.01 && this.isListScrollerAtTop();
+  }
+
+  private shouldEnablePullRefresh(): boolean {
+    return this.pullRefreshArmed && this.canTriggerRefreshFromScroll();
+  }
+
+  private getRefreshPullDownRatio(): number | undefined {
+    return this.shouldEnablePullRefresh() ? undefined : 0;
+  }
+
+  private getRefreshMaxPullDownDistance(): number | undefined {
+    return this.shouldEnablePullRefresh() ? undefined : 0;
+  }
+
   private computeBarVisibility(): number {
-    const raw: number = 1 - this.headerOffset / COLLAPSIBLE_HEIGHT;
-    return this.clamp(raw, 0, 1);
+    return this.clamp(this.floatingTabBarVisibility, 0, 1);
   }
 
   private reportBarVisibility(force: boolean): void {
@@ -603,10 +645,95 @@ export struct TopicListPage {
     }
   }
 
+  private setFloatingTabBarVisible(visible: boolean, forceReport: boolean = false): void {
+    const next: number = visible ? 1 : 0;
+    if (!forceReport && Math.abs(next - this.floatingTabBarVisibility) <= BAR_VISIBILITY_EPS) {
+      return;
+    }
+    this.floatingTabBarVisibility = next;
+    this.reportBarVisibility(forceReport);
+  }
+
+  private clearFloatingTabBarShowTimer(): void {
+    if (this.floatingTabBarShowTimerId >= 0) {
+      clearTimeout(this.floatingTabBarShowTimerId);
+      this.floatingTabBarShowTimerId = -1;
+    }
+  }
+
+  private hideFloatingTabBar(forceReport: boolean = false): void {
+    this.clearFloatingTabBarShowTimer();
+    this.setFloatingTabBarVisible(false, forceReport);
+  }
+
+  private showFloatingTabBarImmediate(forceReport: boolean = false): void {
+    this.clearFloatingTabBarShowTimer();
+    this.setFloatingTabBarVisible(true, forceReport);
+  }
+
+  private scheduleFloatingTabBarShow(forceReport: boolean = false): void {
+    if (Math.abs(this.floatingTabBarVisibility - 1) <= BAR_VISIBILITY_EPS) {
+      this.clearFloatingTabBarShowTimer();
+      if (forceReport) {
+        this.reportBarVisibility(true);
+      }
+      return;
+    }
+    this.clearFloatingTabBarShowTimer();
+    this.floatingTabBarShowTimerId = setTimeout(() => {
+      this.floatingTabBarShowTimerId = -1;
+      this.setFloatingTabBarVisible(true, forceReport);
+    }, FLOATING_TAB_BAR_SHOW_DELAY_MS);
+  }
+
   private clearHeaderSnapTimer(): void {
     if (this.headerSnapTimerId >= 0) {
       clearTimeout(this.headerSnapTimerId);
       this.headerSnapTimerId = -1;
+    }
+  }
+
+  private clearPullRefreshArmTimer(): void {
+    if (this.pullRefreshArmTimerId >= 0) {
+      clearTimeout(this.pullRefreshArmTimerId);
+      this.pullRefreshArmTimerId = -1;
+    }
+  }
+
+  private disarmPullRefresh(): void {
+    this.clearPullRefreshArmTimer();
+    this.pullRefreshArmed = false;
+  }
+
+  private schedulePullRefreshArm(): void {
+    if (this.pullRefreshArmed || this.isListTouchActive || !this.canTriggerRefreshFromScroll()) {
+      return;
+    }
+    this.clearPullRefreshArmTimer();
+    this.pullRefreshArmTimerId = setTimeout(() => {
+      this.pullRefreshArmTimerId = -1;
+      if (!this.isListTouchActive && this.canTriggerRefreshFromScroll()) {
+        this.pullRefreshArmed = true;
+      }
+    }, PULL_REFRESH_REARM_DELAY_MS);
+  }
+
+  private handleListTouch(event: TouchEvent): void {
+    if (event.type === TouchType.Down || event.type === TouchType.Move) {
+      this.isListTouchActive = true;
+      if (!this.canTriggerRefreshFromScroll()) {
+        this.disarmPullRefresh();
+      }
+      return;
+    }
+
+    if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
+      this.isListTouchActive = false;
+      if (this.canTriggerRefreshFromScroll()) {
+        this.schedulePullRefreshArm();
+      } else {
+        this.disarmPullRefresh();
+      }
     }
   }
 
@@ -679,7 +806,9 @@ export struct TopicListPage {
   private snapHeaderIfNeeded(): void {
     if (this.headerOffset <= 0 || this.headerOffset >= COLLAPSIBLE_HEIGHT) return;
 
-    const target: number = this.headerOffset > COLLAPSIBLE_HEIGHT / 2 ? COLLAPSIBLE_HEIGHT : 0;
+    const target: number = this.lastHeaderScrollDirection < 0
+      ? 0
+      : (this.headerOffset > COLLAPSIBLE_HEIGHT / 2 ? COLLAPSIBLE_HEIGHT : 0);
     const uiContext = this.getUIContext();
     if (uiContext !== undefined && uiContext !== null) {
       uiContext.animateTo({ duration: 200, curve: Curve.EaseOut }, () => {
@@ -1004,12 +1133,27 @@ export struct TopicListPage {
   }
 
   private onRefreshFabClick(): void {
+    if (!this.canTriggerRefreshFromScroll()) {
+      this.clearHeaderSnapTimer();
+      this.headerOffset = 0;
+      this.listAtTop = true;
+      this.showFloatingTabBarImmediate(true);
+      this.fabRefreshMode = false;
+      this.listScroller.scrollTo({
+        xOffset: 0,
+        yOffset: 0,
+        animation: { duration: 300, curve: Curve.EaseOut }
+      });
+      return;
+    }
+
     // 复位 Header 折叠状态，并回到顶部后刷新
     this.clearHeaderSnapTimer();
     this.headerOffset = 0;
     this.listAtTop = true;
+    this.showFloatingTabBarImmediate(true);
+    this.refreshGestureReady = true;
     this.fabRefreshMode = false;
-    this.reportBarVisibility(true);
 
     // 清理“查看新话题”状态，避免刷新后残留
     if (this.currentFilter === '最新') {
@@ -2319,8 +2463,16 @@ export struct TopicListPage {
             .layoutWeight(1)
             .padding({ left: 12, right: 12 })
             .backgroundColor($r('app.color.background'))
+            .onTouch((event: TouchEvent) => {
+              this.handleListTouch(event);
+            })
             .onReachStart(() => {
               this.listAtTop = true;
+              this.showFloatingTabBarImmediate();
+              this.refreshGestureReady = this.canTriggerRefreshFromScroll();
+              if (!this.isListTouchActive) {
+                this.schedulePullRefreshArm();
+              }
               if (this.fabRefreshMode) {
                 this.fabRefreshMode = false;
               }
@@ -2328,6 +2480,11 @@ export struct TopicListPage {
             .onScrollFrameBegin((offset: number, state: ScrollState) => {
               // 两段折叠：先消费 offset 折叠/展开 Header，再把剩余 offset 交给 List 滚动
               let remain: number = offset;
+              if (offset > 0.01) {
+                this.lastHeaderScrollDirection = 1;
+              } else if (offset < -0.01) {
+                this.lastHeaderScrollDirection = -1;
+              }
 
               if (offset > 0) {
                 const canCollapse: number = COLLAPSIBLE_HEIGHT - this.headerOffset;
@@ -2337,20 +2494,33 @@ export struct TopicListPage {
                   remain = offset - consume;
                 }
               } else if (offset < 0) {
-                // 仅在 List 已到顶时才展开 Header，避免中段滚动时 Header 误展开
-                if (this.listAtTop && this.headerOffset > 0) {
+                // 上滑时优先展开 Header，让搜索栏/底栏能在中段列表及时回显，而不是必须先回到顶部
+                if (this.headerOffset > 0) {
                   const consume: number = Math.min(-offset, this.headerOffset);
                   this.headerOffset = this.headerOffset - consume;
                   remain = offset + consume;
                 }
               }
 
+              if (remain > 0.01) {
+                this.listAtTop = false;
+                this.disarmPullRefresh();
+                if (this.fabRefreshMode) {
+                  this.fabRefreshMode = false;
+                }
+              }
+              if (offset > 0.01) {
+                this.hideFloatingTabBar();
+              } else if (offset < -0.01) {
+                this.showFloatingTabBarImmediate();
+              }
               // Header 折叠状态变化 → 通知父级更新底部 TabBar 可见性
               this.reportBarVisibility(false);
+              const canTriggerRefreshNow: boolean = this.canTriggerRefreshFromScroll();
 
               // FAB：向上滚动（朝顶部方向）→ 刷新模式；向下滚动 → 创建模式
               if (offset < -0.01) {
-                if (!this.listAtTop && !this.fabRefreshMode) {
+                if (canTriggerRefreshNow && this.refreshGestureReady && !this.fabRefreshMode) {
                   this.fabRefreshMode = true;
                 }
               } else if (offset > 0.01) {
@@ -2358,10 +2528,10 @@ export struct TopicListPage {
                   this.fabRefreshMode = false;
                 }
               }
-
-              if (remain > 0.01) {
-                this.listAtTop = false;
+              if (!canTriggerRefreshNow) {
+                this.disarmPullRefresh();
               }
+              this.refreshGestureReady = canTriggerRefreshNow;
 
               // 松手后吸附：只允许停在 0 或 100
               if (this.headerOffset > 0 && this.headerOffset < COLLAPSIBLE_HEIGHT) {
@@ -2371,11 +2541,25 @@ export struct TopicListPage {
               }
               return { offsetRemain: remain };
             })
+            .onScrollStop(() => {
+              this.scheduleFloatingTabBarShow();
+              if (this.canTriggerRefreshFromScroll() && !this.isListTouchActive) {
+                this.schedulePullRefreshArm();
+                return;
+              }
+              this.disarmPullRefresh();
+            })
             .onReachEnd(() => {
               this.loadTopics(false);
             })
           }
+          .pullToRefresh(this.shouldEnablePullRefresh())
+          .pullDownRatio(this.getRefreshPullDownRatio())
+          .maxPullDownDistance(this.getRefreshMaxPullDownDistance())
           .onRefreshing(() => {
+            if (!this.pullRefreshArmed || !this.canTriggerRefreshFromScroll()) {
+              return;
+            }
             this.resetIncomingBannerState();
 
             // 下拉刷新后清除当前 tab 的 incoming，避免 banner 反复显示旧计数

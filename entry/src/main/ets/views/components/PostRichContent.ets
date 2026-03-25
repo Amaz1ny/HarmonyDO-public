@@ -80,6 +80,15 @@ class AsideQuoteInfo {
   }
 }
 
+class CalloutInfo {
+  type: string = '';
+  title: string = '';
+  contentHtml: string = '';
+
+  constructor() {
+  }
+}
+
 class RichBlock {
   key: string = '';
   order: number = 0;
@@ -146,6 +155,9 @@ class RichBlock {
   quoteAvatarUrl: string = '';
   quoteTitleHtml: string = '';
   quoteContentHtml: string = '';
+  calloutType: string = '';
+  calloutTitle: string = '';
+  calloutContentHtml: string = '';
 
   // Onebox (link preview) block
   oneboxUrl: string = '';
@@ -154,6 +166,7 @@ class RichBlock {
   oneboxSource: string = '';
   oneboxIconUrl: string = '';
   oneboxThumbnailUrl: string = '';
+  oneboxClickText: string = '';
 
   constructor() {
   }
@@ -571,12 +584,243 @@ function extractAsideQuoteInfo(openTag: string, innerHtml: string): AsideQuoteIn
   return info;
 }
 
+function isCalloutBlockquote(openTag: string): boolean {
+  return extractAttr(openTag, 'data-callout-type').trim().length > 0 || containsCssClass(openTag, 'callout');
+}
+
+function extractCalloutInfo(openTag: string, innerHtml: string): CalloutInfo {
+  const info: CalloutInfo = new CalloutInfo();
+  const rawType: string = extractAttr(openTag, 'data-callout-type').trim().toLowerCase();
+  info.type = rawType.length > 0 ? rawType : (containsCssClass(openTag, 'callout') ? 'info' : '');
+
+  let titleHtml: string = extractFirstElementInnerHtmlByClass(innerHtml, 'callout-title-inner').trim();
+  if (titleHtml.length === 0) {
+    titleHtml = extractFirstElementInnerHtmlByClass(innerHtml, 'callout-title').trim();
+    if (titleHtml.length > 0) {
+      titleHtml = titleHtml.replace(
+        /<span[^>]*class\s*=\s*["'][^"']*callout-icon[^"']*["'][^>]*>[\s\S]*?<\/span>/i,
+        ''
+      ).trim();
+    }
+  }
+  info.title = stripHtmlCompact(titleHtml);
+
+  const contentHtml: string = extractFirstElementInnerHtmlByClass(innerHtml, 'callout-content').trim();
+  if (contentHtml.length > 0) {
+    info.contentHtml = contentHtml;
+    return info;
+  }
+
+  info.contentHtml = innerHtml.replace(
+    /<div[^>]*class\s*=\s*["'][^"']*callout-title[^"']*["'][^>]*>[\s\S]*?<\/div>/i,
+    ''
+  ).trim();
+  return info;
+}
+
+function parseMarkdownCalloutHeader(rawLine: string): CalloutInfo | null {
+  const plain: string = stripHtmlCompact(rawLine);
+  const match: RegExpMatchArray | null = plain.match(/^\[!([a-z0-9_-]+)\]\s*(.*)$/i);
+  if (match === null || match.length < 2) {
+    return null;
+  }
+  const info: CalloutInfo = new CalloutInfo();
+  info.type = match[1].trim().toLowerCase();
+  info.title = match.length > 2 ? match[2].trim() : '';
+  return info.type.length > 0 ? info : null;
+}
+
+function buildLooseParagraphHtml(rawText: string): string {
+  const source: string = rawText !== undefined && rawText !== null ? rawText.replace(/\r/g, '') : '';
+  if (source.trim().length === 0) {
+    return '';
+  }
+
+  const lines: string[] = source.split('\n');
+  const paragraphs: string[] = [];
+  const paragraphLines: string[] = [];
+
+  const flushParagraph = (): void => {
+    if (paragraphLines.length === 0) {
+      return;
+    }
+    let start: number = 0;
+    let end: number = paragraphLines.length - 1;
+    while (start <= end && stripHtmlCompact(paragraphLines[start]).length === 0) {
+      start = start + 1;
+    }
+    while (end >= start && stripHtmlCompact(paragraphLines[end]).length === 0) {
+      end = end - 1;
+    }
+    if (start > end) {
+      paragraphLines.length = 0;
+      return;
+    }
+
+    const contentLines: string[] = [];
+    for (let i: number = start; i <= end; i++) {
+      contentLines.push(paragraphLines[i].replace(/^[ \t\u00A0]+/, ''));
+    }
+    paragraphs.push(`<p>${contentLines.join('<br>')}</p>`);
+    paragraphLines.length = 0;
+  };
+
+  for (let i: number = 0; i < lines.length; i++) {
+    const line: string = lines[i];
+    if (stripHtmlCompact(line).length === 0) {
+      flushParagraph();
+      continue;
+    }
+    paragraphLines.push(line);
+  }
+  flushParagraph();
+  return paragraphs.join('');
+}
+
+function buildSyntheticCalloutHtml(type: string, title: string, contentHtml: string): string {
+  const safeType: string = type !== undefined && type !== null ? type.toString().trim().toLowerCase() : '';
+  const titleHtml: string = title !== undefined && title !== null ? title.toString().trim() : '';
+  const bodyHtml: string = contentHtml !== undefined && contentHtml !== null ? contentHtml.toString().trim() : '';
+  return `<blockquote class="callout" data-callout-type="${escapeHtml(safeType.length > 0 ? safeType : 'info')}">`
+    + `<div class="callout-title"><span class="callout-title-inner">${titleHtml}</span></div>`
+    + `<div class="callout-content">${bodyHtml}</div>`
+    + `</blockquote>`;
+}
+
+function convertLooseMarkdownCalloutsToHtml(rawHtml: string): string {
+  const raw: string = rawHtml !== undefined && rawHtml !== null ? rawHtml : '';
+  if (raw.trim().length === 0 || raw.indexOf('[!') < 0) {
+    return raw;
+  }
+  if (/<(?:p|blockquote|aside|pre|ul|ol|table|details|div|h[1-6]|hr)\b/i.test(raw)) {
+    return raw;
+  }
+
+  const lines: string[] = raw.replace(/\r/g, '').split('\n');
+  const blocks: string[] = [];
+  const paragraphLines: string[] = [];
+
+  const flushParagraph = (): void => {
+    if (paragraphLines.length === 0) {
+      return;
+    }
+    const paragraphHtml: string = buildLooseParagraphHtml(paragraphLines.join('\n'));
+    if (paragraphHtml.length > 0) {
+      blocks.push(paragraphHtml);
+    }
+    paragraphLines.length = 0;
+  };
+
+  let index: number = 0;
+  while (index < lines.length) {
+    const callout: CalloutInfo | null = parseMarkdownCalloutHeader(lines[index]);
+    if (callout !== null) {
+      flushParagraph();
+      const contentLines: string[] = [];
+      index = index + 1;
+      while (index < lines.length) {
+        const nextCallout: CalloutInfo | null = parseMarkdownCalloutHeader(lines[index]);
+        if (nextCallout !== null) {
+          break;
+        }
+        contentLines.push(lines[index]);
+        index = index + 1;
+      }
+      callout.contentHtml = buildLooseParagraphHtml(contentLines.join('\n'));
+      blocks.push(buildSyntheticCalloutHtml(callout.type, escapeHtml(callout.title), callout.contentHtml));
+      continue;
+    }
+    paragraphLines.push(lines[index]);
+    index = index + 1;
+  }
+  flushParagraph();
+
+  return blocks.length > 0 ? blocks.join('') : raw;
+}
+
+function extractMarkdownCalloutInfoFromQuoteHtml(innerHtml: string): CalloutInfo | null {
+  const raw0: string = innerHtml !== undefined && innerHtml !== null ? innerHtml : '';
+  if (raw0.trim().length === 0 || raw0.indexOf('[!') < 0) {
+    return null;
+  }
+
+  const plain: string = stripHtmlKeepLines(raw0).replace(/\r/g, '');
+  const plainLines: string[] = plain.split('\n');
+  let headerLine: string = '';
+  for (let i: number = 0; i < plainLines.length; i++) {
+    const line: string = plainLines[i] !== undefined && plainLines[i] !== null ? plainLines[i] : '';
+    if (line.trim().length > 0) {
+      headerLine = line;
+      break;
+    }
+  }
+  if (headerLine.length === 0) {
+    return null;
+  }
+
+  const headerInfo: CalloutInfo | null = parseMarkdownCalloutHeader(headerLine);
+  if (headerInfo === null) {
+    return null;
+  }
+
+  const info: CalloutInfo = new CalloutInfo();
+  info.type = headerInfo.type;
+  info.title = headerInfo.title;
+
+  const raw: string = raw0.trim();
+  const lower: string = raw.toLowerCase();
+  if (lower.startsWith('<p')) {
+    const openEnd: number = raw.indexOf('>');
+    const closeStart: number = lower.indexOf('</p>', openEnd >= 0 ? openEnd + 1 : 0);
+    if (openEnd >= 0 && closeStart > openEnd) {
+      const firstParaInner: string = raw.substring(openEnd + 1, closeStart);
+      const brMatch: RegExpExecArray | null = /<br\s*\/?>/i.exec(firstParaInner);
+      const parts: string[] = [];
+      if (brMatch !== null) {
+        const remainderInFirstPara: string = firstParaInner.substring(brMatch.index + brMatch[0].length).trim();
+        if (remainderInFirstPara.length > 0) {
+          parts.push(`<p>${remainderInFirstPara}</p>`);
+        }
+      }
+      const remainingHtml: string = raw.substring(closeStart + '</p>'.length).trim();
+      if (remainingHtml.length > 0) {
+        parts.push(remainingHtml);
+      }
+      info.contentHtml = parts.join('');
+      return info;
+    }
+  }
+
+  const rawLines: string[] = raw0.replace(/\r/g, '').split('\n');
+  const contentLines: string[] = [];
+  let foundHeader: boolean = false;
+  for (let i: number = 0; i < rawLines.length; i++) {
+    const line: string = rawLines[i] !== undefined && rawLines[i] !== null ? rawLines[i] : '';
+    if (!foundHeader) {
+      if (stripHtmlCompact(line).length === 0) {
+        continue;
+      }
+      if (parseMarkdownCalloutHeader(line) !== null) {
+        foundHeader = true;
+        continue;
+      }
+      return null;
+    }
+    contentLines.push(line);
+  }
+  info.contentHtml = buildLooseParagraphHtml(contentLines.join('\n'));
+  return info;
+}
+
 function buildAsideQuoteHtml(openTag: string, innerHtml: string): string {
   const info: AsideQuoteInfo = extractAsideQuoteInfo(openTag, innerHtml);
   const safeUser: string = escapeHtml(info.username);
   const header: string = `<p><strong>${safeUser}:</strong>${info.titleHtml.length > 0 ? ` ${info.titleHtml}` : ''}</p>`;
-  if (info.contentHtml.length > 0) {
-    return `${header}${info.contentHtml}`;
+  const normalizedContentHtml: string = convertLooseMarkdownCalloutsToHtml(
+    info.contentHtml.length > 0 ? info.contentHtml : removeAvatarImgs(innerHtml)
+  ).trim();
+  if (normalizedContentHtml.length > 0) {
+    return `${header}${normalizedContentHtml}`;
   }
   // 兜底：没有 blockquote 时直接用 innerHtml（但尽量避免把 avatar 当正文图片）
   const cleaned: string = removeAvatarImgs(innerHtml);
@@ -857,9 +1101,46 @@ class OneboxInfo {
   source: string = '';
   iconUrl: string = '';
   thumbnailUrl: string = '';
+  clickText: string = '';
 
   constructor() {
   }
+}
+
+function normalizeCountText(raw: string): string {
+  const input: string = raw !== undefined && raw !== null ? raw.toString() : '';
+  return input
+    .replace(/\u2009/g, ' ')
+    .replace(/\s+/g, '')
+    .trim();
+}
+
+function extractOneboxClickText(titleHtml: string, innerHtml: string): string {
+  const title: string = titleHtml !== undefined && titleHtml !== null ? titleHtml : '';
+  const inner: string = innerHtml !== undefined && innerHtml !== null ? innerHtml : '';
+  const combined: string = `${title} ${inner}`;
+
+  const attrMatch: RegExpMatchArray | null = combined.match(/data-clicks\s*=\s*["']([^"']+)["']/i);
+  if (attrMatch !== null && attrMatch.length > 1) {
+    const value: string = normalizeCountText(attrMatch[1]);
+    if (value.length > 0) return value;
+  }
+
+  const spanMatch: RegExpMatchArray | null = combined.match(
+    /<span[^>]*class\s*=\s*["'][^"']*click-count[^"']*["'][^>]*>([\s\S]*?)<\/span>/i
+  );
+  if (spanMatch !== null && spanMatch.length > 1) {
+    const value: string = normalizeCountText(stripHtmlCompact(spanMatch[1]));
+    if (value.length > 0) return value;
+  }
+
+  const zhMatch: RegExpMatchArray | null = combined.match(/链接已点击\s*([0-9]+(?:\.[0-9]+)?k?)\s*次/i);
+  if (zhMatch !== null && zhMatch.length > 1) {
+    const value: string = normalizeCountText(zhMatch[1]);
+    if (value.length > 0) return value;
+  }
+
+  return '';
 }
 
 function extractOneboxInfo(openTag: string, innerHtml: string): OneboxInfo {
@@ -907,6 +1188,7 @@ function extractOneboxInfo(openTag: string, innerHtml: string): OneboxInfo {
       }
     }
   }
+  info.clickText = extractOneboxClickText(titleHtml, inner);
 
   // 描述：第一个 p
   const p1: RegExpMatchArray | null = inner.match(/<p[^>]*>([\s\S]*?)<\/p>/i);
@@ -1337,7 +1619,7 @@ function parseBlocks(html: string): RichParseResult {
     textBuf = '';
   };
 
-  const pushQuoteBlock = (innerHtml: string): void => {
+  const pushQuoteBlock = (openTag: string, innerHtml: string): void => {
     const html0: string = innerHtml !== undefined && innerHtml !== null ? innerHtml : '';
     const text: string = normalizeMultilineText(stripHtmlKeepLines(html0));
     if (text.length === 0) return;
@@ -1347,6 +1629,19 @@ function parseBlocks(html: string): RichParseResult {
     b.type = RichBlockType.Quote;
     b.html = html0;
     b.text = text;
+    if (isCalloutBlockquote(openTag)) {
+      const callout: CalloutInfo = extractCalloutInfo(openTag, html0);
+      b.calloutType = callout.type;
+      b.calloutTitle = callout.title;
+      b.calloutContentHtml = callout.contentHtml.length > 0 ? callout.contentHtml : html0;
+    } else {
+      const markdownCallout: CalloutInfo | null = extractMarkdownCalloutInfoFromQuoteHtml(html0);
+      if (markdownCallout !== null) {
+        b.calloutType = markdownCallout.type;
+        b.calloutTitle = markdownCallout.title;
+        b.calloutContentHtml = markdownCallout.contentHtml.length > 0 ? markdownCallout.contentHtml : '';
+      }
+    }
     res.blocks.push(b);
     order = order + 1;
   };
@@ -1356,6 +1651,9 @@ function parseBlocks(html: string): RichParseResult {
     const quoteHtml: string = buildAsideQuoteHtml(openTag, innerHtml);
     const text: string = normalizeMultilineText(stripHtmlKeepLines(quoteHtml));
     if (text.length === 0) return;
+    const normalizedQuoteContentHtml: string = convertLooseMarkdownCalloutsToHtml(
+      info.contentHtml.length > 0 ? info.contentHtml : removeAvatarImgs(innerHtml).trim()
+    ).trim();
     const b: RichBlock = new RichBlock();
     b.key = `b_${order}`;
     b.order = order;
@@ -1365,7 +1663,9 @@ function parseBlocks(html: string): RichParseResult {
     b.quoteUsername = info.username;
     b.quoteAvatarUrl = info.avatarUrl;
     b.quoteTitleHtml = info.titleHtml;
-    b.quoteContentHtml = info.contentHtml.length > 0 ? info.contentHtml : removeAvatarImgs(innerHtml).trim();
+    b.quoteContentHtml = normalizedQuoteContentHtml.length > 0
+      ? normalizedQuoteContentHtml
+      : (info.contentHtml.length > 0 ? info.contentHtml : removeAvatarImgs(innerHtml).trim());
     res.blocks.push(b);
     order = order + 1;
   };
@@ -1645,6 +1945,7 @@ function parseBlocks(html: string): RichParseResult {
     b.oneboxSource = info.source;
     b.oneboxIconUrl = info.iconUrl;
     b.oneboxThumbnailUrl = info.thumbnailUrl;
+    b.oneboxClickText = info.clickText;
     res.blocks.push(b);
     order = order + 1;
   };
@@ -1707,9 +2008,10 @@ function parseBlocks(html: string): RichParseResult {
     if (nextType === 1) {
       flushTextBlock();
       const startEnd: number = raw.indexOf('>', next);
-      const end: number = lower.indexOf('</blockquote>', startEnd >= 0 ? startEnd : next);
+      const end: number = findMatchingCloseTag(lower, next, 'blockquote');
       if (startEnd >= 0 && end >= 0) {
-        pushQuoteBlock(raw.substring(startEnd + 1, end));
+        const openTag: string = raw.substring(next, startEnd + 1);
+        pushQuoteBlock(openTag, raw.substring(startEnd + 1, end));
         idx = end + '</blockquote>'.length;
       } else {
         // 不完整的块：按纯文本兜底
@@ -2890,6 +3192,85 @@ export struct PostRichContent {
     return b.oneboxThumbnailUrl !== undefined && b.oneboxThumbnailUrl !== null ? b.oneboxThumbnailUrl.toString().trim() : '';
   }
 
+  private getOneboxClickText(b: RichBlock): string {
+    return b.oneboxClickText !== undefined && b.oneboxClickText !== null ? b.oneboxClickText.toString().trim() : '';
+  }
+
+  private isCalloutBlock(block: RichBlock): boolean {
+    return block.calloutType.trim().length > 0;
+  }
+
+  private normalizeCalloutType(block: RichBlock): string {
+    const raw: string = block.calloutType !== undefined && block.calloutType !== null
+      ? block.calloutType.toString().trim().toLowerCase()
+      : '';
+    if (raw === 'tip' || raw === 'note' || raw === 'warning' || raw === 'danger' || raw === 'error' || raw === 'success') {
+      return raw;
+    }
+    return raw.length > 0 ? raw : 'info';
+  }
+
+  private getCalloutTitleText(block: RichBlock): string {
+    const raw: string = block.calloutTitle !== undefined && block.calloutTitle !== null ? block.calloutTitle.toString().trim() : '';
+    if (raw.length > 0) {
+      return raw;
+    }
+    const type: string = this.normalizeCalloutType(block);
+    if (type === 'success') return '提示';
+    if (type === 'warning') return '注意';
+    if (type === 'danger' || type === 'error') return '警告';
+    if (type === 'tip') return '技巧';
+    if (type === 'note') return '备注';
+    return '信息';
+  }
+
+  private getCalloutAccentColor(block: RichBlock): string {
+    const type: string = this.normalizeCalloutType(block);
+    if (type === 'success') return '#38C172';
+    if (type === 'warning') return '#F59E0B';
+    if (type === 'danger' || type === 'error') return '#E25555';
+    if (type === 'tip') return '#8B5CF6';
+    if (type === 'note') return '#64748B';
+    return '#279BFF';
+  }
+
+  private getCalloutBackgroundColor(block: RichBlock): string {
+    const type: string = this.normalizeCalloutType(block);
+    if (type === 'success') return '#EAF7EE';
+    if (type === 'warning') return '#FFF5E8';
+    if (type === 'danger' || type === 'error') return '#FDEEEE';
+    if (type === 'tip') return '#F3EEFF';
+    if (type === 'note') return '#F3F5F7';
+    return '#EAF4FF';
+  }
+
+  private getCalloutIconBackgroundColor(block: RichBlock): string {
+    const type: string = this.normalizeCalloutType(block);
+    if (type === 'success') return '#D8F0E1';
+    if (type === 'warning') return '#FDE7BF';
+    if (type === 'danger' || type === 'error') return '#F8D4D4';
+    if (type === 'tip') return '#E6D9FF';
+    if (type === 'note') return '#E2E8F0';
+    return '#D9ECFF';
+  }
+
+  private getCalloutIconText(block: RichBlock): string {
+    const type: string = this.normalizeCalloutType(block);
+    if (type === 'success') return '✓';
+    if (type === 'warning') return '!';
+    if (type === 'danger' || type === 'error') return '!';
+    if (type === 'tip') return '✦';
+    if (type === 'note') return '•';
+    return 'i';
+  }
+
+  private getCalloutRenderableHtml(block: RichBlock): string {
+    if (block.calloutContentHtml.trim().length > 0) {
+      return block.calloutContentHtml;
+    }
+    return this.getQuoteRenderableHtml(block);
+  }
+
   private hasStructuredQuoteHeader(block: RichBlock): boolean {
     return block.quoteUsername.trim().length > 0
       || block.quoteAvatarUrl.trim().length > 0
@@ -2910,110 +3291,179 @@ export struct PostRichContent {
 
   @Builder
   private QuoteCard(block: RichBlock, marginTop: number) {
-    Column() {
-      if (this.hasStructuredQuoteHeader(block)) {
-        Row() {
-          if (block.quoteAvatarUrl.trim().length > 0) {
-            SmartAvatar({
-              avatarUrl: block.quoteAvatarUrl,
-              avatarSize: 24,
-              avatarRadius: 12,
-              fallbackText: block.quoteUsername,
-              bgColor: '#E8EAF0'
-            })
-            Blank().width(8)
-          }
-
+    if (this.isCalloutBlock(block)) {
+      this.CalloutCard(block, marginTop)
+    } else {
+      Column() {
+        if (this.hasStructuredQuoteHeader(block)) {
           Row() {
-            Text(`${block.quoteUsername}:`)
-              .fontSize(13)
-              .fontWeight(FontWeight.Medium)
-              .fontColor($r('app.color.on_surface_secondary'))
+            if (block.quoteAvatarUrl.trim().length > 0) {
+              SmartAvatar({
+                avatarUrl: block.quoteAvatarUrl,
+                avatarSize: 24,
+                avatarRadius: 12,
+                fallbackText: block.quoteUsername,
+                bgColor: '#E8EAF0'
+              })
+              Blank().width(8)
+            }
 
-            if (this.getQuoteHeaderTitleText(block).length > 0) {
-              Text(this.getQuoteHeaderTitleText(block))
+            Row() {
+              Text(`${block.quoteUsername}:`)
                 .fontSize(13)
                 .fontWeight(FontWeight.Medium)
-                .fontColor($r('app.color.primary'))
-                .maxLines(1)
-                .textOverflow({ overflow: TextOverflow.Ellipsis })
-                .layoutWeight(1)
-                .margin({ left: 4 })
-            }
-          }
-          .layoutWeight(1)
-          .alignItems(VerticalAlign.Center)
-        }
-        .width('100%')
-        .alignItems(VerticalAlign.Center)
-        .padding({ left: 12, right: 12, top: 8, bottom: 0 })
+                .fontColor($r('app.color.on_surface_secondary'))
 
-        PostRichContent({
-          cookedHtml: this.getQuoteRenderableHtml(block),
-          post: this.post,
-          dense: true,
-          quoteMode: true,
-          blockGapVp: 8,
-          allowPollInteraction: this.allowPollInteraction,
-          enableSelectionQuote: this.enableSelectionQuote,
-          enableCopyQuoteSelection: this.enableCopyQuoteSelection,
-          onOpenLink: (url: string) => {
-            this.onOpenLink(url);
-          },
-          onOpenImagePreview: (urls: string[], initialIndex: number) => {
-            this.onOpenImagePreview(urls, initialIndex);
-          },
-          onQuoteSelection: (selectedText: string, sourceHtml: string) => {
-            this.onQuoteSelection(selectedText, this.buildQuoteSelectionSourceHtml(sourceHtml));
-          },
-          onCopyQuoteSelection: (selectedText: string, sourceHtml: string) => {
-            this.onCopyQuoteSelection(selectedText, this.buildQuoteSelectionSourceHtml(sourceHtml));
-          },
-          onLongPressImage: (imageUrl: string, previewUrl: string) => {
-            this.onLongPressImage(imageUrl, previewUrl);
-          },
-          onPostUpdated: (post: Post) => {
-            this.onPostUpdated(post);
+              if (this.getQuoteHeaderTitleText(block).length > 0) {
+                Text(this.getQuoteHeaderTitleText(block))
+                  .fontSize(13)
+                  .fontWeight(FontWeight.Medium)
+                  .fontColor($r('app.color.primary'))
+                  .maxLines(1)
+                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+                  .layoutWeight(1)
+                  .margin({ left: 4 })
+              }
+            }
+            .layoutWeight(1)
+            .alignItems(VerticalAlign.Center)
           }
-        })
-        .padding({ left: 12, right: 12, top: 8, bottom: 8 })
-      } else {
-        PostRichContent({
-          cookedHtml: this.getQuoteRenderableHtml(block),
-          post: this.post,
-          dense: true,
-          quoteMode: true,
-          blockGapVp: 8,
-          allowPollInteraction: this.allowPollInteraction,
-          enableSelectionQuote: this.enableSelectionQuote,
-          enableCopyQuoteSelection: this.enableCopyQuoteSelection,
-          onOpenLink: (url: string) => {
-            this.onOpenLink(url);
-          },
-          onOpenImagePreview: (urls: string[], initialIndex: number) => {
-            this.onOpenImagePreview(urls, initialIndex);
-          },
-          onQuoteSelection: (selectedText: string, sourceHtml: string) => {
-            this.onQuoteSelection(selectedText, this.buildQuoteSelectionSourceHtml(sourceHtml));
-          },
-          onCopyQuoteSelection: (selectedText: string, sourceHtml: string) => {
-            this.onCopyQuoteSelection(selectedText, this.buildQuoteSelectionSourceHtml(sourceHtml));
-          },
-          onLongPressImage: (imageUrl: string, previewUrl: string) => {
-            this.onLongPressImage(imageUrl, previewUrl);
-          },
-          onPostUpdated: (post: Post) => {
-            this.onPostUpdated(post);
-          }
-        })
-        .padding({ left: 12, right: 12, top: 10, bottom: 10 })
+          .width('100%')
+          .alignItems(VerticalAlign.Center)
+          .padding({ left: 12, right: 12, top: 8, bottom: 0 })
+
+          PostRichContent({
+            cookedHtml: this.getQuoteRenderableHtml(block),
+            post: this.post,
+            dense: true,
+            quoteMode: true,
+            blockGapVp: 8,
+            allowPollInteraction: this.allowPollInteraction,
+            enableSelectionQuote: this.enableSelectionQuote,
+            enableCopyQuoteSelection: this.enableCopyQuoteSelection,
+            onOpenLink: (url: string) => {
+              this.onOpenLink(url);
+            },
+            onOpenImagePreview: (urls: string[], initialIndex: number) => {
+              this.onOpenImagePreview(urls, initialIndex);
+            },
+            onQuoteSelection: (selectedText: string, sourceHtml: string) => {
+              this.onQuoteSelection(selectedText, this.buildQuoteSelectionSourceHtml(sourceHtml));
+            },
+            onCopyQuoteSelection: (selectedText: string, sourceHtml: string) => {
+              this.onCopyQuoteSelection(selectedText, this.buildQuoteSelectionSourceHtml(sourceHtml));
+            },
+            onLongPressImage: (imageUrl: string, previewUrl: string) => {
+              this.onLongPressImage(imageUrl, previewUrl);
+            },
+            onPostUpdated: (post: Post) => {
+              this.onPostUpdated(post);
+            }
+          })
+          .padding({ left: 12, right: 12, top: 8, bottom: 8 })
+        } else {
+          PostRichContent({
+            cookedHtml: this.getQuoteRenderableHtml(block),
+            post: this.post,
+            dense: true,
+            quoteMode: true,
+            blockGapVp: 8,
+            allowPollInteraction: this.allowPollInteraction,
+            enableSelectionQuote: this.enableSelectionQuote,
+            enableCopyQuoteSelection: this.enableCopyQuoteSelection,
+            onOpenLink: (url: string) => {
+              this.onOpenLink(url);
+            },
+            onOpenImagePreview: (urls: string[], initialIndex: number) => {
+              this.onOpenImagePreview(urls, initialIndex);
+            },
+            onQuoteSelection: (selectedText: string, sourceHtml: string) => {
+              this.onQuoteSelection(selectedText, this.buildQuoteSelectionSourceHtml(sourceHtml));
+            },
+            onCopyQuoteSelection: (selectedText: string, sourceHtml: string) => {
+              this.onCopyQuoteSelection(selectedText, this.buildQuoteSelectionSourceHtml(sourceHtml));
+            },
+            onLongPressImage: (imageUrl: string, previewUrl: string) => {
+              this.onLongPressImage(imageUrl, previewUrl);
+            },
+            onPostUpdated: (post: Post) => {
+              this.onPostUpdated(post);
+            }
+          })
+          .padding({ left: 12, right: 12, top: 10, bottom: 10 })
+        }
       }
+      .width('100%')
+      .backgroundColor($r('app.color.surface_variant'))
+      .borderRadius({ topLeft: 4, bottomLeft: 4, topRight: 8, bottomRight: 8 })
+      .borderWidth({ left: 4, top: 0, right: 0, bottom: 0 })
+      .borderColor({ left: $r('app.color.on_surface_secondary') })
+      .margin({ top: marginTop })
+    }
+  }
+
+  @Builder
+  private CalloutCard(block: RichBlock, marginTop: number) {
+    Column() {
+      Row() {
+        Column() {
+          Text(this.getCalloutIconText(block))
+            .fontSize(15)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(this.getCalloutAccentColor(block))
+        }
+        .width(28)
+        .height(28)
+        .borderRadius(14)
+        .backgroundColor(this.getCalloutIconBackgroundColor(block))
+        .justifyContent(FlexAlign.Center)
+        .alignItems(HorizontalAlign.Center)
+
+        Text(this.getCalloutTitleText(block))
+          .layoutWeight(1)
+          .fontSize(16)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(this.getCalloutAccentColor(block))
+          .margin({ left: 12 })
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Center)
+
+      PostRichContent({
+        cookedHtml: this.getCalloutRenderableHtml(block),
+        post: this.post,
+        dense: true,
+        blockGapVp: 8,
+        allowPollInteraction: this.allowPollInteraction,
+        enableSelectionQuote: this.enableSelectionQuote,
+        enableCopyQuoteSelection: this.enableCopyQuoteSelection,
+        onOpenLink: (url: string) => {
+          this.onOpenLink(url);
+        },
+        onOpenImagePreview: (urls: string[], initialIndex: number) => {
+          this.onOpenImagePreview(urls, initialIndex);
+        },
+        onQuoteSelection: (selectedText: string, sourceHtml: string) => {
+          this.onQuoteSelection(selectedText, sourceHtml);
+        },
+        onCopyQuoteSelection: (selectedText: string, sourceHtml: string) => {
+          this.onCopyQuoteSelection(selectedText, sourceHtml);
+        },
+        onLongPressImage: (imageUrl: string, previewUrl: string) => {
+          this.onLongPressImage(imageUrl, previewUrl);
+        },
+        onPostUpdated: (post: Post) => {
+          this.onPostUpdated(post);
+        }
+      })
+      .margin({ top: 12 })
     }
     .width('100%')
-    .backgroundColor($r('app.color.surface_variant'))
-    .borderRadius({ topLeft: 4, bottomLeft: 4, topRight: 8, bottomRight: 8 })
-    .borderWidth({ left: 4, top: 0, right: 0, bottom: 0 })
-    .borderColor({ left: $r('app.color.on_surface_secondary') })
+    .padding({ left: 14, right: 14, top: 14, bottom: 14 })
+    .backgroundColor(this.getCalloutBackgroundColor(block))
+    .borderRadius(12)
+    .borderWidth({ left: 5, top: 0, right: 0, bottom: 0 })
+    .borderColor({ left: this.getCalloutAccentColor(block) })
     .margin({ top: marginTop })
   }
 
@@ -3623,91 +4073,91 @@ export struct PostRichContent {
   @Builder
   private OneboxCard(b: RichBlock, marginTop: number) {
     Column() {
-      // 来源行
-      Row() {
-        if (this.getOneboxIconUrl(b).length > 0) {
-          Image(this.getOneboxIconUrl(b))
-            .width(16)
-            .height(16)
-            .objectFit(ImageFit.Contain)
-            .borderRadius(4)
-            .backgroundColor($r('app.color.surface'))
-            .margin({ right: 6 })
-        }
-        Text(this.getOneboxSourceText(b))
-          .fontSize(11)
-          .fontColor($r('app.color.on_surface_secondary'))
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-          .layoutWeight(1)
-      }
-      .width('100%')
-      .alignItems(VerticalAlign.Center)
-
-      // 内容区（标题/描述 + 可选缩略图）
-      if (this.getOneboxThumbnailUrl(b).length > 0) {
-        Row() {
-          Column() {
-            if (this.getOneboxTitleText(b).length > 0) {
-              Text(this.getOneboxTitleText(b))
-                .fontSize(14)
-                .fontWeight(FontWeight.Bold)
-                .fontColor($r('app.color.on_surface'))
-                .maxLines(2)
-                .textOverflow({ overflow: TextOverflow.Ellipsis })
-            }
-            if (this.getOneboxDescriptionText(b).length > 0) {
-              Text(this.getOneboxDescriptionText(b))
-                .fontSize(12)
-                .fontColor($r('app.color.on_surface_secondary'))
-                .maxLines(3)
-                .textOverflow({ overflow: TextOverflow.Ellipsis })
-                .margin({ top: 4 })
-            }
-          }
-          .layoutWeight(1)
-
-          Blank().width(12)
-
-          Image(this.getOneboxThumbnailUrl(b))
-            .width(80)
-            .height(80)
-            .objectFit(ImageFit.Cover)
-            .borderRadius(8)
-            .backgroundColor($r('app.color.surface'))
-        }
+      Text(this.getOneboxSourceText(b))
+        .fontSize(11)
+        .fontColor($r('app.color.on_surface_secondary'))
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
         .width('100%')
-        .alignItems(VerticalAlign.Top)
-        .margin({ top: 10 })
-      } else {
+
+      Row() {
+        if (this.getOneboxThumbnailUrl(b).length > 0) {
+          Image(this.getOneboxThumbnailUrl(b))
+            .width(76)
+            .height(76)
+            .objectFit(ImageFit.Cover)
+            .borderRadius(10)
+            .backgroundColor($r('app.color.surface_variant'))
+        } else if (this.getOneboxIconUrl(b).length > 0) {
+          Column() {
+            Image(this.getOneboxIconUrl(b))
+              .width(22)
+              .height(22)
+              .objectFit(ImageFit.Contain)
+          }
+          .width(76)
+          .height(76)
+          .justifyContent(FlexAlign.Center)
+          .alignItems(HorizontalAlign.Center)
+          .backgroundColor($r('app.color.surface_variant'))
+          .borderRadius(10)
+        }
+
+        if (this.getOneboxThumbnailUrl(b).length > 0 || this.getOneboxIconUrl(b).length > 0) {
+          Blank().width(12)
+        }
+
         Column() {
-          if (this.getOneboxTitleText(b).length > 0) {
+          Row() {
             Text(this.getOneboxTitleText(b))
-              .fontSize(14)
+              .layoutWeight(1)
+              .fontSize(15)
               .fontWeight(FontWeight.Bold)
-              .fontColor($r('app.color.on_surface'))
+              .fontColor($r('app.color.primary'))
               .maxLines(2)
               .textOverflow({ overflow: TextOverflow.Ellipsis })
+
+            if (this.getOneboxClickText(b).length > 0) {
+              Row() {
+                Text(this.getOneboxClickText(b))
+                  .fontSize(12)
+                  .fontWeight(FontWeight.Bold)
+                  .fontColor($r('app.color.on_surface_secondary'))
+                Text(' 点击')
+                  .fontSize(10)
+                  .fontColor($r('app.color.on_surface_tertiary'))
+              }
+              .padding({ left: 8, right: 8, top: 4, bottom: 4 })
+              .backgroundColor('#F3F5F8')
+              .borderRadius(999)
+              .margin({ left: 10, top: 1 })
+            }
           }
+          .width('100%')
+          .alignItems(VerticalAlign.Top)
+
           if (this.getOneboxDescriptionText(b).length > 0) {
             Text(this.getOneboxDescriptionText(b))
-              .fontSize(12)
+              .fontSize(13)
               .fontColor($r('app.color.on_surface_secondary'))
-              .maxLines(3)
+              .maxLines(2)
               .textOverflow({ overflow: TextOverflow.Ellipsis })
-              .margin({ top: 4 })
+              .margin({ top: 8 })
           }
         }
-        .width('100%')
-        .margin({ top: 10 })
+        .layoutWeight(1)
       }
+      .width('100%')
+      .alignItems(VerticalAlign.Top)
+      .margin({ top: 10 })
     }
     .width('100%')
-    .padding(12)
-    .backgroundColor($r('app.color.surface_variant'))
-    .border({ width: 0.5, color: $r('app.color.divider_light') })
-    .borderRadius(8)
+    .padding({ left: 14, right: 14, top: 12, bottom: 12 })
+    .backgroundColor($r('app.color.surface'))
+    .border({ width: 1, color: '#D9DEE7' })
+    .borderRadius(14)
     .margin({ top: marginTop })
+    .clip(true)
     .onClick(() => {
       if (this.getOneboxUrl(b).length > 0) {
         this.onOpenLink(this.getOneboxUrl(b));

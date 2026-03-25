@@ -1,6 +1,7 @@
 import { ApiClient, PostEnqueuedError } from '../../services/network/ApiClient';
 import { Draft, DraftData } from '../../models/Draft';
 import { Post } from '../../models/Post';
+import { SiteResponse } from '../../models/Category';
 import { ThemeManager } from '../../common/theme/ThemeManager';
 import { WindowManager } from '../../common/utils/WindowManager';
 import { LoadingSpinner } from './LoadingSpinner';
@@ -28,6 +29,7 @@ export struct ReplyComposerSheet {
   };
 
   @Local private content: string = '';
+  @Local private minContentLength: number = SiteResponse.DEFAULT_MIN_POST_LENGTH;
   @Local private isLoadingDraft: boolean = false;
   @Local private isSubmitting: boolean = false;
   @Local private errorMessage: string = '';
@@ -43,24 +45,26 @@ export struct ReplyComposerSheet {
   private draftSaveTimerId: number = -1;
   private submitted: boolean = false;
   private loadRequestId: number = 0;
+  private siteInfoRequestId: number = 0;
   private readonly contentController: TextAreaController = new TextAreaController();
   private readonly emojiPanelHeight: number = 320;
 
   aboutToAppear(): void {
     this.resetComposerState();
-    ApiClient.getInstance().getSiteInfo().catch((_: Object) => {
-    });
+    this.loadSiteComposerLimits();
     this.loadDraft();
   }
 
   @Monitor('requestKey')
   private onRequestKeyChange(): void {
     this.resetComposerState();
+    this.loadSiteComposerLimits();
     this.loadDraft();
   }
 
   aboutToDisappear(): void {
     this.clearDraftSaveTimer();
+    this.siteInfoRequestId = this.siteInfoRequestId + 1;
     if (!this.submitted) {
       this.flushDraft().catch((_: Object) => {
       });
@@ -70,6 +74,7 @@ export struct ReplyComposerSheet {
   private resetComposerState(): void {
     this.submitted = false;
     this.content = this.initialContent;
+    this.minContentLength = SiteResponse.DEFAULT_MIN_POST_LENGTH;
     this.syncContentSelection(this.content.length, this.content.length);
     this.errorMessage = '';
     this.draftSequence = 0;
@@ -87,7 +92,23 @@ export struct ReplyComposerSheet {
   }
 
   private getMinContentLength(): number {
-    return 20;
+    return this.minContentLength;
+  }
+
+  private async loadSiteComposerLimits(): Promise<void> {
+    const requestId: number = this.siteInfoRequestId + 1;
+    this.siteInfoRequestId = requestId;
+    try {
+      const siteInfo: SiteResponse = await ApiClient.getInstance().getSiteInfo();
+      if (requestId !== this.siteInfoRequestId) {
+        return;
+      }
+      this.minContentLength = siteInfo.getReplyMinLength();
+    } catch (_) {
+      if (requestId === this.siteInfoRequestId) {
+        this.minContentLength = SiteResponse.DEFAULT_MIN_POST_LENGTH;
+      }
+    }
   }
 
   private getToolbarHeight(): number {
@@ -224,7 +245,7 @@ export struct ReplyComposerSheet {
       return;
     }
     if (trimmed.length < this.getMinContentLength()) {
-      this.errorMessage = `回复内容至少需要 ${this.getMinContentLength()} 个字`;
+      this.errorMessage = `回复内容至少需要 ${this.getMinContentLength()} 个字符`;
       this.isPreview = false;
       return;
     }
@@ -649,7 +670,7 @@ export struct ReplyComposerSheet {
             .padding({ left: 16, right: 16, top: 4, bottom: 8 })
         }
 
-        Text(`${this.content.length} 字`)
+        Text(`${this.content.length} 字符`)
           .fontSize(12)
           .fontColor($r('app.color.on_surface_secondary'))
           .width('100%')

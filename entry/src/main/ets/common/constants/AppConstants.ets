@@ -12,6 +12,18 @@ export class AppConstants {
    */
   static readonly DEBUG_TRACKING: boolean = true;
 
+  /**
+   * 调试构建下允许跳过远端 TLS/SSL 证书校验。
+   *
+   * 适用场景：
+   * - 本地代理 / 抓包
+   * - 域名被重定向到 192.168.x.x 等开发环境
+   * - 本地测试证书未加入系统信任链
+   *
+   * 正式环境应优先使用受信任证书；这里只给调试构建做兜底，避免首页直接被 2300060 拦死。
+   */
+  static readonly ALLOW_INSECURE_PROXY_SSL_IN_DEBUG: boolean = true;
+
   /** API 前缀 */
   static readonly API_PREFIX: string = '';
 

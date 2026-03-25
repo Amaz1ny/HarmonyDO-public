@@ -99,9 +99,72 @@ export class Category {
  * 站点信息响应
  */
 export class SiteResponse {
+  static readonly DEFAULT_MIN_POST_LENGTH: number = 20;
+  static readonly DEFAULT_MIN_FIRST_POST_LENGTH: number = 20;
+  static readonly DEFAULT_MIN_TOPIC_TITLE_LENGTH: number = 15;
+
   categories: Category[] = [];
+  minPostLength: number = SiteResponse.DEFAULT_MIN_POST_LENGTH;
+  minFirstPostLength: number = SiteResponse.DEFAULT_MIN_FIRST_POST_LENGTH;
+  minTopicTitleLength: number = SiteResponse.DEFAULT_MIN_TOPIC_TITLE_LENGTH;
 
   constructor() {
+  }
+
+  getReplyMinLength(): number {
+    return SiteResponse.normalizeMinLength(this.minPostLength, SiteResponse.DEFAULT_MIN_POST_LENGTH);
+  }
+
+  getTopicBodyMinLength(): number {
+    const fallback: number = this.getReplyMinLength();
+    return SiteResponse.normalizeMinLength(this.minFirstPostLength, fallback);
+  }
+
+  getTopicTitleMinLength(): number {
+    return SiteResponse.normalizeMinLength(this.minTopicTitleLength, SiteResponse.DEFAULT_MIN_TOPIC_TITLE_LENGTH);
+  }
+
+  private static normalizeMinLength(value: number, fallback: number): number {
+    if (isNaN(value) || value <= 0) {
+      return fallback;
+    }
+    return Math.floor(value);
+  }
+
+  private static parseSettingNumber(value: Object | null, fallback: number): number {
+    if (value === undefined || value === null) {
+      return fallback;
+    }
+    if (typeof value === 'number') {
+      return SiteResponse.normalizeMinLength(value as number, fallback);
+    }
+    if (typeof value === 'string') {
+      const parsed: number = Number((value as string).trim());
+      return SiteResponse.normalizeMinLength(parsed, fallback);
+    }
+    if (typeof value === 'object') {
+      const obj: Record<string, Object> = value as Record<string, Object>;
+      const currentVal = obj['value'];
+      if (currentVal !== undefined && currentVal !== null) {
+        return SiteResponse.parseSettingNumber(currentVal, fallback);
+      }
+      const defaultVal = obj['default'];
+      if (defaultVal !== undefined && defaultVal !== null) {
+        return SiteResponse.parseSettingNumber(defaultVal, fallback);
+      }
+    }
+    return fallback;
+  }
+
+  private static readSettingNumber(candidates: Record<string, Object>[], key: string, fallback: number): number {
+    for (let i: number = 0; i < candidates.length; i++) {
+      const rawValue = candidates[i][key];
+      if (rawValue === undefined || rawValue === null) {
+        continue;
+      }
+      return SiteResponse.parseSettingNumber(rawValue, fallback);
+    }
+    return fallback;
   }
 
   static fromJson(json: Record<string, Object>): SiteResponse {
@@ -116,6 +179,36 @@ export class SiteResponse {
       }
       response.categories = parsed;
     }
+
+    const settingCandidates: Record<string, Object>[] = [];
+    const clientSettingsVal = json['client_settings'];
+    if (clientSettingsVal !== undefined && clientSettingsVal !== null && typeof clientSettingsVal === 'object') {
+      settingCandidates.push(clientSettingsVal as Record<string, Object>);
+    }
+    const siteSettingsVal = json['site_settings'];
+    if (siteSettingsVal !== undefined && siteSettingsVal !== null && typeof siteSettingsVal === 'object') {
+      settingCandidates.push(siteSettingsVal as Record<string, Object>);
+    }
+    const siteSettingsCamelVal = json['siteSettings'];
+    if (siteSettingsCamelVal !== undefined && siteSettingsCamelVal !== null && typeof siteSettingsCamelVal === 'object') {
+      settingCandidates.push(siteSettingsCamelVal as Record<string, Object>);
+    }
+
+    response.minPostLength = SiteResponse.readSettingNumber(
+      settingCandidates,
+      'min_post_length',
+      SiteResponse.DEFAULT_MIN_POST_LENGTH
+    );
+    response.minFirstPostLength = SiteResponse.readSettingNumber(
+      settingCandidates,
+      'min_first_post_length',
+      response.getReplyMinLength()
+    );
+    response.minTopicTitleLength = SiteResponse.readSettingNumber(
+      settingCandidates,
+      'min_topic_title_length',
+      SiteResponse.DEFAULT_MIN_TOPIC_TITLE_LENGTH
+    );
     return response;
   }
 }

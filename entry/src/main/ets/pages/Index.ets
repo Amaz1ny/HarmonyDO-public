@@ -47,6 +47,7 @@ import { SmartAvatar } from '../views/components/SmartAvatar';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 
 const TAG: string = 'Index';
+const FLOATING_TAB_BAR_ANIM_DURATION: number = 180;
 
 /**
  * 应用主页面 -
@@ -97,7 +98,15 @@ struct Index {
 
   private updateTabBarVisibility(next: number): void {
     const v: number = Math.max(0, Math.min(1, next));
-    if (Math.abs(v - this.tabBarVisibility) > 0.001) {
+    if (Math.abs(v - this.tabBarVisibility) <= 0.001) {
+      return;
+    }
+    const uiContext = this.getUIContext();
+    if (uiContext !== undefined && uiContext !== null) {
+      uiContext.animateTo({ duration: FLOATING_TAB_BAR_ANIM_DURATION, curve: Curve.EaseOut }, () => {
+        this.tabBarVisibility = v;
+      });
+    } else {
       this.tabBarVisibility = v;
     }
   }
@@ -466,6 +475,7 @@ struct Index {
     .opacity(this.getEffectiveTabBarVisibility())
     .translate({ x: 0, y: (1 - this.getEffectiveTabBarVisibility()) * this.getFloatingTabBarHideTranslate() })
     .enabled(this.getEffectiveTabBarVisibility() > 0.05)
+    .animation({ duration: FLOATING_TAB_BAR_ANIM_DURATION, curve: Curve.EaseOut })
   }
 
   @Builder

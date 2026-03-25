@@ -31,6 +31,8 @@ export struct CreateTopicComposerSheet {
   @Local private selectedCategoryId: number = 0;
   @Local private selectedTags: string[] = [];
   @Local private draftSelectedTags: string[] = [];
+  @Local private minTitleLength: number = SiteResponse.DEFAULT_MIN_TOPIC_TITLE_LENGTH;
+  @Local private minContentLength: number = SiteResponse.DEFAULT_MIN_FIRST_POST_LENGTH;
   @Local private isLoadingDraft: boolean = false;
   @Local private isLoadingCategories: boolean = false;
   @Local private isSubmitting: boolean = false;
@@ -82,6 +84,8 @@ export struct CreateTopicComposerSheet {
     this.selectedCategoryId = 0;
     this.selectedTags = [];
     this.draftSelectedTags = [];
+    this.minTitleLength = SiteResponse.DEFAULT_MIN_TOPIC_TITLE_LENGTH;
+    this.minContentLength = SiteResponse.DEFAULT_MIN_FIRST_POST_LENGTH;
     this.isLoadingDraft = false;
     this.isLoadingCategories = false;
     this.isSubmitting = false;
@@ -105,11 +109,11 @@ export struct CreateTopicComposerSheet {
   }
 
   private getMinTitleLength(): number {
-    return 15;
+    return this.minTitleLength;
   }
 
   private getMinContentLength(): number {
-    return 20;
+    return this.minContentLength;
   }
 
   private getToolbarHeight(): number {
@@ -247,6 +251,8 @@ export struct CreateTopicComposerSheet {
       if (requestId !== this.loadRequestId) {
         return;
       }
+      this.minTitleLength = siteResponse.getTopicTitleMinLength();
+      this.minContentLength = siteResponse.getTopicBodyMinLength();
 
       const writableCategories: Category[] = [];
       for (let i: number = 0; i < siteResponse.categories.length; i++) {
@@ -384,7 +390,7 @@ export struct CreateTopicComposerSheet {
       return false;
     }
     if (normalizedTitle.length < this.getMinTitleLength()) {
-      this.errorMessage = `标题至少需要 ${this.getMinTitleLength()} 个字`;
+      this.errorMessage = `标题至少需要 ${this.getMinTitleLength()} 个字符`;
       return false;
     }
     if (normalizedContent.length === 0) {
@@ -392,7 +398,7 @@ export struct CreateTopicComposerSheet {
       return false;
     }
     if (normalizedContent.length < this.getMinContentLength()) {
-      this.errorMessage = `正文至少需要 ${this.getMinContentLength()} 个字`;
+      this.errorMessage = `正文至少需要 ${this.getMinContentLength()} 个字符`;
       return false;
     }
     if (this.selectedCategoryId <= 0) {
@@ -1096,7 +1102,7 @@ export struct CreateTopicComposerSheet {
           .color($r('app.color.divider_light'))
           .margin({ left: 20, right: 20, top: 18 })
 
-        Text(`${this.content.length} 字`)
+        Text(`${this.content.length} 字符`)
           .fontSize(12)
           .fontColor($r('app.color.on_surface_secondary'))
           .width('100%')

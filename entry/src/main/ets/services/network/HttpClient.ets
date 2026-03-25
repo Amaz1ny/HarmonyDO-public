@@ -3,6 +3,7 @@ import { http } from '@kit.NetworkKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { AppConstants } from '../../common/constants/AppConstants';
 import { ApiConstants } from '../../common/constants/ApiConstants';
+import { AppContext } from '../../common/utils/AppContext';
 import { AuthService } from '../auth/AuthService';
 import { AuthSessionService } from '../auth/AuthSessionService';
 import { CookieStore } from './CookieStore';
@@ -42,6 +43,7 @@ export interface HttpMultipartFilePart {
  * 使用 @ohos.net.http 原生 API
  */
 export class HttpClient {
+  private static insecureTlsBypassLogged: boolean = false;
   private baseUrl: string;
   private csrfToken: string = '';
   private cookieStore: CookieStore = CookieStore.getInstance();
@@ -482,6 +484,31 @@ export class HttpClient {
     return false;
   }
 
+  private shouldSkipRemoteCertificateValidation(): boolean {
+    if (!AppConstants.ALLOW_INSECURE_PROXY_SSL_IN_DEBUG) {
+      return false;
+    }
+    return AppContext.isDebugMode();
+  }
+
+  private applyTlsCompatibilityOptions(req: Record<string, Object>, url: string): void {
+    if (!this.shouldSkipRemoteCertificateValidation()) {
+      return;
+    }
+
+    req['remoteValidation'] = 'skip';
+
+    if (!HttpClient.insecureTlsBypassLogged) {
+      HttpClient.insecureTlsBypassLogged = true;
+      hilog.warn(
+        0x0000,
+        TAG,
+        'Remote TLS validation skipped in debug build for proxy/local-cert compatibility, sampleUrl=%{public}s',
+        url
+      );
+    }
+  }
+
   private async requestOnce(
     url: string,
     method: http.RequestMethod,
@@ -498,6 +525,7 @@ export class HttpClient {
       req['header'] = headers !== null ? headers : this.buildHeaders();
       req['connectTimeout'] = connectTimeout !== null ? connectTimeout : AppConstants.REQUEST_TIMEOUT;
       req['readTimeout'] = readTimeout !== null ? readTimeout : AppConstants.REQUEST_TIMEOUT;
+      this.applyTlsCompatibilityOptions(req, url);
       if (this.hasBody(body)) {
         if (typeof body === 'string') {
           req['extraData'] = body;
@@ -549,6 +577,7 @@ export class HttpClient {
       req['connectTimeout'] = connectTimeout !== null ? connectTimeout : AppConstants.REQUEST_TIMEOUT;
       req['readTimeout'] = readTimeout !== null ? readTimeout : AppConstants.REQUEST_TIMEOUT;
       req['expectDataType'] = http.HttpDataType.ARRAY_BUFFER;
+      this.applyTlsCompatibilityOptions(req, url);
 
       const response = await httpRequest.request(url, req).catch((err: Object) => {
         let errText: string = '';
