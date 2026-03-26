@@ -31,12 +31,11 @@ export struct BrowsingHistoryPage {
 
   private page: number = 0;
   private categoryMap: Map<number, Category> = new Map();
+  private isResetLoading: boolean = false;
 
   aboutToAppear(): void {
-    if (this.topics.length === 0) {
-      this.loadTopics(true, true).catch(() => {
-      });
-    }
+    this.loadTopics(true, this.topics.length === 0, false).catch(() => {
+    });
   }
 
   private normalizeErrorMessage(err: Object): string {
@@ -64,14 +63,19 @@ export struct BrowsingHistoryPage {
     }
   }
 
-  private async loadTopics(reset: boolean, showLoading: boolean = false): Promise<void> {
-    if (this.isLoadingMore) {
+  private async loadTopics(
+    reset: boolean,
+    showLoading: boolean = false,
+    showRefreshIndicator: boolean = !showLoading
+  ): Promise<void> {
+    if (this.isLoadingMore || (reset && this.isResetLoading)) {
       return;
     }
     if (reset) {
+      this.isResetLoading = true;
       if (showLoading) {
         this.isLoading = true;
-      } else {
+      } else if (showRefreshIndicator) {
         this.isRefreshing = true;
       }
       this.errorMessage = '';
@@ -87,7 +91,7 @@ export struct BrowsingHistoryPage {
     try {
       await this.ensureContext();
       const targetPage: number = reset ? 0 : (this.page + 1);
-      const response = await ApiClient.getInstance().getBrowsingHistory(targetPage);
+      const response = await ApiClient.getInstance().getBrowsingHistory(targetPage, reset);
       if (reset) {
         this.topics = response.topics;
         this.page = 0;
@@ -120,6 +124,9 @@ export struct BrowsingHistoryPage {
         this.loadMoreFailed = true;
       }
     } finally {
+      if (reset) {
+        this.isResetLoading = false;
+      }
       this.isLoading = false;
       this.isRefreshing = false;
       this.isLoadingMore = false;
@@ -182,7 +189,7 @@ export struct BrowsingHistoryPage {
         Column() {
           this.TopBar()
 
-          Refresh({ refreshing: false }) {
+          Refresh({ refreshing: this.isRefreshing }) {
             if (this.isLoading && this.topics.length === 0 && this.errorMessage.length === 0) {
               Column() {
                 LoadingSpinner({ message: '' })
@@ -289,7 +296,7 @@ export struct BrowsingHistoryPage {
             }
           }
           .onRefreshing(() => {
-            this.loadTopics(true, false).catch(() => {
+            this.loadTopics(true, false, true).catch(() => {
             });
           })
           .layoutWeight(1)

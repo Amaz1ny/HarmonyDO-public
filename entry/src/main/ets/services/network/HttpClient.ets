@@ -195,6 +195,33 @@ export class HttpClient {
     return `${url}?${parts.join('&')}`;
   }
 
+  private appendCacheBustQuery(url: string): string {
+    const token: string = `_=${Date.now().toString()}`;
+    if (url.indexOf('?') >= 0) {
+      return `${url}&${token}`;
+    }
+    return `${url}?${token}`;
+  }
+
+  private buildNoCacheHeaders(
+    accept: string = 'application/json',
+    contentType: string = 'application/json',
+    extraHeaders: Record<string, string> | null = null
+  ): Record<string, string> {
+    const merged: Record<string, string> = {};
+    if (extraHeaders !== null) {
+      const keys: string[] = Object.keys(extraHeaders);
+      for (let i = 0; i < keys.length; i++) {
+        const key: string = keys[i];
+        merged[key] = extraHeaders[key];
+      }
+    }
+    merged['Cache-Control'] = 'no-cache, no-store, max-age=0';
+    merged['Pragma'] = 'no-cache';
+    merged['Expires'] = '0';
+    return this.buildHeaders(accept, contentType, merged);
+  }
+
   private buildMultipartBody(
     fields: Record<string, Object>,
     files: HttpMultipartFilePart[],
@@ -1040,6 +1067,41 @@ export class HttpClient {
       connectTimeoutMs,
       readTimeoutMs,
       guardOptions
+    );
+    const codeVal = resp['code'];
+    const code: number = codeVal !== undefined && codeVal !== null ? codeVal as number : 0;
+    const resultVal = resp['result'];
+    const result: string = resultVal !== undefined && resultVal !== null ? resultVal as string : '';
+    if (this.isSuccessStatus(code)) {
+      return result;
+    }
+    throw new Error(`HTTP ${code}`);
+  }
+
+  async getNoCache(
+    path: string,
+    params: Record<string, Object> | null = null,
+    connectTimeoutMs: number | null = null,
+    readTimeoutMs: number | null = null,
+    guardOptions: CfGuardOptions | null = null
+  ): Promise<string> {
+    await this.cookieStore.init();
+    let url: string = `${this.baseUrl}${path}`;
+    url = this.appendQueryParams(url, params);
+    url = this.appendCacheBustQuery(url);
+
+    hilog.info(0x0000, TAG, 'GET(no-cache) %{public}s', url);
+
+    const resp: Record<string, Object> = await this.requestWithCfGuardDetailed(
+      url,
+      http.RequestMethod.GET,
+      null,
+      false,
+      this.buildNoCacheHeaders('application/json', 'application/json', null),
+      connectTimeoutMs,
+      readTimeoutMs,
+      guardOptions,
+      0
     );
     const codeVal = resp['code'];
     const code: number = codeVal !== undefined && codeVal !== null ? codeVal as number : 0;

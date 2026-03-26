@@ -226,7 +226,8 @@ export class ApiClient {
     tags: string[] | null = null,
     connectTimeoutMs: number | null = null,
     readTimeoutMs: number | null = null,
-    guardOptions: CfGuardOptions | null = null
+    guardOptions: CfGuardOptions | null = null,
+    forceRefresh: boolean = false
   ): Promise<TopicListResponse> {
     // 构造 path（分类优先，其次纯标签，否则全站）
     // path 规则：
@@ -290,7 +291,9 @@ export class ApiClient {
     }
 
     const hasParams: boolean = Object.keys(params).length > 0;
-    const result: string = await this.http.get(path, hasParams ? params : null, connectTimeoutMs, readTimeoutMs, guardOptions);
+    const result: string = forceRefresh
+      ? await this.http.getNoCache(path, hasParams ? params : null, connectTimeoutMs, readTimeoutMs, guardOptions)
+      : await this.http.get(path, hasParams ? params : null, connectTimeoutMs, readTimeoutMs, guardOptions);
     const json: Record<string, Object> = JSON.parse(result) as Record<string, Object>;
     return TopicListResponse.fromJson(json);
   }
@@ -963,7 +966,7 @@ export class ApiClient {
     }
   }
 
-  async getDrafts(offset: number = 0, limit: number = 20): Promise<DraftListResponse> {
+  async getDrafts(offset: number = 0, limit: number = 20, forceRefresh: boolean = false): Promise<DraftListResponse> {
     const params: Record<string, Object> = {};
     if (offset > 0) {
       params['offset'] = offset.toString();
@@ -971,7 +974,9 @@ export class ApiClient {
     if (limit > 0) {
       params['limit'] = limit.toString();
     }
-    const rawText: string = await this.http.get(ApiConstants.DRAFTS, params);
+    const rawText: string = forceRefresh
+      ? await this.http.getNoCache(ApiConstants.DRAFTS, params)
+      : await this.http.get(ApiConstants.DRAFTS, params);
     const json: Record<string, Object> = JSON.parse(rawText) as Record<string, Object>;
     return DraftListResponse.fromJson(json);
   }
@@ -1154,19 +1159,21 @@ export class ApiClient {
     return UserSummary.fromJson(json);
   }
 
-  async getBrowsingHistory(page: number = 0): Promise<TopicListResponse> {
+  async getBrowsingHistory(page: number = 0, forceRefresh: boolean = false): Promise<TopicListResponse> {
     let params: Record<string, Object> | null = null;
     if (page > 0) {
       const query: Record<string, Object> = {};
       query['page'] = page.toString();
       params = query;
     }
-    const raw: string = await this.http.get(ApiConstants.READ_HISTORY, params);
+    const raw: string = forceRefresh
+      ? await this.http.getNoCache(ApiConstants.READ_HISTORY, params)
+      : await this.http.get(ApiConstants.READ_HISTORY, params);
     const json: Record<string, Object> = JSON.parse(raw) as Record<string, Object>;
     return TopicListResponse.fromJson(json);
   }
 
-  async getUserBookmarks(username: string, page: number = 0): Promise<TopicListResponse> {
+  async getUserBookmarks(username: string, page: number = 0, forceRefresh: boolean = false): Promise<TopicListResponse> {
     let params: Record<string, Object> | null = null;
     if (page > 0) {
       const query: Record<string, Object> = {};
@@ -1174,7 +1181,9 @@ export class ApiClient {
       params = query;
     }
     const path: string = ApiConstants.userBookmarks(encodeURIComponent(username));
-    const raw: string = await this.http.get(path, params);
+    const raw: string = forceRefresh
+      ? await this.http.getNoCache(path, params)
+      : await this.http.get(path, params);
     const json: Record<string, Object> = JSON.parse(raw) as Record<string, Object>;
     return TopicListResponse.fromJson(json);
   }
@@ -1372,7 +1381,7 @@ export class ApiClient {
     await this.http.delete(ApiConstants.bookmark(bookmarkId));
   }
 
-  async getUserCreatedTopics(username: string, page: number = 0): Promise<TopicListResponse> {
+  async getUserCreatedTopics(username: string, page: number = 0, forceRefresh: boolean = false): Promise<TopicListResponse> {
     let params: Record<string, Object> | null = null;
     if (page > 0) {
       const query: Record<string, Object> = {};
@@ -1380,7 +1389,9 @@ export class ApiClient {
       params = query;
     }
     const path: string = ApiConstants.userCreatedTopics(encodeURIComponent(username));
-    const raw: string = await this.http.get(path, params);
+    const raw: string = forceRefresh
+      ? await this.http.getNoCache(path, params)
+      : await this.http.get(path, params);
     const json: Record<string, Object> = JSON.parse(raw) as Record<string, Object>;
     return TopicListResponse.fromJson(json);
   }

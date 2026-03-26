@@ -54,6 +54,7 @@ export struct TopicListPage {
   @Local categories: Category[] = [];
   @Local categoryMap: Map<number, Category> = new Map();
   @Local isLoading: boolean = true;
+  @Local isRefreshing: boolean = false;
   @Local isLoadingMore: boolean = false;
   @Local errorMessage: string = '';
   @Local isLoggedIn: boolean = false;
@@ -100,6 +101,7 @@ export struct TopicListPage {
   private notificationStateListener: (() => void) | null = null;
   private hasBootstrapped: boolean = false;
   private lastNotificationBadgeForcedSyncAt: number = 0;
+  private isResetLoading: boolean = false;
      
   // 底部弹出层状态
   @Local isSheetVisible: boolean = false;
@@ -159,7 +161,7 @@ export struct TopicListPage {
   }
 
   private onPageResume(): void {
-    // 页面恢复可见时：不重新拉取列表，只同步 tracking UI
+    // 页面恢复可见时：同步 tracking UI，并静默刷新一次列表，避免返回后仍停留在旧数据
     this.ensureTrackingStarted();
     this.refreshTrackingUI();
     this.maybeArmIncomingBanner();
@@ -173,6 +175,9 @@ export struct TopicListPage {
         this.ensureTrackingStarted();
         this.refreshTrackingUI();
         this.maybeArmIncomingBanner();
+        this.loadTopics(true, false, false).catch((err: Object) => {
+          hilog.warn(0x0000, TAG, 'Resume refresh topics failed: %{public}s', ApiClient.formatError(err));
+        });
       })
       .catch((err: Object) => {
         hilog.error(0x0000, TAG, 'Resume init auth failed: %{public}s', JSON.stringify(err));
@@ -261,7 +266,7 @@ export struct TopicListPage {
     // 提前启动 tracking，尽快建立 /latest + /new 的实时状态
     this.ensureTrackingStarted();
     await this.loadCategories();
-    await this.loadTopics(true);
+    await this.loadTopics(true, true, false);
     this.maybeArmIncomingBanner();
   }
 
@@ -409,9 +414,21 @@ export struct TopicListPage {
   /**
    * 加载话题列表
    */
-  async loadTopics(isRefresh: boolean): Promise<void> {
+  async loadTopics(
+    isRefresh: boolean,
+    showLoading: boolean = isRefresh,
+    showRefreshIndicator: boolean = false
+  ): Promise<void> {
     if (isRefresh) {
-      this.isLoading = true;
+      if (this.isResetLoading) {
+        return;
+      }
+      this.isResetLoading = true;
+      if (showLoading) {
+        this.isLoading = true;
+      } else if (showRefreshIndicator) {
+        this.isRefreshing = true;
+      }
       this.currentPage = 0;
       this.errorMessage = '';
     } else {
@@ -516,7 +533,11 @@ export struct TopicListPage {
         categorySlug,
         categoryId,
         parentCategorySlug,
-        tagsParam
+        tagsParam,
+        null,
+        null,
+        null,
+        isRefresh
       );
 
       if (isRefresh) {
@@ -531,13 +552,17 @@ export struct TopicListPage {
     } catch (err) {
       const errText: string = ApiClient.formatError(err);
       hilog.error(0x0000, TAG, 'Load topics failed: %{public}s', errText);
-      if (isRefresh) {
+      if (isRefresh && (showLoading || this.topics.length === 0)) {
         this.errorMessage = ApiClient.isSslPeerCertificateError(err)
           ? ApiClient.getTlsCertificateErrorMessage()
           : '加载失败，请下拉重试';
       }
     } finally {
+      if (isRefresh) {
+        this.isResetLoading = false;
+      }
       this.isLoading = false;
+      this.isRefreshing = false;
       this.isLoadingMore = false;
     }
   }
@@ -1168,7 +1193,7 @@ export struct TopicListPage {
       animation: { duration: 300, curve: Curve.EaseOut }
     });
 
-    this.loadTopics(true);
+    this.loadTopics(true, false, false);
   }
 
   private closeHomeFabMenu(): void {
@@ -2400,7 +2425,7 @@ export struct TopicListPage {
           .layoutWeight(1)
           .justifyContent(FlexAlign.Center)
         } else {
-          Refresh({ refreshing: false }) {
+          Refresh({ refreshing: this.isRefreshing }) {
             List({ scroller: this.listScroller }) {
               if (this.incomingTopicCount > 0 && this.currentFilter === '最新') {
                 ListItem() {
@@ -2573,7 +2598,7 @@ export struct TopicListPage {
               }
             }
 
-            this.loadTopics(true);
+            this.loadTopics(true, false, true);
             this.maybeArmIncomingBanner();
           })
           .layoutWeight(1)

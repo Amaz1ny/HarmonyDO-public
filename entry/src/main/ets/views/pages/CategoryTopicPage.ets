@@ -26,6 +26,7 @@ export struct CategoryTopicPage {
   @Local categories: Category[] = [];
   @Local categoryMap: Map<number, Category> = new Map();
   @Local isLoading: boolean = true;
+  @Local isRefreshing: boolean = false;
   @Local isLoadingMore: boolean = false;
   @Local errorMessage: string = '';
   @Local isLoggedIn: boolean = false;
@@ -52,6 +53,7 @@ export struct CategoryTopicPage {
   private listScroller: Scroller = new Scroller();
   private trackingListener: (() => void) | null = null;
   private authStateListener: (() => void) | null = null;
+  private isResetLoading: boolean = false;
 
   aboutToAppear(): void {
     this.attachAuthStateListener();
@@ -93,7 +95,7 @@ export struct CategoryTopicPage {
     await this.initAuthState();
     this.ensureTrackingStarted();
     await this.loadCategories();
-    await this.loadTopics(true);
+    await this.loadTopics(true, true, false);
   }
 
   private async restorePersistedState(): Promise<void> {
@@ -171,16 +173,29 @@ export struct CategoryTopicPage {
   /**
    * 加载当前分类的话题列表
    */
-  async loadTopics(isRefresh: boolean): Promise<void> {
+  async loadTopics(
+    isRefresh: boolean,
+    showLoading: boolean = isRefresh,
+    showRefreshIndicator: boolean = false
+  ): Promise<void> {
     if (this.category === null) {
       this.errorMessage = '无效的分类参数';
       this.isLoading = false;
+      this.isRefreshing = false;
       this.isLoadingMore = false;
       return;
     }
 
     if (isRefresh) {
-      this.isLoading = true;
+      if (this.isResetLoading) {
+        return;
+      }
+      this.isResetLoading = true;
+      if (showLoading) {
+        this.isLoading = true;
+      } else if (showRefreshIndicator) {
+        this.isRefreshing = true;
+      }
       this.currentPage = 0;
       this.errorMessage = '';
     } else {
@@ -268,7 +283,11 @@ export struct CategoryTopicPage {
         c.slug,
         c.id,
         parentCategorySlug,
-        tagsParam
+        tagsParam,
+        null,
+        null,
+        null,
+        isRefresh
       );
 
       if (isRefresh) {
@@ -281,11 +300,15 @@ export struct CategoryTopicPage {
       this.currentPage = this.currentPage + 1;
     } catch (err) {
       hilog.error(0x0000, TAG, 'Load topics failed: %{public}s', JSON.stringify(err));
-      if (isRefresh) {
+      if (isRefresh && (showLoading || this.topics.length === 0)) {
         this.errorMessage = '加载失败，请下拉重试';
       }
     } finally {
+      if (isRefresh) {
+        this.isResetLoading = false;
+      }
       this.isLoading = false;
+      this.isRefreshing = false;
       this.isLoadingMore = false;
     }
   }
@@ -727,7 +750,7 @@ export struct CategoryTopicPage {
           .layoutWeight(1)
           .justifyContent(FlexAlign.Center)
         } else {
-          Refresh({ refreshing: false }) {
+          Refresh({ refreshing: this.isRefreshing }) {
             List({ scroller: this.listScroller }) {
               ForEach(this.topics, (topic: Topic) => {
                 ListItem() {
@@ -781,9 +804,9 @@ export struct CategoryTopicPage {
               this.loadTopics(false);
             })
           }
-          .onRefreshing(() => {
-            this.loadTopics(true);
-          })
+              .onRefreshing(() => {
+                this.loadTopics(true, false, true);
+              })
           .layoutWeight(1)
         }
         }

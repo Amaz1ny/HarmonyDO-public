@@ -35,12 +35,11 @@ export struct DraftsPage {
   @Local activeTopicDraft: Draft | null = null;
 
   private createdTopicId: number = 0;
+  private isResetLoading: boolean = false;
 
   aboutToAppear(): void {
-    if (this.drafts.length === 0) {
-      this.loadDrafts(true, true).catch(() => {
-      });
-    }
+    this.loadDrafts(true, this.drafts.length === 0, false).catch(() => {
+    });
   }
 
   private normalizeErrorMessage(err: Object): string {
@@ -51,14 +50,19 @@ export struct DraftsPage {
     return text.length > 0 ? text : '加载草稿失败';
   }
 
-  private async loadDrafts(reset: boolean, showLoading: boolean = false): Promise<void> {
-    if (this.isLoadingMore || this.deletingDraftKey.length > 0) {
+  private async loadDrafts(
+    reset: boolean,
+    showLoading: boolean = false,
+    showRefreshIndicator: boolean = !showLoading
+  ): Promise<void> {
+    if (this.isLoadingMore || this.deletingDraftKey.length > 0 || (reset && this.isResetLoading)) {
       return;
     }
     if (reset) {
+      this.isResetLoading = true;
       if (showLoading) {
         this.isLoading = true;
-      } else {
+      } else if (showRefreshIndicator) {
         this.isRefreshing = true;
       }
       this.errorMessage = '';
@@ -73,7 +77,7 @@ export struct DraftsPage {
 
     try {
       const offset: number = reset ? 0 : this.drafts.length;
-      const response = await ApiClient.getInstance().getDrafts(offset, 20);
+      const response = await ApiClient.getInstance().getDrafts(offset, 20, reset);
       if (reset) {
         this.drafts = response.drafts;
       } else {
@@ -104,6 +108,9 @@ export struct DraftsPage {
         this.loadMoreFailed = true;
       }
     } finally {
+      if (reset) {
+        this.isResetLoading = false;
+      }
       this.isLoading = false;
       this.isRefreshing = false;
       this.isLoadingMore = false;
@@ -253,7 +260,7 @@ export struct DraftsPage {
         Column() {
           this.TopBar()
 
-          Refresh({ refreshing: false }) {
+          Refresh({ refreshing: this.isRefreshing }) {
             if (this.isLoading && this.drafts.length === 0 && this.errorMessage.length === 0) {
               Column() {
                 LoadingSpinner({ message: '' })
@@ -350,7 +357,7 @@ export struct DraftsPage {
             }
           }
           .onRefreshing(() => {
-            this.loadDrafts(true, false).catch(() => {
+            this.loadDrafts(true, false, true).catch(() => {
             });
           })
           .layoutWeight(1)
