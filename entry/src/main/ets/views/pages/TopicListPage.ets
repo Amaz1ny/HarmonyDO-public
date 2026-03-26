@@ -20,6 +20,7 @@ import { NotificationTrackingService } from '../../services/messagebus/Notificat
 import { TopicListPreferences } from '../../services/storage/TopicListPreferences';
 import { HoldingHandService, HoldingHandState } from '../../services/device/HoldingHandService';
 import { CreateTopicComposerSheet } from '../components/CreateTopicComposerSheet';
+import { resolveTopicListFabRefreshModeByScroll } from '../../common/utils/TopicListFabModeUtils';
 import {
   FLOATING_TAB_BAR_HEIGHT_VP,
   FLOATING_TAB_BAR_MARGIN_BOTTOM_VP,
@@ -80,9 +81,7 @@ export struct TopicListPage {
   private headerSnapTimerId: number = -1;
   private pullRefreshArmTimerId: number = -1;
   private floatingTabBarShowTimerId: number = -1;
-  private fabRefreshIntentStartedAt: number = 0;
   private lastHeaderScrollDirection: number = 0;
-  private refreshGestureReady: boolean = true;
   private isListTouchActive: boolean = false;
   private lastReportedBarVisibility: number = 1;
   private createdTopicId: number = 0;
@@ -149,7 +148,6 @@ export struct TopicListPage {
     this.clearHeaderSnapTimer();
     this.clearPullRefreshArmTimer();
     this.clearFloatingTabBarShowTimer();
-    this.clearFabRefreshIntent();
     this.clearIncomingLoadTimer();
     this.clearIncomingPollTimer();
     this.clearIncomingHighlightTimer();
@@ -688,32 +686,21 @@ export struct TopicListPage {
     }
   }
 
-  private clearFabRefreshIntent(): void {
-    this.fabRefreshIntentStartedAt = 0;
-  }
-
   private resetFabToCreateMode(): void {
-    this.clearFabRefreshIntent();
     if (this.fabRefreshMode) {
       this.fabRefreshMode = false;
     }
   }
 
-  private handleFabModeByScroll(offset: number, remain: number): void {
-    // 默认保持“创建话题”；只有用户处于向上回滚内容的阶段时，切换为“刷新页面”。
-    // 这里使用滚动剩余量判断真实列表是否仍在向上移动，避免顶部下拉刷新手势误切换。
-    if (offset < -0.01 && remain < -0.01) {
-      if (!this.fabRefreshMode) {
-        this.closeHomeFabMenu();
-        this.fabRefreshMode = true;
-      }
-      this.clearFabRefreshIntent();
+  private updateFabModeByScroll(offset: number, remain: number): void {
+    const nextMode: boolean = resolveTopicListFabRefreshModeByScroll(this.fabRefreshMode, offset, remain);
+    if (nextMode === this.fabRefreshMode) {
       return;
     }
-
-    if (offset > 0.01) {
-      this.resetFabToCreateMode();
+    if (nextMode) {
+      this.closeHomeFabMenu();
     }
+    this.fabRefreshMode = nextMode;
   }
 
   private hideFloatingTabBar(forceReport: boolean = false): void {
@@ -1188,12 +1175,10 @@ export struct TopicListPage {
   }
 
   private onRefreshFabClick(): void {
-    this.clearFabRefreshIntent();
     this.clearHeaderSnapTimer();
     this.headerOffset = 0;
     this.listAtTop = true;
     this.showFloatingTabBarImmediate(true);
-    this.refreshGestureReady = true;
     this.fabRefreshMode = false;
 
     // 清理“查看新话题”状态，避免刷新后残留
@@ -1209,7 +1194,8 @@ export struct TopicListPage {
       animation: { duration: 300, curve: Curve.EaseOut }
     });
 
-    this.loadTopics(true, false, false);
+    this.isRefreshing = true;
+    this.loadTopics(true, false, true);
   }
 
   private closeHomeFabMenu(): void {
@@ -2510,7 +2496,7 @@ export struct TopicListPage {
             .onReachStart(() => {
               this.listAtTop = true;
               this.showFloatingTabBarImmediate();
-              this.refreshGestureReady = this.canTriggerRefreshFromScroll();
+              this.resetFabToCreateMode();
               if (!this.isListTouchActive) {
                 this.schedulePullRefreshArm();
               }
@@ -2554,11 +2540,10 @@ export struct TopicListPage {
               this.reportBarVisibility(false);
               const canTriggerRefreshNow: boolean = this.canTriggerRefreshFromScroll();
 
-              this.handleFabModeByScroll(offset, remain);
+              this.updateFabModeByScroll(offset, remain);
               if (!canTriggerRefreshNow) {
                 this.disarmPullRefresh();
               }
-              this.refreshGestureReady = canTriggerRefreshNow;
 
               // 松手后吸附：只允许停在 0 或 100
               if (this.headerOffset > 0 && this.headerOffset < COLLAPSIBLE_HEIGHT) {
