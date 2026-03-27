@@ -20,6 +20,7 @@ import { NotificationTrackingService } from '../../services/messagebus/Notificat
 import { TopicListPreferences } from '../../services/storage/TopicListPreferences';
 import { HoldingHandService, HoldingHandState } from '../../services/device/HoldingHandService';
 import { CreateTopicComposerSheet } from '../components/CreateTopicComposerSheet';
+import { resolveTopicListFabRefreshModeByScroll } from '../../common/utils/TopicListFabModeUtils';
 import {
   FLOATING_TAB_BAR_HEIGHT_VP,
   FLOATING_TAB_BAR_MARGIN_BOTTOM_VP,
@@ -81,7 +82,6 @@ export struct TopicListPage {
   private pullRefreshArmTimerId: number = -1;
   private floatingTabBarShowTimerId: number = -1;
   private lastHeaderScrollDirection: number = 0;
-  private refreshGestureReady: boolean = true;
   private isListTouchActive: boolean = false;
   private lastReportedBarVisibility: number = 1;
   private createdTopicId: number = 0;
@@ -686,6 +686,23 @@ export struct TopicListPage {
     }
   }
 
+  private resetFabToCreateMode(): void {
+    if (this.fabRefreshMode) {
+      this.fabRefreshMode = false;
+    }
+  }
+
+  private updateFabModeByScroll(offset: number, remain: number): void {
+    const nextMode: boolean = resolveTopicListFabRefreshModeByScroll(this.fabRefreshMode, offset, remain);
+    if (nextMode === this.fabRefreshMode) {
+      return;
+    }
+    if (nextMode) {
+      this.closeHomeFabMenu();
+    }
+    this.fabRefreshMode = nextMode;
+  }
+
   private hideFloatingTabBar(forceReport: boolean = false): void {
     this.clearFloatingTabBarShowTimer();
     this.setFloatingTabBarVisible(false, forceReport);
@@ -1158,26 +1175,10 @@ export struct TopicListPage {
   }
 
   private onRefreshFabClick(): void {
-    if (!this.canTriggerRefreshFromScroll()) {
-      this.clearHeaderSnapTimer();
-      this.headerOffset = 0;
-      this.listAtTop = true;
-      this.showFloatingTabBarImmediate(true);
-      this.fabRefreshMode = false;
-      this.listScroller.scrollTo({
-        xOffset: 0,
-        yOffset: 0,
-        animation: { duration: 300, curve: Curve.EaseOut }
-      });
-      return;
-    }
-
-    // 复位 Header 折叠状态，并回到顶部后刷新
     this.clearHeaderSnapTimer();
     this.headerOffset = 0;
     this.listAtTop = true;
     this.showFloatingTabBarImmediate(true);
-    this.refreshGestureReady = true;
     this.fabRefreshMode = false;
 
     // 清理“查看新话题”状态，避免刷新后残留
@@ -1193,7 +1194,8 @@ export struct TopicListPage {
       animation: { duration: 300, curve: Curve.EaseOut }
     });
 
-    this.loadTopics(true, false, false);
+    this.isRefreshing = true;
+    this.loadTopics(true, false, true);
   }
 
   private closeHomeFabMenu(): void {
@@ -2494,12 +2496,9 @@ export struct TopicListPage {
             .onReachStart(() => {
               this.listAtTop = true;
               this.showFloatingTabBarImmediate();
-              this.refreshGestureReady = this.canTriggerRefreshFromScroll();
+              this.resetFabToCreateMode();
               if (!this.isListTouchActive) {
                 this.schedulePullRefreshArm();
-              }
-              if (this.fabRefreshMode) {
-                this.fabRefreshMode = false;
               }
             })
             .onScrollFrameBegin((offset: number, state: ScrollState) => {
@@ -2530,9 +2529,7 @@ export struct TopicListPage {
               if (remain > 0.01) {
                 this.listAtTop = false;
                 this.disarmPullRefresh();
-                if (this.fabRefreshMode) {
-                  this.fabRefreshMode = false;
-                }
+                this.resetFabToCreateMode();
               }
               if (offset > 0.01) {
                 this.hideFloatingTabBar();
@@ -2543,20 +2540,10 @@ export struct TopicListPage {
               this.reportBarVisibility(false);
               const canTriggerRefreshNow: boolean = this.canTriggerRefreshFromScroll();
 
-              // FAB：向上滚动（朝顶部方向）→ 刷新模式；向下滚动 → 创建模式
-              if (offset < -0.01) {
-                if (canTriggerRefreshNow && this.refreshGestureReady && !this.fabRefreshMode) {
-                  this.fabRefreshMode = true;
-                }
-              } else if (offset > 0.01) {
-                if (this.fabRefreshMode) {
-                  this.fabRefreshMode = false;
-                }
-              }
+              this.updateFabModeByScroll(offset, remain);
               if (!canTriggerRefreshNow) {
                 this.disarmPullRefresh();
               }
-              this.refreshGestureReady = canTriggerRefreshNow;
 
               // 松手后吸附：只允许停在 0 或 100
               if (this.headerOffset > 0 && this.headerOffset < COLLAPSIBLE_HEIGHT) {

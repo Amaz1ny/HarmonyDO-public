@@ -26,6 +26,7 @@ export struct ReplyComposerSheet {
   @Param initialContent: string = '';
   @Param requestKey: string = '';
   @Param draftKey: string = '';
+  @Param editingPost: Post | null = null;
   @Event onSubmitted: (post: Post) => void = (_: Post) => {
   };
   @Event onDismiss: (submitted: boolean) => void = (_: boolean) => {
@@ -53,10 +54,18 @@ export struct ReplyComposerSheet {
   private readonly contentController: TextAreaController = new TextAreaController();
   private readonly emojiPanelHeight: number = 320;
 
+  private isEditMode(): boolean {
+    return this.editingPost !== null && (this.editingPost as Post).id > 0;
+  }
+
   aboutToAppear(): void {
     this.resetComposerState();
     this.hydratePreviewResources();
     this.loadSiteComposerLimits();
+    if (this.isEditMode()) {
+      this.loadEditingPostContent();
+      return;
+    }
     this.loadDraft();
   }
 
@@ -65,13 +74,17 @@ export struct ReplyComposerSheet {
     this.resetComposerState();
     this.hydratePreviewResources();
     this.loadSiteComposerLimits();
+    if (this.isEditMode()) {
+      this.loadEditingPostContent();
+      return;
+    }
     this.loadDraft();
   }
 
   aboutToDisappear(): void {
     this.clearDraftSaveTimer();
     this.siteInfoRequestId = this.siteInfoRequestId + 1;
-    if (!this.submitted) {
+    if (!this.submitted && !this.isEditMode()) {
       this.flushDraft().catch((_: Object) => {
       });
     }
@@ -173,7 +186,7 @@ export struct ReplyComposerSheet {
   }
 
   private async loadDraft(): Promise<void> {
-    if (this.topicId <= 0) {
+    if (this.topicId <= 0 || this.isEditMode()) {
       return;
     }
     const requestId: number = this.loadRequestId + 1;
@@ -209,8 +222,40 @@ export struct ReplyComposerSheet {
     }
   }
 
+  private async loadEditingPostContent(): Promise<void> {
+    if (!this.isEditMode()) {
+      return;
+    }
+    const requestId: number = this.loadRequestId + 1;
+    this.loadRequestId = requestId;
+    this.isLoadingDraft = true;
+    this.errorMessage = '';
+    try {
+      const postId: number = (this.editingPost as Post).id;
+      const raw: string = await ApiClient.getInstance().getPostRaw(postId);
+      if (requestId !== this.loadRequestId) {
+        return;
+      }
+      this.content = raw;
+      this.syncContentSelection(this.content.length, this.content.length);
+      this.preparePreviewResources();
+      this.restoreContentCaretAsync(this.content.length, this.content.length);
+    } catch (err) {
+      if (requestId !== this.loadRequestId) {
+        return;
+      }
+      this.errorMessage = err !== undefined && err !== null
+        ? err.toString().replace('Error: ', '')
+        : '加载帖子内容失败';
+    } finally {
+      if (requestId === this.loadRequestId) {
+        this.isLoadingDraft = false;
+      }
+    }
+  }
+
   private async persistDraft(): Promise<void> {
-    if (this.topicId <= 0 || this.submitted) {
+    if (this.topicId <= 0 || this.submitted || this.isEditMode()) {
       return;
     }
     const apiClient: ApiClient = ApiClient.getInstance();
@@ -238,12 +283,14 @@ export struct ReplyComposerSheet {
 
   private async closeSheet(): Promise<void> {
     this.isDiscardConfirmVisible = false;
-    await this.flushDraft();
+    if (!this.isEditMode()) {
+      await this.flushDraft();
+    }
     this.onDismiss(false);
   }
 
   private hasDraftLikeContent(): boolean {
-    return this.content.trim().length > 0 || this.draftSequence > 0;
+    return this.content.trim().length > 0 || (!this.isEditMode() && this.draftSequence > 0);
   }
 
   private requestDiscardDraft(): void {
@@ -262,6 +309,10 @@ export struct ReplyComposerSheet {
     this.submitted = true;
     this.isDiscardConfirmVisible = false;
     this.clearDraftSaveTimer();
+    if (this.isEditMode()) {
+      this.onDismiss(false);
+      return;
+    }
     try {
       await ApiClient.getInstance().deleteDraft(this.getDraftKey(), this.draftSequence);
     } catch (_) {
@@ -286,13 +337,20 @@ export struct ReplyComposerSheet {
     this.errorMessage = '';
     try {
       const apiClient: ApiClient = ApiClient.getInstance();
+      if (this.isEditMode()) {
+        const post: Post = await apiClient.updatePost((this.editingPost as Post).id, this.content);
+        this.submitted = true;
+        this.onSubmitted(post);
+        this.onDismiss(true);
+        return;
+      }
       const post: Post = await apiClient.createReply(this.topicId, this.content, this.replyToPostNumber);
       this.submitted = true;
       await apiClient.deleteDraft(this.getDraftKey(), this.draftSequence);
       this.onSubmitted(post);
       this.onDismiss(true);
     } catch (err) {
-      if (err instanceof PostEnqueuedError) {
+      if (!this.isEditMode() && err instanceof PostEnqueuedError) {
         this.submitted = true;
         try {
           await ApiClient.getInstance().deleteDraft(this.getDraftKey(), this.draftSequence);
@@ -303,7 +361,7 @@ export struct ReplyComposerSheet {
       } else {
         this.errorMessage = err !== undefined && err !== null
           ? err.toString().replace('Error: ', '')
-          : '发送失败';
+          : this.isEditMode() ? '保存失败' : '发送失败';
       }
     } finally {
       this.isSubmitting = false;
@@ -311,6 +369,9 @@ export struct ReplyComposerSheet {
   }
 
   private getHeaderTitle(): string {
+    if (this.isEditMode()) {
+      return '编辑回复';
+    }
     if (this.replyToPostNumber > 0) {
       return `回复 #${this.replyToPostNumber}`;
     }
@@ -508,7 +569,15 @@ export struct ReplyComposerSheet {
 
   @Builder
   private ReplyTargetInfo() {
-    if (this.replyToPostNumber > 0) {
+    if (this.isEditMode()) {
+      Row() {
+        Text(`编辑 #${(this.editingPost as Post).postNumber}`)
+          .fontSize(13)
+          .fontColor($r('app.color.on_surface_secondary'))
+      }
+      .width('100%')
+      .padding({ left: 16, right: 16, bottom: 8 })
+    } else if (this.replyToPostNumber > 0) {
       Row() {
         SmartAvatar({
           avatarUrl: this.getReplyTargetAvatarUrl(),
@@ -679,7 +748,7 @@ export struct ReplyComposerSheet {
               this.requestDiscardDraft();
             })
 
-          Button(this.isSubmitting ? '发送中...' : '发送')
+          Button(this.isSubmitting ? (this.isEditMode() ? '保存中...' : '发送中...') : (this.isEditMode() ? '保存' : '发送'))
             .type(ButtonType.Capsule)
             .height(40)
             .enabled(!this.isSubmitting)
@@ -783,7 +852,7 @@ export struct ReplyComposerSheet {
       if (this.isLoadingDraft) {
         Column() {
           LoadingSpinner({ message: '' })
-          Text('正在恢复草稿...')
+          Text(this.isEditMode() ? '正在加载帖子内容...' : '正在恢复草稿...')
             .fontSize(12)
             .fontColor($r('app.color.on_surface_secondary'))
             .margin({ top: 8 })

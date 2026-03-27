@@ -148,6 +148,7 @@ export struct TopicDetailPage {
   @Local isInReadLater: boolean = false;
   @Local isPostBookmarkSheetVisible: boolean = false;
   @Local editingPostBookmarkPost: Post | null = null;
+  @Local editingReplyPost: Post | null = null;
   @Local postBookmarkMutatingPostId: number = 0;
   @Local postLikeMutatingPostId: number = 0;
   @Local postLikeUiVersion: number = 0;
@@ -2535,6 +2536,7 @@ export struct TopicDetailPage {
       return;
     }
 
+    this.editingReplyPost = null;
     this.replySheetTargetPostNumber = replyToPost !== null ? replyToPost.postNumber : 0;
     this.replySheetTargetUsername = replyToPost !== null ? replyToPost.username : '';
     this.replySheetTargetAvatarTemplate = replyToPost !== null ? replyToPost.avatarTemplate : '';
@@ -2543,8 +2545,33 @@ export struct TopicDetailPage {
     this.isReplySheetVisible = true;
   }
 
+  private openEditReplySheet(post: Post): void {
+    if (this.isGuestMode) {
+      ToastService.show('请先登录');
+      return;
+    }
+    if (!post.canEdit) {
+      ToastService.show('当前帖子不可编辑');
+      return;
+    }
+    this.editingReplyPost = this.clonePost(post);
+    this.replySheetTargetPostNumber = 0;
+    this.replySheetTargetUsername = '';
+    this.replySheetTargetAvatarTemplate = '';
+    this.replySheetInitialContent = '';
+    this.replySheetRequestKey = `edit_${Date.now()}_${post.id}`;
+    this.isReplySheetVisible = true;
+  }
+
   private handleReplySubmitted(post: Post): void {
     if (post.id <= 0) {
+      return;
+    }
+
+    if (this.editingReplyPost !== null) {
+      this.replacePostInstance(post);
+      ToastService.show('已保存');
+      this.pendingReplyScrollPostNumber = 0;
       return;
     }
 
@@ -2564,6 +2591,7 @@ export struct TopicDetailPage {
 
   private handleReplySheetDismiss(submitted: boolean): void {
     this.isReplySheetVisible = false;
+    this.editingReplyPost = null;
     this.replySheetTargetPostNumber = 0;
     this.replySheetTargetUsername = '';
     this.replySheetTargetAvatarTemplate = '';
@@ -5426,6 +5454,31 @@ export struct TopicDetailPage {
           }
         })
 
+        if (post.canEdit) {
+          MenuItem() {
+            Row() {
+              SymbolGlyph($r('sys.symbol.pencil_line'))
+                .fontSize(16)
+                .fontColor([$r('app.color.on_surface')])
+                .margin({ right: 10 })
+              Text('编辑')
+                .fontSize(14)
+                .fontColor($r('app.color.on_surface'))
+            }
+            .width('100%')
+            .padding({ left: 12, right: 12 })
+            .alignItems(VerticalAlign.Center)
+          }
+          .selected(false)
+          .selectIcon(false)
+          .height(44)
+          .onChange((selected: boolean) => {
+            if (selected) {
+              this.openEditReplySheet(post);
+            }
+          })
+        }
+
         MenuItem() {
           Row() {
             SymbolGlyph(post.bookmarked ? $r('sys.symbol.bookmark_fill') : $r('sys.symbol.bookmark'))
@@ -6095,6 +6148,7 @@ export struct TopicDetailPage {
       replyToAvatarTemplate: this.replySheetTargetAvatarTemplate,
       initialContent: this.replySheetInitialContent,
       requestKey: this.replySheetRequestKey,
+      editingPost: this.editingReplyPost,
       onSubmitted: (post: Post) => {
         this.handleReplySubmitted(post);
       },

@@ -648,6 +648,50 @@ export class ApiClient {
     throw new Error('未知响应格式');
   }
 
+  /**
+   * 编辑帖子
+   */
+  async updatePost(postId: number, raw: string, editReason: string = ''): Promise<Post> {
+    if (postId <= 0) {
+      throw new Error('无效的帖子');
+    }
+
+    const form: Record<string, Object> = {};
+    form['post[raw]'] = raw;
+    if (editReason.trim().length > 0) {
+      form['post[edit_reason]'] = editReason.trim();
+    }
+
+    const rawText: string = await this.http.putForm(ApiConstants.postDetail(postId), form);
+    const json: Record<string, Object> = JSON.parse(rawText) as Record<string, Object>;
+
+    const postVal = json['post'];
+    if (postVal !== undefined && postVal !== null && typeof postVal === 'object') {
+      return Post.fromJson(postVal as Record<string, Object>);
+    }
+
+    const idVal = json['id'];
+    if (idVal !== undefined && idVal !== null) {
+      return Post.fromJson(json);
+    }
+
+    const errorsVal = json['errors'];
+    if (errorsVal !== undefined && errorsVal !== null && Array.isArray(errorsVal)) {
+      const errs: Object[] = errorsVal as Object[];
+      let message: string = '';
+      for (let i = 0; i < errs.length; i++) {
+        const part: string = errs[i] !== undefined && errs[i] !== null ? errs[i].toString() : '';
+        if (part.length === 0) {
+          continue;
+        }
+        message = message.length > 0 ? `${message}\n${part}` : part;
+      }
+      throw new Error(message.length > 0 ? message : '保存失败');
+    }
+
+    throw new Error('未知响应格式');
+  }
+
   async uploadComposerImage(
     bytes: ArrayBuffer,
     fileName: string,
