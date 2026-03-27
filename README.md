@@ -84,15 +84,18 @@ HarmonyDO 是为 [Linux.do](https://linux.do/) 社区打造的现代化移动客
   - 个人中心
   - 他人主页
   - 我的话题、我的徽章、浏览历史、关注列表
-
+  - 信任要求
+  - 邀请链接
+  
 - **创作能力**
   - 创建话题
   - 回复与引用回复
+  - 编辑回复
   - Markdown 工具栏
   - Emoji / Sticker 面板
   - 图片选择、上传与多图网格插入
   - 草稿恢复与继续编辑
-
+  
 - **内容管理**
   - 我的书签
   - 我的草稿
@@ -162,50 +165,57 @@ HarmonyDO 是为 [Linux.do](https://linux.do/) 社区打造的现代化移动客
 
 ## 项目结构说明
 
+> 以下为核心目录示意，省略部分构建产物、临时目录与 IDE 配置文件。
+
 ```text
 HarmonyDO/
 ├─ AppScope/                         # 应用级配置
 ├─ entry/
-│  └─ src/main/
-│     ├─ ets/
-│     │  ├─ common/                 # 常量、工具、主题与公共能力
-│     │  ├─ entryability/           # 应用入口 Ability
-│     │  ├─ entrybackupability/     # 备份相关 Ability
-│     │  ├─ models/                 # 数据模型
-│     │  ├─ pages/                  # 页面入口与导航装配
-│     │  ├─ services/
-│     │  │  ├─ auth/                # 登录与会话
-│     │  │  ├─ device/              # 设备能力，如智感握姿
-│     │  │  ├─ messagebus/          # 实时消息与预加载
-│     │  │  ├─ network/             # 网络、Cookie、Cloudflare
-│     │  │  └─ storage/             # 本地存储与偏好
-│     │  └─ views/
-│     │     ├─ components/          # 通用组件与编辑器组件
-│     │     └─ pages/               # 业务页面
-│     └─ resources/base/
-│        ├─ element/                # 字符串、颜色等资源
-│        ├─ media/                  # 图片与图标资源
-│        └─ profile/                # 页面与模块配置资源
-├─ build-profile.json5              # 构建与 SDK 配置
-├─ hvigorfile.ts                    # Hvigor 构建入口
-├─ oh-package.json5                 # OHPM 包配置
+│  ├─ build-profile.json5            # entry 模块构建配置
+│  ├─ hvigorfile.ts                  # entry 模块 Hvigor 入口
+│  └─ src/
+│     ├─ main/
+│     │  ├─ ets/
+│     │  │  ├─ common/               # 常量、工具、主题与公共能力
+│     │  │  ├─ entryability/         # 应用入口 Ability
+│     │  │  ├─ entrybackupability/   # 备份相关 Ability
+│     │  │  ├─ models/               # 数据模型
+│     │  │  ├─ pages/                # 页面入口与导航装配
+│     │  │  ├─ services/
+│     │  │  │  ├─ auth/              # 登录与会话
+│     │  │  │  ├─ device/            # 设备能力，如智感握姿
+│     │  │  │  ├─ messagebus/        # 实时消息与预加载
+│     │  │  │  ├─ network/           # 网络、Cookie、Cloudflare
+│     │  │  │  └─ storage/           # 本地存储与偏好
+│     │  │  └─ views/
+│     │  │     ├─ components/        # 通用组件与编辑器组件
+│     │  │     └─ pages/             # 业务页面
+│     │  └─ resources/base/
+│     │     ├─ element/              # 字符串、颜色等资源
+│     │     ├─ media/                # 图片与图标资源
+│     │     └─ profile/              # 页面与模块配置资源
+│     ├─ mock/                       # 调试 / 测试辅助资源
+│     ├─ ohosTest/                   # 设备侧测试
+│     └─ test/                       # 本地单元测试
+├─ screenshots/                      # README 截图资源
+├─ code-linter.json5                 # 代码检查配置
+├─ build-profile.json5               # 应用级构建与 SDK 配置
+├─ hvigorfile.ts                     # Hvigor 构建入口
+├─ oh-package.json5                  # OHPM 包配置
+├─ oh-package-lock.json5             # OHPM 锁定文件
 └─ README.md
 ```
 
 ### 主要页面
 
-- `TopicListPage`：首页话题流
-- `CategoryTopicPage`：分类话题页
-- `SearchPage`：搜索页
-- `TopicDetailPage`：话题详情页
-- `LoginPage`：登录页
-- `ProfilePage`：个人中心
-- `UserProfilePage`：他人主页
-- `BookmarksPage`：我的书签
-- `DraftsPage`：我的草稿
-- `BrowsingHistoryPage`：浏览历史
-- `MyTopicsPage` / `MyBadgesPage`：我的话题 / 我的徽章
-- `ImagePreviewPage` / `WebViewPage`：图片预览 / 应用内网页
+- `TopicListPage` / `CategoryTopicPage` / `SearchPage`：首页话题流、分类浏览与搜索
+- `TopicDetailPage` / `ImagePreviewPage` / `WebViewPage`：话题详情、图片预览与应用内网页
+- `ProfilePage` / `UserProfilePage` / `FollowListPage`：个人中心、他人主页与关注关系页
+- `NotificationsPage` / `BookmarksPage` / `DraftsPage` / `BrowsingHistoryPage`：通知、书签、草稿与浏览历史
+- `MyTopicsPage` / `MyBadgesPage` / `BadgeDetailPage`：我的话题、我的徽章与徽章详情
+- `LoginPage` / `CfChallengePage`：登录页与 Cloudflare 验证页
+- `TrustLevelPage` / `InviteLinksPage`：信任等级与邀请链接页
+- `AboutAppPage` / `OpenSourceInfoPage`：关于应用与开源信息页
 
 ## 关于 Linux.do
 
