@@ -4,6 +4,7 @@ import { ApiClient } from '../network/ApiClient';
 import { CookieStore } from '../network/CookieStore';
 import { User, UserStatus } from '../../models/User';
 import { AuthSessionService } from './AuthSessionService';
+import { LoginCredentialStore } from './LoginCredentialStore';
 
 const TAG: string = 'AuthService';
 
@@ -275,7 +276,7 @@ export class AuthService {
   /**
    * 保存登录信息
    */
-  async saveLoginInfo(cookies: string, csrfToken: string, username: string): Promise<void> {
+  async saveLoginInfo(cookies: string, csrfToken: string, username: string, password: string = ''): Promise<void> {
     await this.init();
     const normalizedUsername: string = username.trim().toLowerCase();
     if (this.currentUser !== null) {
@@ -307,6 +308,11 @@ export class AuthService {
     await PreferencesUtil.putString(AuthService.KEY_CSRF_TOKEN, csrfToken);
     await PreferencesUtil.putString(AuthService.KEY_USERNAME, username);
     await PreferencesUtil.putBoolean(AuthService.KEY_IS_LOGGED_IN, true);
+    if (password.length > 0) {
+      await LoginCredentialStore.getInstance().saveCredential(username, password);
+    } else {
+      await LoginCredentialStore.getInstance().clearCredentialIfUsernameMismatch(username);
+    }
 
     hilog.info(0x0000, TAG, 'Login info saved for user: %{public}s', username);
     this.notifyListeners();
@@ -343,6 +349,7 @@ export class AuthService {
     await PreferencesUtil.delete(AuthService.KEY_USERNAME);
     await PreferencesUtil.delete(AuthService.KEY_CURRENT_USER);
     await PreferencesUtil.putBoolean(AuthService.KEY_IS_LOGGED_IN, false);
+    await LoginCredentialStore.getInstance().clearCredential();
 
     hilog.info(0x0000, TAG, 'User logged out');
     this.notifyListeners();

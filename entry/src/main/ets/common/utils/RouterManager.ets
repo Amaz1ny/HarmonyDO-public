@@ -25,6 +25,8 @@ export class RouteConstants {
   static readonly PAGE_INVITE_LINKS: string = 'InviteLinks';
   static readonly PAGE_ABOUT_APP: string = 'AboutApp';
   static readonly PAGE_OPEN_SOURCE_INFO: string = 'OpenSourceInfo';
+  static readonly PAGE_APP_LOGS: string = 'AppLogs';
+  static readonly PAGE_FEATURE_SETTINGS: string = 'FeatureSettings';
 }
 
 /**
@@ -267,6 +269,14 @@ export class RouterManager {
 
   static pushOpenSourceInfo(): void {
     RouterManager.pushPath(RouteConstants.PAGE_OPEN_SOURCE_INFO);
+  }
+
+  static pushAppLogs(): void {
+    RouterManager.pushPath(RouteConstants.PAGE_APP_LOGS);
+  }
+
+  static pushFeatureSettings(): void {
+    RouterManager.pushPath(RouteConstants.PAGE_FEATURE_SETTINGS);
   }
 
   /**

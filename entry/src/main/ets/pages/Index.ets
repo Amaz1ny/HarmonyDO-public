@@ -20,6 +20,8 @@ import { TrustLevelPage } from '../views/pages/TrustLevelPage';
 import { InviteLinksPage } from '../views/pages/InviteLinksPage';
 import { AboutAppPage } from '../views/pages/AboutAppPage';
 import { OpenSourceInfoPage } from '../views/pages/OpenSourceInfoPage';
+import { AppLogsPage } from '../views/pages/AppLogsPage';
+import { FeatureSettingsPage } from '../views/pages/FeatureSettingsPage';
 import { CfRefreshHost } from '../views/components/CfRefreshHost';
 import { ReadLaterBubble } from '../views/components/ReadLaterBubble';
 import { Topic } from '../models/Topic';
@@ -49,6 +51,7 @@ import {
 } from '../common/constants/LayoutConstants';
 import { SmartAvatar } from '../views/components/SmartAvatar';
 import { hilog } from '@kit.PerformanceAnalysisKit';
+import { AppLogService } from '../common/utils/AppLogService';
 
 const TAG: string = 'Index';
 const FLOATING_TAB_BAR_ANIM_DURATION: number = 180;
@@ -147,6 +150,7 @@ struct Index {
       this.backgroundSessionBootstrapped = false;
       this.lastBackgroundLoggedIn = null;
       hilog.warn(0x0000, TAG, 'Sync background session failed: %{public}s', JSON.stringify(err));
+      AppLogService.getInstance().error('general', 'sync background session failed', TAG, JSON.stringify(err));
     });
   }
 
@@ -344,6 +348,10 @@ struct Index {
       AboutAppPage()
     } else if (name === RouteConstants.PAGE_OPEN_SOURCE_INFO) {
       OpenSourceInfoPage()
+    } else if (name === RouteConstants.PAGE_APP_LOGS) {
+      AppLogsPage()
+    } else if (name === RouteConstants.PAGE_FEATURE_SETTINGS) {
+      FeatureSettingsPage()
     }
   }
 

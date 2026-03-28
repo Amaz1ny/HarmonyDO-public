@@ -12,6 +12,9 @@ import { UserSummarySnapshotService } from '../../services/storage/UserSummarySn
 import { CookieStore } from '../../services/network/CookieStore';
 import { ApiClient } from '../../services/network/ApiClient';
 import { User, UserSummary } from '../../models/User';
+import { FeatureSettingsService } from '../../services/storage/FeatureSettingsService';
+import { LoginCredential, LoginCredentialStore } from '../../services/auth/LoginCredentialStore';
+import { LoginAutoFillUtils } from '../../common/utils/LoginAutoFillUtils';
 
 const TAG: string = 'LoginPage';
 const LOGIN_URL: string = `${AppConstants.BASE_URL}/login`;
@@ -148,6 +151,11 @@ interface PageLoginInfo {
   pageUrl: string;
 }
 
+interface CapturedCredentialResult {
+  username: string;
+  password: string;
+}
+
 @ComponentV2
 export struct LoginPage {
   @Local isPageLoading: boolean = true;
@@ -160,8 +168,14 @@ export struct LoginPage {
   private loginCompleted: boolean = false;
   private loginStatePollTimerId: number = -1;
   private finalizingLogin: boolean = false;
+  private pendingCredential: LoginCredential | null = null;
+  private autoFillEnabled: boolean = true;
+  private lastAutoFilledUsername: string = '';
   private passkeyBlockScripts: Array<ScriptItem> = [{
     script: LOGIN_PASSKEY_BLOCK_SCRIPT,
+    scriptRules: [AppConstants.BASE_URL]
+  }, {
+    script: LoginAutoFillUtils.buildCredentialTrackingScript(),
     scriptRules: [AppConstants.BASE_URL]
   }];
 
@@ -170,6 +184,9 @@ export struct LoginPage {
     AuthSessionService.getInstance().advance('login_page_enter');
     ApiClient.getInstance().resetCurrentUserSessionState();
     hilog.info(0x0000, TAG, 'LoginPage passkey/WebAuthn block enabled for %{public}s/login', AppConstants.BASE_URL);
+    this.prepareAutoFill().catch((err: Object) => {
+      hilog.warn(0x0000, TAG, 'Prepare auto fill failed: %{public}s', JSON.stringify(err));
+    });
     this.startLoginStatePolling();
     CookieStore.getInstance().init()
       .then(() => {
@@ -202,12 +219,77 @@ export struct LoginPage {
     }
   }
 
-  private sleep(ms: number): Promise<void> {
-    return new Promise<void>((resolve) => {
-      setTimeout(() => {
-        resolve();
-      }, ms);
-    });
+  private async prepareAutoFill(): Promise<void> {
+    this.autoFillEnabled = await FeatureSettingsService.getInstance().isAutoFillLoginEnabled();
+    if (!this.autoFillEnabled) {
+      this.pendingCredential = null;
+      this.lastAutoFilledUsername = '';
+      return;
+    }
+    this.pendingCredential = await LoginCredentialStore.getInstance().loadCredential();
+    this.lastAutoFilledUsername = '';
+    if (this.pendingCredential !== null && this.isLoginLikeUrl(this.currentPageUrl)) {
+      this.tryAutoFillLoginForm().catch((err: Object) => {
+        hilog.warn(0x0000, TAG, 'Delayed auto fill login form failed: %{public}s', JSON.stringify(err));
+      });
+    }
+  }
+
+  private normalizeCapturedCredential(raw: string): CapturedCredentialResult {
+    if (raw.trim().length === 0) {
+      return { username: '', password: '' };
+    }
+    try {
+      const parsed: Record<string, Object> = JSON.parse(raw) as Record<string, Object>;
+      const usernameVal: Object | undefined = parsed['username'];
+      const passwordVal: Object | undefined = parsed['password'];
+      return {
+        username: usernameVal !== undefined && usernameVal !== null ? usernameVal.toString().trim() : '',
+        password: passwordVal !== undefined && passwordVal !== null ? passwordVal.toString() : ''
+      };
+    } catch (_) {
+      return { username: '', password: '' };
+    }
+  }
+
+  private async captureCredentialDraft(): Promise<CapturedCredentialResult> {
+    try {
+      const raw: string = await this.controller.runJavaScript(LoginAutoFillUtils.buildCaptureCredentialScript());
+      return this.normalizeCapturedCredential(this.normalizeJsStringResult(raw));
+    } catch (err) {
+      hilog.warn(0x0000, TAG, 'Capture credential draft failed: %{public}s', JSON.stringify(err));
+      return { username: '', password: '' };
+    }
+  }
+
+  private async tryAutoFillLoginForm(): Promise<void> {
+    if (!this.autoFillEnabled) {
+      return;
+    }
+    if (!this.isLoginLikeUrl(this.currentPageUrl)) {
+      return;
+    }
+    if (this.pendingCredential === null) {
+      this.pendingCredential = await LoginCredentialStore.getInstance().loadCredential();
+      if (this.pendingCredential === null) {
+        return;
+      }
+    }
+    const credential: LoginCredential = this.pendingCredential as LoginCredential;
+    const normalizedUsername: string = credential.username.trim().toLowerCase();
+    if (normalizedUsername.length === 0 || normalizedUsername === this.lastAutoFilledUsername) {
+      return;
+    }
+    try {
+      const raw: string = await this.controller.runJavaScript(LoginAutoFillUtils.buildFillCredentialScript(credential));
+      const payload: string = this.normalizeJsStringResult(raw);
+      if (payload.indexOf('"filled":true') >= 0) {
+        this.lastAutoFilledUsername = normalizedUsername;
+        hilog.info(0x0000, TAG, 'Auto filled login form for %{public}s', credential.username);
+      }
+    } catch (err) {
+      hilog.warn(0x0000, TAG, 'Auto fill login form failed: %{public}s', JSON.stringify(err));
+    }
   }
 
   private normalizeJsStringResult(raw: string): string {
@@ -341,6 +423,14 @@ export struct LoginPage {
     return err.toString().indexOf('HTTP 429') >= 0;
   }
 
+  private async sleep(ms: number): Promise<void> {
+    return new Promise<void>((resolve) => {
+      setTimeout(() => {
+        resolve();
+      }, ms);
+    });
+  }
+
   private async fetchCurrentUserWithRetry(fallbackUsername: string): Promise<User | null> {
     const normalizedFallbackUsername: string = fallbackUsername.trim();
     const maxAttempts: number = normalizedFallbackUsername.length > 0 ? 1 : NATIVE_USER_RETRY_COUNT;
@@ -413,6 +503,7 @@ export struct LoginPage {
     user: User,
     cookieHeader: string,
     csrfToken: string,
+    password: string = '',
     allowNetworkWarmup: boolean = true
   ): Promise<void> {
     const auth: AuthService = AuthService.getInstance();
@@ -423,7 +514,7 @@ export struct LoginPage {
     }
     auth.setCurrentUser(user);
     ApiClient.getInstance().setCachedCurrentUser(user);
-    await auth.saveLoginInfo(cookieHeader, csrfToken, user.username);
+    await auth.saveLoginInfo(cookieHeader, csrfToken, user.username, password);
     this.loginCompleted = true;
     this.finalizingLogin = false;
     this.stopLoginStatePolling();
@@ -511,7 +602,17 @@ export struct LoginPage {
       const effectiveCsrfToken: string = pageInfo.csrfToken.length > 0
         ? pageInfo.csrfToken
         : AuthService.getInstance().getCsrfToken();
-      await this.applyLoginSuccess(loginUser, effectiveCookieHeader, effectiveCsrfToken, allowNetworkWarmup);
+      let effectivePassword: string = '';
+      if (await FeatureSettingsService.getInstance().isAutoFillLoginEnabled()) {
+        const capturedCredential: CapturedCredentialResult = await this.captureCredentialDraft();
+        const capturedUsername: string = capturedCredential.username.trim().toLowerCase();
+        const loginUsername: string = loginUser.username.trim().toLowerCase();
+        effectivePassword = capturedCredential.password.length > 0 &&
+          (capturedUsername.length === 0 || capturedUsername === loginUsername)
+          ? capturedCredential.password
+          : '';
+      }
+      await this.applyLoginSuccess(loginUser, effectiveCookieHeader, effectiveCsrfToken, effectivePassword, allowNetworkWarmup);
     } catch (err) {
       hilog.error(0x0000, TAG, 'Inspect login state failed: %{public}s', ApiClient.formatError(err));
     } finally {
@@ -639,6 +740,9 @@ export struct LoginPage {
               this.errorMessage = '';
               this.progress = 0;
               this.currentPageUrl = event.url;
+              if (!this.isLoginLikeUrl(this.currentPageUrl)) {
+                this.lastAutoFilledUsername = '';
+              }
               hilog.info(0x0000, TAG, 'LoginPage onPageBegin url=%{public}s', this.currentPageUrl);
             })
             .onProgressChange((event: OnProgressChangeEvent) => {
@@ -652,6 +756,9 @@ export struct LoginPage {
               this.progress = 100;
               this.currentPageUrl = event.url;
               hilog.info(0x0000, TAG, 'LoginPage onPageEnd url=%{public}s', this.currentPageUrl);
+              this.tryAutoFillLoginForm().catch((err: Object) => {
+                hilog.warn(0x0000, TAG, 'tryAutoFillLoginForm failed: %{public}s', JSON.stringify(err));
+              });
               this.inspectLoginState().catch((err: Object) => {
                 hilog.error(0x0000, TAG, 'inspectLoginState onPageEnd failed: %{public}s', JSON.stringify(err));
               });

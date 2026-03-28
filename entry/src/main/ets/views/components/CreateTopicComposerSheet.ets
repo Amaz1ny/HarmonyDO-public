@@ -15,6 +15,7 @@ import { ComposerUploadUrlCache } from '../../common/utils/ComposerUploadUrlCach
 import { PostRichContent } from './PostRichContent';
 import { Emoji } from '../../models/Emoji';
 import { ComposerImageUploadService } from '../../common/utils/ComposerImageUploadService';
+import { FeatureSettingsService } from '../../services/storage/FeatureSettingsService';
 
 @ComponentV2
 export struct CreateTopicComposerSheet {
@@ -449,9 +450,16 @@ export struct CreateTopicComposerSheet {
     this.isSubmitting = true;
     this.errorMessage = '';
     try {
+      const submitContent: string = await FeatureSettingsService.getInstance().transformComposerContentBeforeSubmit(
+        this.content
+      );
+      if (submitContent !== this.content) {
+        this.content = submitContent;
+        this.syncSelectionToTail();
+      }
       const topicId: number = await ApiClient.getInstance().createTopic(
         this.title.trim(),
-        this.content,
+        submitContent,
         this.selectedCategoryId,
         this.selectedTags.length > 0 ? [...this.selectedTags] : null
       );

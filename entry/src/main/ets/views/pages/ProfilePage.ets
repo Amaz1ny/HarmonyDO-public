@@ -1451,7 +1451,7 @@ export struct ProfilePage {
         title: $r('app.string.profile_feature_settings'),
         subtitle: $r('app.string.profile_service_feature_hint'),
         showDivider: true,
-        onClick: () => { this.showPendingToast('功能设置'); }
+        onClick: () => { RouterManager.pushFeatureSettings(); }
       })
       this.OptionItem({
         iconSymbol: $r('sys.symbol.archivebox'),

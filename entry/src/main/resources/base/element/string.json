@@ -485,6 +485,110 @@
       "value": "常用行为与交互偏好"
     },
     {
+      "name": "feature_settings_page_title",
+      "value": "功能设置"
+    },
+    {
+      "name": "feature_settings_section_general_title",
+      "value": "通用行为"
+    },
+    {
+      "name": "feature_settings_section_general_subtitle",
+      "value": "控制分享、登录与设备方向等常用能力"
+    },
+    {
+      "name": "feature_settings_section_editor_title",
+      "value": "编辑器增强"
+    },
+    {
+      "name": "feature_settings_section_editor_subtitle",
+      "value": "在发帖和回复时自动处理文本细节"
+    },
+    {
+      "name": "feature_settings_section_sticker_title",
+      "value": "表情包市场"
+    },
+    {
+      "name": "feature_settings_section_sticker_subtitle",
+      "value": "切换表情包索引与资源请求使用的源地址"
+    },
+    {
+      "name": "feature_settings_anonymous_share_title",
+      "value": "匿名分享个人主页"
+    },
+    {
+      "name": "feature_settings_anonymous_share_subtitle",
+      "value": "分享个人主页时使用匿名链接，隐藏用户名参数"
+    },
+    {
+      "name": "feature_settings_auto_fill_login_title",
+      "value": "自动填充登录"
+    },
+    {
+      "name": "feature_settings_auto_fill_login_subtitle",
+      "value": "记住最近一次登录凭据，并在登录页自动填入"
+    },
+    {
+      "name": "feature_settings_auto_pangu_title",
+      "value": "自动补全优化"
+    },
+    {
+      "name": "feature_settings_auto_pangu_subtitle",
+      "value": "发布话题或回复前自动为中英文之间补全空格"
+    },
+    {
+      "name": "feature_settings_portrait_lock_title",
+      "value": "锁定竖屏"
+    },
+    {
+      "name": "feature_settings_portrait_lock_subtitle",
+      "value": "启用后应用会优先保持竖屏显示，并在下次启动时恢复"
+    },
+    {
+      "name": "feature_settings_sticker_source_title",
+      "value": "Sticker 源地址"
+    },
+    {
+      "name": "feature_settings_sticker_source_subtitle",
+      "value": "支持自定义表情包市场接口根地址，修改后新请求立即生效"
+    },
+    {
+      "name": "feature_settings_sticker_source_placeholder",
+      "value": "请输入 http:// 或 https:// 开头的地址"
+    },
+    {
+      "name": "feature_settings_sticker_source_current",
+      "value": "当前源"
+    },
+    {
+      "name": "feature_settings_sticker_source_save",
+      "value": "保存源地址"
+    },
+    {
+      "name": "feature_settings_sticker_source_saving",
+      "value": "保存中..."
+    },
+    {
+      "name": "feature_settings_sticker_source_saved",
+      "value": "Sticker 源地址已更新"
+    },
+    {
+      "name": "feature_settings_sticker_source_reset",
+      "value": "恢复默认"
+    },
+    {
+      "name": "feature_settings_sticker_source_reset_done",
+      "value": "已恢复默认 Sticker 源地址"
+    },
+    {
+      "name": "feature_settings_save_failed",
+      "value": "功能设置保存失败"
+    },
+    {
+      "name": "feature_settings_load_failed",
+      "value": "功能设置加载失败"
+    },
+    {
       "name": "profile_service_data_hint",
       "value": "缓存、导出与清理"
     },

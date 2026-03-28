@@ -32,6 +32,7 @@ import { SystemShareService } from '../../common/utils/SystemShareService';
 import { ExternalLinkService } from '../../common/utils/ExternalLinkService';
 import { ClipboardService } from '../../common/utils/ClipboardService';
 import { ToastService } from '../../common/utils/ToastService';
+import { FeatureSettingsService } from '../../services/storage/FeatureSettingsService';
 
 const TOP_BAR_HEIGHT: number = 56; // 不含状态栏安全区
 const HEADER_AVATAR_SIZE: number = 72;
@@ -1915,12 +1916,12 @@ export struct UserProfilePage {
     }
   }
 
-  private getUserShareUrl(): string {
-    return ShareUtils.buildShareUrl(`/u/${this.getTargetUsername()}`);
+  private async getUserShareUrl(): Promise<string> {
+    return FeatureSettingsService.getInstance().buildShareUrl(`/u/${this.getTargetUsername()}`, this.getTargetUsername());
   }
 
   private async shareUser(): Promise<void> {
-    const url: string = this.getUserShareUrl();
+    const url: string = await this.getUserShareUrl();
     const ok: boolean = await SystemShareService.shareText(url, this.getTargetUsername(), false);
     if (ok) return;
     const copied: boolean = await ClipboardService.copyText(url, true);
@@ -1930,7 +1931,13 @@ export struct UserProfilePage {
   }
 
   private openUserInBrowser(): void {
-    ExternalLinkService.openInBrowser(this.getUserShareUrl());
+    this.getUserShareUrl()
+      .then((url: string) => {
+        ExternalLinkService.openInBrowser(url);
+      })
+      .catch(() => {
+        ExternalLinkService.openInBrowser(ShareUtils.buildShareUrl(`/u/${this.getTargetUsername()}`));
+      });
   }
 
   private stripHtml(input: string): string {

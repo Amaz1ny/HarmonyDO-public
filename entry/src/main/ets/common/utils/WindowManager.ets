@@ -38,6 +38,7 @@ interface WindowSystemBarLike {
   setWindowSystemBarEnable?: (names: SystemBarName[]) => Promise<void>;
   setWindowBackgroundColor?: (color: string) => void;
   getWindowAvoidArea?: (type: window.AvoidAreaType) => window.AvoidArea;
+  setPreferredOrientation?: (orientation: number) => Promise<void>;
 }
 
 export class WindowManager {
@@ -103,6 +104,21 @@ export class WindowManager {
       return;
     }
     WindowManager.applyDefaultSystemChrome(colorMode);
+  }
+
+  static async applyPortraitLock(enabled: boolean): Promise<void> {
+    const win: window.Window | null = WindowManager.mainWindow;
+    if (win === null) {
+      return;
+    }
+    const adapter: WindowSystemBarLike = win as WindowSystemBarLike;
+    if (adapter.setPreferredOrientation === undefined) {
+      return;
+    }
+    const orientation: number = enabled
+      ? window.Orientation.PORTRAIT
+      : window.Orientation.AUTO_ROTATION;
+    await adapter.setPreferredOrientation(orientation);
   }
 
   private static pxToVp(px: number): number {

@@ -69,7 +69,7 @@ export struct AboutAppPage {
   }
 
   private onAppLogsClicked(): void {
-    ToastService.show('日志查看功能尚未实现');
+    RouterManager.pushAppLogs();
   }
 
   private onFeedbackClicked(): void {

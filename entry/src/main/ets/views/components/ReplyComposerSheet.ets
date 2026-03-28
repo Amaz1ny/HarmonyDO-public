@@ -16,6 +16,7 @@ import { ComposerUploadUrlCache } from '../../common/utils/ComposerUploadUrlCach
 import { PostRichContent } from './PostRichContent';
 import { Emoji } from '../../models/Emoji';
 import { ComposerImageUploadService } from '../../common/utils/ComposerImageUploadService';
+import { FeatureSettingsService } from '../../services/storage/FeatureSettingsService';
 
 @ComponentV2
 export struct ReplyComposerSheet {
@@ -336,15 +337,22 @@ export struct ReplyComposerSheet {
     this.isSubmitting = true;
     this.errorMessage = '';
     try {
+      const submitContent: string = await FeatureSettingsService.getInstance().transformComposerContentBeforeSubmit(
+        this.content
+      );
+      if (submitContent !== this.content) {
+        this.content = submitContent;
+        this.syncSelectionToTail();
+      }
       const apiClient: ApiClient = ApiClient.getInstance();
       if (this.isEditMode()) {
-        const post: Post = await apiClient.updatePost((this.editingPost as Post).id, this.content);
+        const post: Post = await apiClient.updatePost((this.editingPost as Post).id, submitContent);
         this.submitted = true;
         this.onSubmitted(post);
         this.onDismiss(true);
         return;
       }
-      const post: Post = await apiClient.createReply(this.topicId, this.content, this.replyToPostNumber);
+      const post: Post = await apiClient.createReply(this.topicId, submitContent, this.replyToPostNumber);
       this.submitted = true;
       await apiClient.deleteDraft(this.getDraftKey(), this.draftSequence);
       this.onSubmitted(post);

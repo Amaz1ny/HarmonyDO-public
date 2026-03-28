@@ -3,11 +3,13 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 import { AppConstants } from '../../common/constants/AppConstants';
 import { StickerGroup, StickerGroupDetail, StickerMarketIndex } from '../../models/Sticker';
 import { PreferencesUtil } from '../storage/PreferencesUtil';
+import { FeatureSettingsService } from '../storage/FeatureSettingsService';
 
 const TAG: string = 'StickerMarketService';
 
 export class StickerMarketService {
   static readonly DEFAULT_BASE_URL: string = 'https://s.pwsh.us.kg';
+  private static currentBaseUrl: string = StickerMarketService.DEFAULT_BASE_URL;
   private static readonly CACHE_PREFIX: string = 'sticker_market_cache_';
   private static readonly CACHE_TTL_MS: number = 24 * 60 * 60 * 1000;
   private static readonly REQUEST_TIMEOUT_MS: number = 15000;
@@ -17,6 +19,7 @@ export class StickerMarketService {
   private allGroupsCache: StickerGroup[] | null = null;
   private pageCache: Map<number, StickerGroup[]> = new Map();
   private detailCache: Map<string, StickerGroupDetail> = new Map();
+  private lastResolvedBaseUrl: string = StickerMarketService.DEFAULT_BASE_URL;
 
   static getInstance(): StickerMarketService {
     if (StickerMarketService.instance === null) {
@@ -25,7 +28,7 @@ export class StickerMarketService {
     return StickerMarketService.instance;
   }
 
-  static resolveAssetUrl(rawUrl: string): string {
+  static resolveAssetUrl(rawUrl: string, baseUrl: string = StickerMarketService.currentBaseUrl): string {
     const trimmed: string = rawUrl !== undefined && rawUrl !== null ? rawUrl.trim() : '';
     if (trimmed.length === 0) {
       return '';
@@ -37,7 +40,10 @@ export class StickerMarketService {
       return `https:${trimmed}`;
     }
     if (trimmed.startsWith('/')) {
-      return `${StickerMarketService.DEFAULT_BASE_URL}${trimmed}`;
+      const normalizedBaseUrl: string = baseUrl !== undefined && baseUrl !== null && baseUrl.trim().length > 0
+        ? baseUrl.trim()
+        : StickerMarketService.DEFAULT_BASE_URL;
+      return `${normalizedBaseUrl}${trimmed}`;
     }
     return trimmed;
   }
@@ -131,7 +137,16 @@ export class StickerMarketService {
 
   private async fetchWithCache(cacheKey: string, relativePath: string): Promise<Record<string, Object>> {
     await PreferencesUtil.ensureInit();
-    const valueKey: string = `${StickerMarketService.CACHE_PREFIX}${cacheKey}`;
+    const baseUrl: string = await FeatureSettingsService.getInstance().getStickerSource();
+    if (this.lastResolvedBaseUrl !== baseUrl) {
+      this.indexCache = null;
+      this.allGroupsCache = null;
+      this.pageCache.clear();
+      this.detailCache.clear();
+      this.lastResolvedBaseUrl = baseUrl;
+    }
+    StickerMarketService.currentBaseUrl = baseUrl;
+    const valueKey: string = `${StickerMarketService.CACHE_PREFIX}${baseUrl}_${cacheKey}`;
     const tsKey: string = `${valueKey}_ts`;
     const cachedRaw: string = await PreferencesUtil.getString(valueKey, '');
     const cachedTs: number = await PreferencesUtil.getNumber(tsKey, 0);
@@ -144,7 +159,7 @@ export class StickerMarketService {
       }
     }
 
-    const url: string = StickerMarketService.resolveAssetUrl(relativePath);
+    const url: string = StickerMarketService.resolveAssetUrl(relativePath, baseUrl);
     try {
       const data: Record<string, Object> = await this.requestJson(url);
       await PreferencesUtil.putString(valueKey, JSON.stringify(data));

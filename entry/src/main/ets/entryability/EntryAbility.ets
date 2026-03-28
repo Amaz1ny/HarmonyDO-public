@@ -5,6 +5,8 @@ import { PreferencesUtil } from '../services/storage/PreferencesUtil';
 import { WindowManager } from '../common/utils/WindowManager';
 import { CfClearanceRefreshService } from '../services/network/CfClearanceRefreshService';
 import { AppContext } from '../common/utils/AppContext';
+import { AppLogService } from '../common/utils/AppLogService';
+import { FeatureSettingsService } from '../services/storage/FeatureSettingsService';
 
 const DOMAIN = 0x0000;
 
@@ -26,6 +28,7 @@ export default class EntryAbility extends UIAbility {
       AppContext.setUIAbilityContext(this.context as common.UIAbilityContext);
     } catch (_) {
     }
+    AppLogService.getInstance().info('lifecycle', 'ability onCreate', 'EntryAbility');
   }
 
   onDestroy(): void {
@@ -61,6 +64,7 @@ export default class EntryAbility extends UIAbility {
   onForeground(): void {
     // Ability has brought to foreground
     hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onForeground');
+    AppLogService.getInstance().info('lifecycle', 'ability onForeground', 'EntryAbility');
     try {
       CfClearanceRefreshService.getInstance().resume();
     } catch (_) {
@@ -70,6 +74,7 @@ export default class EntryAbility extends UIAbility {
   onBackground(): void {
     // Ability has back to background
     hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onBackground');
+    AppLogService.getInstance().info('lifecycle', 'ability onBackground', 'EntryAbility');
     try {
       CfClearanceRefreshService.getInstance().pause();
     } catch (_) {
@@ -85,6 +90,9 @@ export default class EntryAbility extends UIAbility {
 
         WindowManager.init(w);
         WindowManager.applyDefaultSystemChrome(this.context.config.colorMode);
+        FeatureSettingsService.getInstance().replayPortraitLockPreference().catch((err: Object) => {
+          hilog.error(DOMAIN, 'testTag', 'Replay portrait lock failed. Cause: %{public}s', JSON.stringify(err));
+        });
         return;
       } catch (err) {
         hilog.error(DOMAIN, 'testTag', 'Init main window sync failed. Cause: %{public}s', JSON.stringify(err));
@@ -96,6 +104,9 @@ export default class EntryAbility extends UIAbility {
         .then((w: window.Window) => {
           WindowManager.init(w);
           WindowManager.applyDefaultSystemChrome(this.context.config.colorMode);
+          FeatureSettingsService.getInstance().replayPortraitLockPreference().catch((err: Object) => {
+            hilog.error(DOMAIN, 'testTag', 'Replay portrait lock failed. Cause: %{public}s', JSON.stringify(err));
+          });
         })
         .catch((err: Object) => {
           hilog.error(DOMAIN, 'testTag', 'Init main window failed. Cause: %{public}s', JSON.stringify(err));
