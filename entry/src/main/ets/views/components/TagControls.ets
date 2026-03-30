@@ -3,6 +3,7 @@ import { ApiClient } from '../../services/network/ApiClient';
 import { TagInfo, TagSearchResult } from '../../models/TagSearchResult';
 import { TagBadge, BadgeIconUtils } from './TopicBadges';
 import { ErrorView } from './ErrorView';
+import { WindowManager } from '../../common/utils/WindowManager';
 
 /**
  * 标签相关通用组件：
@@ -64,10 +65,12 @@ export struct TagSelectionSheet {
   @Param selectedTags: string[] = [];
   @Param categoryId: number | null = null;
   @Param maxTags: number = 5;
+  @Param showHeaderBar: boolean = false;
 
   @Event onToggleTag: (tagName: string) => void = () => {};
   @Event onDone: () => void = () => {};
   @Event onClear: () => void = () => {};
+  @Event onBack: () => void = () => {};
 
   @Local private searchQuery: string = '';
   @Local private isLoading: boolean = false;
@@ -170,6 +173,37 @@ export struct TagSelectionSheet {
       .width('100%')
       .padding({ top: 12 })
       .alignItems(HorizontalAlign.Center)
+
+      if (this.showHeaderBar) {
+        Row() {
+          Row() {
+            SymbolGlyph($r('sys.symbol.chevron_left'))
+              .fontSize(18)
+              .fontColor([$r('app.color.on_surface')])
+          }
+          .width(32)
+          .height(32)
+          .justifyContent(FlexAlign.Center)
+          .alignItems(VerticalAlign.Center)
+          .onClick(() => {
+            this.onBack();
+          })
+
+          Text(this.title)
+            .layoutWeight(1)
+            .fontSize(17)
+            .fontWeight(FontWeight.Bold)
+            .fontColor($r('app.color.on_surface'))
+            .textAlign(TextAlign.Center)
+
+          Blank()
+            .width(32)
+            .height(32)
+        }
+        .width('100%')
+        .padding({ left: 16, right: 16, top: 14, bottom: 2 })
+        .alignItems(VerticalAlign.Center)
+      }
 
       // 顶部：搜索框 + 确定按钮
       Row() {
@@ -343,7 +377,7 @@ export struct TagSelectionSheet {
           })
       }
       .width('100%')
-      .padding({ left: 16, right: 16, top: 12, bottom: 20 })
+      .padding({ left: 16, right: 16, top: 12, bottom: 20 + WindowManager.getSystemAvoidAreaBottomVp() })
       .backgroundColor($r('app.color.surface'))
     }
     .width('100%')

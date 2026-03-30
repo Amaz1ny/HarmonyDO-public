@@ -253,12 +253,12 @@ export struct SearchFilterPanel {
   @Builder
   TagChip(tag: string, selected: boolean) {
     Row() {
-      if (selected) {
-        SymbolGlyph($r('sys.symbol.checkmark'))
+      if (BadgeIconUtils.getTagSymbol(tag) !== null) {
+        SymbolGlyph(BadgeIconUtils.getTagSymbol(tag) as Resource)
           .fontSize(14)
-          .fontColor([$r('app.color.primary')])
+          .fontColor([BadgeIconUtils.getTagColor(tag)])
           .margin({ right: 4 })
-      } else {
+      } else if (!selected) {
         SymbolGlyph($r('sys.symbol.label'))
           .fontSize(12)
           .fontColor([$r('app.color.on_surface_secondary')])
@@ -268,6 +268,13 @@ export struct SearchFilterPanel {
         .fontSize(12)
         .fontColor(selected ? $r('app.color.primary') : $r('app.color.on_surface_secondary'))
         .fontWeight(selected ? FontWeight.Bold : FontWeight.Normal)
+
+      if (selected) {
+        SymbolGlyph($r('sys.symbol.checkmark'))
+          .fontSize(14)
+          .fontColor([$r('app.color.primary')])
+          .margin({ left: 4 })
+      }
     }
     .padding({ left: 10, right: 10, top: 6, bottom: 6 })
     .backgroundColor(selected ? $r('app.color.badge_background_light') : $r('app.color.search_bar_background'))
