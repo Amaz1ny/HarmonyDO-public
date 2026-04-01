@@ -2866,6 +2866,22 @@ export struct PostRichContent {
     return this.quoteMode ? $r('app.color.on_surface_secondary') : $r('app.color.on_surface');
   }
 
+  private getInlineCodeTextColor(): string {
+    return WindowManager.isDarkMode() ? '#FF8FA3' : '#E06C75';
+  }
+
+  private getInlineCodeBackgroundColor(): string {
+    return WindowManager.isDarkMode() ? '#26FFFFFF' : '#1A000000';
+  }
+
+  private getOneboxClickBadgeBackgroundColor(): string {
+    return WindowManager.isDarkMode() ? '#2B3440' : '#F3F5F8';
+  }
+
+  private getOneboxBorderColor(): string {
+    return WindowManager.isDarkMode() ? '#394451' : '#D9DEE7';
+  }
+
   private getClickCountFontSize(baseFontSize: number): number {
     const size: number = Math.round(baseFontSize) - 4;
     return size >= 10 ? size : 10;
@@ -3226,6 +3242,14 @@ export struct PostRichContent {
 
   private getCalloutAccentColor(block: RichBlock): string {
     const type: string = this.normalizeCalloutType(block);
+    if (WindowManager.isDarkMode()) {
+      if (type === 'success') return '#63D98F';
+      if (type === 'warning') return '#F6B84C';
+      if (type === 'danger' || type === 'error') return '#FF8A8A';
+      if (type === 'tip') return '#B794F6';
+      if (type === 'note') return '#A7B4C7';
+      return '#7BC3FF';
+    }
     if (type === 'success') return '#38C172';
     if (type === 'warning') return '#F59E0B';
     if (type === 'danger' || type === 'error') return '#E25555';
@@ -3236,6 +3260,14 @@ export struct PostRichContent {
 
   private getCalloutBackgroundColor(block: RichBlock): string {
     const type: string = this.normalizeCalloutType(block);
+    if (WindowManager.isDarkMode()) {
+      if (type === 'success') return '#162B1C';
+      if (type === 'warning') return '#33260F';
+      if (type === 'danger' || type === 'error') return '#341A1D';
+      if (type === 'tip') return '#261D3A';
+      if (type === 'note') return '#20262E';
+      return '#162536';
+    }
     if (type === 'success') return '#EAF7EE';
     if (type === 'warning') return '#FFF5E8';
     if (type === 'danger' || type === 'error') return '#FDEEEE';
@@ -3246,6 +3278,14 @@ export struct PostRichContent {
 
   private getCalloutIconBackgroundColor(block: RichBlock): string {
     const type: string = this.normalizeCalloutType(block);
+    if (WindowManager.isDarkMode()) {
+      if (type === 'success') return '#1D3825';
+      if (type === 'warning') return '#473414';
+      if (type === 'danger' || type === 'error') return '#4A2429';
+      if (type === 'tip') return '#342850';
+      if (type === 'note') return '#2B3440';
+      return '#1F3249';
+    }
     if (type === 'success') return '#D8F0E1';
     if (type === 'warning') return '#FDE7BF';
     if (type === 'danger' || type === 'error') return '#F8D4D4';
@@ -3989,13 +4029,13 @@ export struct PostRichContent {
             .fontSize((t.sup || t.sub) ? this.getBodySupFontSize() : this.getBodyFontSize())
         } else {
           Span(t.text)
-            .fontColor(t.code ? '#E06C75' : this.getBaseTextColor())
+            .fontColor(t.code ? this.getInlineCodeTextColor() : this.getBaseTextColor())
             .decoration({ type: t.strike ? TextDecorationType.LineThrough : (t.underline ? TextDecorationType.Underline : TextDecorationType.None) })
             .fontWeight(t.bold ? FontWeight.Bold : FontWeight.Normal)
             .fontStyle(t.italic ? FontStyle.Italic : FontStyle.Normal)
             .fontFamily(t.code ? 'monospace' : '')
             .fontSize(t.code ? (this.getBodyFontSize() - 1) : ((t.sup || t.sub) ? this.getBodySupFontSize() : this.getBodyFontSize()))
-            .backgroundColor(t.code ? '#1A000000' : Color.Transparent)
+            .backgroundColor(t.code ? this.getInlineCodeBackgroundColor() : Color.Transparent)
         }
       }, (t: RichSpanToken) => t.key)
     }
@@ -4128,7 +4168,7 @@ export struct PostRichContent {
                   .fontColor($r('app.color.on_surface_tertiary'))
               }
               .padding({ left: 8, right: 8, top: 4, bottom: 4 })
-              .backgroundColor('#F3F5F8')
+              .backgroundColor(this.getOneboxClickBadgeBackgroundColor())
               .borderRadius(999)
               .margin({ left: 10, top: 1 })
             }
@@ -4154,7 +4194,7 @@ export struct PostRichContent {
     .width('100%')
     .padding({ left: 14, right: 14, top: 12, bottom: 12 })
     .backgroundColor($r('app.color.surface'))
-    .border({ width: 1, color: '#D9DEE7' })
+    .border({ width: 1, color: this.getOneboxBorderColor() })
     .borderRadius(14)
     .margin({ top: marginTop })
     .clip(true)
@@ -4838,8 +4878,12 @@ struct RichLazyVideoBlock {
     const raw: string = this.provider !== undefined && this.provider !== null ? this.provider.trim().toLowerCase() : '';
     if (raw === 'youtube') return '#FF0000';
     if (raw === 'vimeo') return '#1AB7EA';
-    if (raw === 'tiktok') return '#111111';
-    return '#666666';
+    if (raw === 'tiktok') return WindowManager.isDarkMode() ? '#1F1F1F' : '#111111';
+    return WindowManager.isDarkMode() ? '#8A8A8A' : '#666666';
+  }
+
+  private getFallbackBackgroundColor(): string {
+    return WindowManager.isDarkMode() ? '#0F1115' : '#111111';
   }
 
   private getDisplayTitle(): string {
@@ -4882,7 +4926,7 @@ struct RichLazyVideoBlock {
           }
           .width('100%')
           .height(208)
-            .backgroundColor('#111111')
+            .backgroundColor(this.getFallbackBackgroundColor())
             .justifyContent(FlexAlign.Center)
             .alignItems(HorizontalAlign.Center)
           }
@@ -5645,7 +5689,7 @@ struct RichPollBlock {
       .fontColor(
         primary
           ? Color.White
-          : (danger ? Color.Red : $r('app.color.on_surface_secondary'))
+          : (danger ? $r('app.color.error') : $r('app.color.on_surface_secondary'))
       )
       .padding({ left: 10, right: 10, top: 6, bottom: 6 })
       .backgroundColor(primary ? $r('app.color.primary') : $r('app.color.surface'))

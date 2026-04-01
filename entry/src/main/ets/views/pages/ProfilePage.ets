@@ -919,11 +919,6 @@ export struct ProfilePage {
   @Builder
   private HeaderSection() {
     Column() {
-      Text($r('app.string.profile_header_caption'))
-        .fontSize(12)
-        .fontWeight(FontWeight.Medium)
-        .fontColor($r('app.color.on_surface_secondary'))
-
       Row() {
         Stack({ alignContent: Alignment.Center }) {
           Circle()

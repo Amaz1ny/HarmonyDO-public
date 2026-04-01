@@ -55,6 +55,11 @@ import { AppLogService } from '../common/utils/AppLogService';
 
 const TAG: string = 'Index';
 const FLOATING_TAB_BAR_ANIM_DURATION: number = 180;
+const FLOATING_TAB_SWITCH_ANIM_DURATION: number = 260;
+const FLOATING_TAB_ITEM_ANIM_DURATION: number = 220;
+const FLOATING_TAB_INDICATOR_WIDTH_VP: number = 66;
+const FLOATING_TAB_INDICATOR_HEIGHT_VP: number = 46;
+const FLOATING_TAB_ICON_BOX_HEIGHT_VP: number = 28;
 
 /**
  * 应用主页面 -
@@ -73,6 +78,7 @@ struct Index {
   @Local pathStack: NavPathStack = new NavPathStack();
   @Local currentTabUser: User | null = null;
   @Local currentTabUsername: string = '';
+  @Local floatingTabBarContentWidth: number = 0;
 
   private authStateListener: (() => void) | null = null;
   private backgroundSessionSyncId: number = 0;
@@ -101,6 +107,67 @@ struct Index {
 
   private getFloatingTabBarHideTranslate(): number {
     return FLOATING_TAB_BAR_HEIGHT_VP + this.getBottomSafeHeight() + FLOATING_TAB_BAR_MARGIN_BOTTOM_VP + 24;
+  }
+
+  private updateFloatingTabBarContentWidth(widthValue: number | string | Resource): void {
+    const rawWidth: number = (widthValue !== undefined && widthValue !== null && typeof widthValue === 'number')
+      ? (widthValue as number)
+      : 0;
+    if (rawWidth <= 0) {
+      return;
+    }
+
+    let resolvedWidthVp: number = rawWidth;
+    const uiContext = this.getUIContext();
+    if (uiContext !== undefined && uiContext !== null) {
+      try {
+        const convertedVp: number = uiContext.px2vp(rawWidth);
+        if (convertedVp > 0) {
+          resolvedWidthVp = convertedVp;
+
+          // onAreaChange 在这里更像是直接给了 vp；若再 px2vp 一次会让位移明显偏小。
+          if (convertedVp < 140 && rawWidth > 220) {
+            resolvedWidthVp = rawWidth;
+          }
+        }
+      } catch (_) {
+      }
+    }
+
+    if (Math.abs(resolvedWidthVp - this.floatingTabBarContentWidth) <= 0.5) {
+      return;
+    }
+    this.floatingTabBarContentWidth = resolvedWidthVp;
+  }
+
+  private getFloatingTabIndicatorOffsetX(): number {
+    if (this.floatingTabBarContentWidth <= 0) {
+      return 0;
+    }
+    return this.floatingTabBarContentWidth / 4;
+  }
+
+  private getFloatingTabIndicatorTranslateX(): number {
+    const offsetX: number = this.getFloatingTabIndicatorOffsetX();
+    return this.currentIndex === 0 ? -offsetX : offsetX;
+  }
+
+  private isFloatingTabSelected(index: number): boolean {
+    return this.currentIndex === index;
+  }
+
+  private switchMainTab(index: number): void {
+    if (this.currentIndex === index) {
+      return;
+    }
+    const uiContext = this.getUIContext();
+    if (uiContext !== undefined && uiContext !== null) {
+      uiContext.animateTo({ duration: FLOATING_TAB_SWITCH_ANIM_DURATION, curve: Curve.EaseInOut }, () => {
+        this.currentIndex = index;
+      });
+    } else {
+      this.currentIndex = index;
+    }
   }
 
   private updateTabBarVisibility(next: number): void {
@@ -458,7 +525,7 @@ struct Index {
   @Builder
   FloatingTabBar() {
     Row() {
-      Stack() {
+      Stack({ alignContent: Alignment.Center }) {
         Stack()
           .width('100%')
           .height('100%')
@@ -475,6 +542,17 @@ struct Index {
             { disableSystemAdaptation: true }
           )
 
+        Stack()
+          .width(FLOATING_TAB_INDICATOR_WIDTH_VP)
+          .height(FLOATING_TAB_INDICATOR_HEIGHT_VP)
+          .borderRadius(FLOATING_TAB_INDICATOR_HEIGHT_VP / 2)
+          .backgroundColor($r('app.color.tab_selected_pill'))
+          .border({ width: 0.5, color: $r('app.color.tab_glass_stroke') })
+          .shadow({ radius: 10, color: '#14000000', offsetX: 0, offsetY: 4 })
+          .opacity(this.floatingTabBarContentWidth > 0 ? 1 : 0)
+          .translate({ x: this.getFloatingTabIndicatorTranslateX(), y: 0 })
+          .animation({ duration: FLOATING_TAB_SWITCH_ANIM_DURATION, curve: Curve.EaseInOut })
+
         Row() {
           this.FloatingTabItem(0, '首页', $r('sys.symbol.house'), $r('sys.symbol.house_fill'))
           this.FloatingTabItem(1, '我的', $r('sys.symbol.person'), $r('sys.symbol.person_fill'))
@@ -484,6 +562,9 @@ struct Index {
       }
       .width('100%')
       .height(FLOATING_TAB_BAR_HEIGHT_VP)
+      .onAreaChange((_: Area, newArea: Area) => {
+        this.updateFloatingTabBarContentWidth(newArea.width);
+      })
       .border({ width: 0.5, color: $r('app.color.tab_glass_stroke') })
       .borderRadius(FLOATING_TAB_BAR_RADIUS_VP)
       .clip(true)
@@ -501,29 +582,7 @@ struct Index {
   @Builder
   FloatingTabItem(index: number, label: string, icon: Resource, selectedIcon: Resource) {
     Column() {
-      if (this.currentIndex === index) {
-        Column() {
-          if (index === 1 && this.shouldShowProfileTabAvatar()) {
-            SmartAvatar({
-              avatarUrl: this.getProfileTabAvatarUrl(),
-              avatarSize: 24,
-              avatarRadius: 12,
-              fallbackText: this.getProfileTabFallbackText(),
-              bgColor: '#E8EAF0'
-            })
-          } else {
-            SymbolGlyph(selectedIcon)
-              .fontSize(22)
-              .fontColor([$r('app.color.primary')])
-          }
-        }
-        .width(56)
-        .height(30)
-        .borderRadius(15)
-        .backgroundColor($r('app.color.tab_selected_pill'))
-        .justifyContent(FlexAlign.Center)
-        .alignItems(HorizontalAlign.Center)
-      } else {
+      Column() {
         if (index === 1 && this.shouldShowProfileTabAvatar()) {
           SmartAvatar({
             avatarUrl: this.getProfileTabAvatarUrl(),
@@ -532,26 +591,41 @@ struct Index {
             fallbackText: this.getProfileTabFallbackText(),
             bgColor: '#E8EAF0'
           })
+            .scale({ x: this.isFloatingTabSelected(index) ? 1 : 0.92, y: this.isFloatingTabSelected(index) ? 1 : 0.92 })
+            .opacity(this.isFloatingTabSelected(index) ? 1 : 0.86)
+            .animation({ duration: FLOATING_TAB_ITEM_ANIM_DURATION, curve: Curve.EaseOut })
         } else {
-          SymbolGlyph(icon)
+          SymbolGlyph(this.isFloatingTabSelected(index) ? selectedIcon : icon)
             .fontSize(22)
-            .fontColor([$r('app.color.on_surface_secondary')])
+            .fontColor([this.isFloatingTabSelected(index) ? $r('app.color.primary') : $r('app.color.on_surface_secondary')])
+            .scale({ x: this.isFloatingTabSelected(index) ? 1 : 0.88, y: this.isFloatingTabSelected(index) ? 1 : 0.88 })
+            .opacity(this.isFloatingTabSelected(index) ? 1 : 0.74)
+            .animation({ duration: FLOATING_TAB_ITEM_ANIM_DURATION, curve: Curve.EaseOut })
         }
       }
+      .width(FLOATING_TAB_INDICATOR_WIDTH_VP)
+      .height(FLOATING_TAB_ICON_BOX_HEIGHT_VP)
+      .justifyContent(FlexAlign.Center)
+      .alignItems(HorizontalAlign.Center)
+      .translate({ x: 0, y: this.isFloatingTabSelected(index) ? 0 : 1 })
+      .animation({ duration: FLOATING_TAB_ITEM_ANIM_DURATION, curve: Curve.EaseOut })
 
       Text(label)
         .fontSize(11)
-        .fontColor(this.currentIndex === index ? $r('app.color.primary') : $r('app.color.on_surface_secondary'))
-        .margin({ top: 2 })
+        .lineHeight(12)
+        .fontWeight(this.isFloatingTabSelected(index) ? FontWeight.Medium : FontWeight.Regular)
+        .fontColor(this.isFloatingTabSelected(index) ? $r('app.color.primary') : $r('app.color.on_surface_secondary'))
+        .opacity(this.isFloatingTabSelected(index) ? 1 : 0.8)
+        .translate({ x: 0, y: this.isFloatingTabSelected(index) ? 0 : 1 })
+        .margin({ top: 1 })
+        .animation({ duration: FLOATING_TAB_ITEM_ANIM_DURATION, curve: Curve.EaseOut })
     }
     .layoutWeight(1)
     .height('100%')
     .justifyContent(FlexAlign.Center)
     .alignItems(HorizontalAlign.Center)
     .onClick(() => {
-      if (this.currentIndex !== index) {
-        this.currentIndex = index;
-      }
+      this.switchMainTab(index);
     })
   }
 }

@@ -1,6 +1,7 @@
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { Category, SiteResponse } from '../../models/Category';
 import { SearchPost, SearchResult, SearchTopic, SearchUser } from '../../models/SearchResult';
+import { Topic, TopicListResponse } from '../../models/Topic';
 import { ApiClient } from '../../services/network/ApiClient';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { ErrorView } from '../components/ErrorView';
@@ -9,10 +10,11 @@ import { RouterManager } from '../../common/utils/RouterManager';
 import { PreferencesUtil } from '../../services/storage/PreferencesUtil';
 import { SearchFilter, SearchInType, SearchStatus } from '../../models/SearchFilter';
 import { SearchSortOrder } from '../../models/SearchSort';
+import { TagInfo } from '../../models/TagSearchResult';
 import { ActiveSearchFiltersBar } from '../components/search/ActiveSearchFiltersBar';
 import { SearchPostCard } from '../components/search/SearchPostCard';
 import { SearchFilterPanel } from '../components/search/SearchFilterPanel';
-import { DEFAULT_AVAILABLE_TAGS, TagSelectionSheet } from '../components/TagControls';
+import { TagSelectionSheet } from '../components/TagControls';
 import { HdsNavDestination } from '@kit.UIDesignKit';
 import { WindowManager } from '../../common/utils/WindowManager';
 
@@ -26,6 +28,8 @@ const SHEET_DATE_RANGE: number = 3;
 const RECENT_SEARCH_KEY: string = 'search_recent_queries';
 const RECENT_SEARCH_LIMIT: number = 20;
 const SEARCH_SORT_ORDER_KEY: string = 'search_sort_order';
+const HOT_TAG_LIMIT: number = 30;
+const HOT_TAG_TOPIC_SAMPLE_PAGES: number = 2;
 
 /**
  * 搜索页面（游客态可用）
@@ -60,21 +64,27 @@ export struct SearchPage {
   // 高级筛选（已应用 + 草稿）
   @Local filter: SearchFilter = new SearchFilter();
   @Local draftFilter: SearchFilter = new SearchFilter();
+  @Local hotTags: string[] = [];
 
   // Sheet 状态（筛选 / 标签搜索更多 / 自定义日期范围）
   @Local isSheetVisible: boolean = false;
   @Local sheetMode: number = SHEET_NONE;
+  @Local isTagMoreSheetVisible: boolean = false;
 
   // 最近搜索
   @Local recentSearches: string[] = [];
   @Local isLoadingRecent: boolean = true;
   @Local isClearingRecent: boolean = false;
 
-  // 自定义日期范围输入（YYYY-MM-DD）
-  @Local dateAfterText: string = '';
-  @Local dateBeforeText: string = '';
+  // 自定义日期范围草稿 / 选择器
+  @Local dateAfterDraft: Date | null = null;
+  @Local dateBeforeDraft: Date | null = null;
+  @Local datePickerValue: Date = new Date();
+  @Local isAfterDateSheetVisible: boolean = false;
+  @Local isBeforeDateSheetVisible: boolean = false;
 
   private listScroller: Scroller = new Scroller();
+  private hotTagsLoadVersion: number = 0;
 
   aboutToAppear(): void {
     this.initializePage();
@@ -129,12 +139,13 @@ export struct SearchPage {
         newMap.set(c.id, c);
       }
       this.categoryMap = newMap;
+      await this.loadHotTags(this.filter.categoryId);
     } catch (err) {
       hilog.error(0x0000, TAG, 'Load search data failed: %{public}s', JSON.stringify(err));
       this.errorMessage = '加载失败';
     } finally {
       this.isLoading = false;
-      if (this.errorMessage.length === 0 && this.query.trim().length > 0) {
+      if (this.errorMessage.length === 0 && this.hasRunnableSearchCriteria(this.query, this.filter)) {
         this.performSearch();
       }
     }
@@ -151,6 +162,168 @@ export struct SearchPage {
     this.lastSearchQuery = '';
   }
 
+  private cloneFilter(filter: SearchFilter): SearchFilter {
+    return filter.copyWith({ tags: [...filter.tags] });
+  }
+
+  private hasRunnableSearchCriteria(query: string, filter: SearchFilter): boolean {
+    return query.trim().length > 0 || filter.isNotEmpty;
+  }
+
+  private hasAppliedSearchCriteria(): boolean {
+    return this.hasRunnableSearchCriteria(this.query, this.filter);
+  }
+
+  private pushUniqueTag(target: string[], rawName: string): void {
+    const name: string = rawName.trim();
+    if (name.length === 0) {
+      return;
+    }
+    if (target.indexOf(name) >= 0) {
+      return;
+    }
+    target.push(name);
+  }
+
+  private extractHotTagNames(results: TagInfo[]): string[] {
+    const tags: string[] = [];
+    for (let i = 0; i < results.length; i++) {
+      const info: TagInfo = results[i];
+      this.pushUniqueTag(tags, info.name);
+    }
+    return tags;
+  }
+
+  private collectHotTagsFromTopics(topics: Topic[]): string[] {
+    const counts: Map<string, number> = new Map();
+    const tags: string[] = [];
+    for (let i = 0; i < topics.length; i++) {
+      const topic: Topic = topics[i];
+      for (let j = 0; j < topic.tags.length; j++) {
+        const tagName: string = topic.tags[j].name.trim();
+        if (tagName.length === 0) {
+          continue;
+        }
+        if (counts.has(tagName)) {
+          counts.set(tagName, (counts.get(tagName) as number) + 1);
+        } else {
+          counts.set(tagName, 1);
+          tags.push(tagName);
+        }
+      }
+    }
+    tags.sort((a: string, b: string): number => {
+      const countDiff: number = (counts.get(b) as number) - (counts.get(a) as number);
+      if (countDiff !== 0) {
+        return countDiff;
+      }
+      return a.localeCompare(b);
+    });
+    return tags.length > HOT_TAG_LIMIT ? tags.slice(0, HOT_TAG_LIMIT) : tags;
+  }
+
+  private async loadHotTagTopics(categoryId: number | null): Promise<Topic[]> {
+    const apiClient: ApiClient = ApiClient.getInstance();
+    const category: Category | null = categoryId !== null ? this.getCategoryById(categoryId) : null;
+    const topics: Topic[] = [];
+    for (let page = 0; page < HOT_TAG_TOPIC_SAMPLE_PAGES; page++) {
+      let response: TopicListResponse;
+      if (category !== null && category.slug.trim().length > 0) {
+        response = await apiClient.getCategoryTopics(category.slug, category.id, page);
+      } else {
+        response = await apiClient.getLatestTopics(page);
+      }
+      for (let i = 0; i < response.topics.length; i++) {
+        topics.push(response.topics[i]);
+      }
+      if (response.topics.length < response.perPage || topics.length >= HOT_TAG_LIMIT * 3) {
+        break;
+      }
+    }
+    return topics;
+  }
+
+  private buildHotTagFallback(): string[] {
+    const tags: string[] = [];
+    for (let i = 0; i < this.filter.tags.length; i++) {
+      this.pushUniqueTag(tags, this.filter.tags[i]);
+    }
+    for (let i = 0; i < this.draftFilter.tags.length; i++) {
+      this.pushUniqueTag(tags, this.draftFilter.tags[i]);
+    }
+
+    for (let i = 0; i < this.topicResults.length; i++) {
+      const topic: SearchTopic = this.topicResults[i];
+      for (let j = 0; j < topic.tags.length; j++) {
+        this.pushUniqueTag(tags, topic.tags[j]);
+      }
+    }
+
+    for (let i = 0; i < this.postResults.length; i++) {
+      const post: SearchPost = this.postResults[i];
+      if (post.topic === null) {
+        continue;
+      }
+      const topic: SearchTopic = post.topic as SearchTopic;
+      for (let j = 0; j < topic.tags.length; j++) {
+        this.pushUniqueTag(tags, topic.tags[j]);
+      }
+    }
+    return tags;
+  }
+
+  private async loadHotTags(categoryId: number | null): Promise<void> {
+    const loadVersion: number = this.hotTagsLoadVersion + 1;
+    this.hotTagsLoadVersion = loadVersion;
+    const next: string[] = [];
+
+    try {
+      const topicTags: string[] = this.collectHotTagsFromTopics(await this.loadHotTagTopics(categoryId));
+      for (let i = 0; i < topicTags.length; i++) {
+        this.pushUniqueTag(next, topicTags[i]);
+        if (next.length >= HOT_TAG_LIMIT) {
+          break;
+        }
+      }
+    } catch (err) {
+      hilog.warn(0x0000, TAG, 'Load hot tags from topics failed: %{public}s', JSON.stringify(err));
+    }
+
+    if (next.length < HOT_TAG_LIMIT) {
+      try {
+        const apiClient: ApiClient = ApiClient.getInstance();
+        const primaryResponse = await apiClient.searchTags('', categoryId, null, 20, false);
+        const primaryTags: string[] = this.extractHotTagNames(primaryResponse.results);
+        for (let i = 0; i < primaryTags.length; i++) {
+          this.pushUniqueTag(next, primaryTags[i]);
+          if (next.length >= HOT_TAG_LIMIT) {
+            break;
+          }
+        }
+
+        if (next.length < HOT_TAG_LIMIT && primaryTags.length > 0) {
+          const secondaryResponse = await apiClient.searchTags('', categoryId, next, 20, false);
+          const secondaryTags: string[] = this.extractHotTagNames(secondaryResponse.results);
+          for (let i = 0; i < secondaryTags.length; i++) {
+            this.pushUniqueTag(next, secondaryTags[i]);
+            if (next.length >= HOT_TAG_LIMIT) {
+              break;
+            }
+          }
+        }
+      } catch (err) {
+        hilog.warn(0x0000, TAG, 'Load hot tags from tag search failed: %{public}s', JSON.stringify(err));
+      }
+    }
+
+    if (loadVersion !== this.hotTagsLoadVersion) {
+      return;
+    }
+
+    const fallback: string[] = next.length > 0 ? next : this.buildHotTagFallback();
+    this.hotTags = fallback.length > HOT_TAG_LIMIT ? fallback.slice(0, HOT_TAG_LIMIT) : fallback;
+  }
+
   private performSearch(): void {
     const rawQuery: string = this.query.trim();
     const typedSortOrder: SearchSortOrder | null = this.extractSortOrderFromQuery(rawQuery);
@@ -161,12 +334,16 @@ export struct SearchPage {
 
     const q: string = this.stripSortOrderFromQuery(rawQuery);
     this.query = q;
-    if (q.length === 0) {
+    if (!this.hasRunnableSearchCriteria(q, this.filter)) {
       this.resetSearchResults();
       return;
     }
 
     const searchQuery: string = this.buildSearchQuery(q, this.filter);
+    if (searchQuery.length === 0) {
+      this.resetSearchResults();
+      return;
+    }
     hilog.info(0x0000, TAG, 'Perform search: %{public}s', searchQuery);
 
     this.saveRecentQuery(q);
@@ -294,35 +471,43 @@ export struct SearchPage {
   }
 
   private openFilterSheet(): void {
-    this.draftFilter = this.filter.copyWith({ tags: [...this.filter.tags] });
+    this.draftFilter = this.cloneFilter(this.filter);
+    this.loadHotTags(this.draftFilter.categoryId).catch(() => {});
     this.sheetMode = SHEET_FILTER;
     this.isSheetVisible = true;
   }
 
   private closeSheet(): void {
     this.isSheetVisible = false;
-    this.sheetMode = SHEET_NONE;
+    this.isTagMoreSheetVisible = false;
+    this.isAfterDateSheetVisible = false;
+    this.isBeforeDateSheetVisible = false;
   }
 
   private applyDraftFilter(): void {
-    this.filter = this.draftFilter;
+    this.filter = this.cloneFilter(this.draftFilter);
+    this.draftFilter = this.cloneFilter(this.filter);
+    this.loadHotTags(this.filter.categoryId).catch(() => {});
     this.closeSheet();
     this.performSearch();
   }
 
   private resetDraftFilter(): void {
     this.draftFilter = this.draftFilter.clear();
+    this.loadHotTags(null).catch(() => {});
   }
 
   private clearAllFilters(): void {
     this.filter = this.filter.clear();
-    this.draftFilter = this.filter;
+    this.draftFilter = this.cloneFilter(this.filter);
+    this.loadHotTags(null).catch(() => {});
     this.performSearch();
   }
 
   private clearFilterCategory(): void {
     this.filter = this.filter.copyWith({ clearCategory: true });
-    this.draftFilter = this.filter;
+    this.draftFilter = this.cloneFilter(this.filter);
+    this.loadHotTags(null).catch(() => {});
     this.performSearch();
   }
 
@@ -333,25 +518,26 @@ export struct SearchPage {
       if (t !== tagName) next.push(t);
     }
     this.filter = this.filter.copyWith({ tags: next });
-    this.draftFilter = this.filter;
+    this.draftFilter = this.cloneFilter(this.filter);
     this.performSearch();
   }
 
   private clearFilterStatus(): void {
     this.filter = this.filter.copyWith({ clearStatus: true });
-    this.draftFilter = this.filter;
+    this.draftFilter = this.cloneFilter(this.filter);
     this.performSearch();
   }
 
   private clearFilterDateRange(): void {
     this.filter = this.filter.copyWith({ clearDateRange: true });
-    this.draftFilter = this.filter;
+    this.draftFilter = this.cloneFilter(this.filter);
     this.performSearch();
   }
 
   private onDraftCategoryChange(category: Category | null, parentSlug: string | null): void {
     if (category === null) {
       this.draftFilter = this.draftFilter.copyWith({ clearCategory: true });
+      this.loadHotTags(null).catch(() => {});
       return;
     }
     this.draftFilter = this.draftFilter.copyWith({
@@ -360,6 +546,7 @@ export struct SearchPage {
       categoryName: category.name,
       parentCategorySlug: parentSlug
     });
+    this.loadHotTags(category.id).catch(() => {});
   }
 
   private toggleDraftTag(tagName: string): void {
@@ -377,13 +564,16 @@ export struct SearchPage {
   }
 
   private openTagMoreSheet(): void {
-    this.sheetMode = SHEET_TAG_MORE;
-    this.isSheetVisible = true;
+    this.isTagMoreSheetVisible = true;
   }
 
   private openDateRangeSheet(): void {
-    this.dateAfterText = this.draftFilter.afterDate !== null ? this.formatDateText(this.draftFilter.afterDate as Date) : '';
-    this.dateBeforeText = this.draftFilter.beforeDate !== null ? this.formatDateText(this.draftFilter.beforeDate as Date) : '';
+    this.dateAfterDraft = this.draftFilter.afterDate !== null
+      ? new Date((this.draftFilter.afterDate as Date).getTime())
+      : null;
+    this.dateBeforeDraft = this.draftFilter.beforeDate !== null
+      ? new Date((this.draftFilter.beforeDate as Date).getTime())
+      : null;
     this.sheetMode = SHEET_DATE_RANGE;
     this.isSheetVisible = true;
   }
@@ -395,41 +585,79 @@ export struct SearchPage {
     return `${y}-${m.toString().padStart(2, '0')}-${d.toString().padStart(2, '0')}`;
   }
 
-  private parseDateText(text: string): Date | null {
-    const raw: string = text.trim();
-    if (raw.length === 0) return null;
-    const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-    if (match === null || match.length < 4) return null;
-    const year: number = Number(match[1]);
-    const month: number = Number(match[2]);
-    const day: number = Number(match[3]);
-    if (isNaN(year) || isNaN(month) || isNaN(day)) return null;
-    const d: Date = new Date(year, month - 1, day);
-    if (d.getFullYear() !== year || d.getMonth() !== month - 1 || d.getDate() !== day) return null;
-    return d;
+  private getDateDraftText(date: Date | null): string {
+    return date !== null ? this.formatDateText(date as Date) : '未选择';
   }
 
-  private applyDateRangeFromText(): void {
-    const afterDate: Date | null = this.parseDateText(this.dateAfterText);
-    const beforeDate: Date | null = this.parseDateText(this.dateBeforeText);
+  private buildPickedDate(): Date {
+    return new Date(
+      this.datePickerValue.getFullYear(),
+      this.datePickerValue.getMonth(),
+      this.datePickerValue.getDate(),
+      0,
+      0,
+      0,
+      0
+    );
+  }
+
+  private openAfterDatePicker(): void {
+    this.datePickerValue = this.dateAfterDraft !== null
+      ? new Date((this.dateAfterDraft as Date).getTime())
+      : new Date();
+    this.isAfterDateSheetVisible = true;
+  }
+
+  private openBeforeDatePicker(): void {
+    this.datePickerValue = this.dateBeforeDraft !== null
+      ? new Date((this.dateBeforeDraft as Date).getTime())
+      : new Date();
+    this.isBeforeDateSheetVisible = true;
+  }
+
+  private applyAfterDatePicker(): void {
+    this.dateAfterDraft = this.buildPickedDate();
+    this.isAfterDateSheetVisible = false;
+  }
+
+  private applyBeforeDatePicker(): void {
+    this.dateBeforeDraft = this.buildPickedDate();
+    this.isBeforeDateSheetVisible = false;
+  }
+
+  private clearDateDraft(isAfter: boolean): void {
+    if (isAfter) {
+      this.dateAfterDraft = null;
+      return;
+    }
+    this.dateBeforeDraft = null;
+  }
+
+  private applyDateRangeDraft(): void {
+    let afterDate: Date | null = this.dateAfterDraft !== null ? new Date((this.dateAfterDraft as Date).getTime()) : null;
+    let beforeDate: Date | null = this.dateBeforeDraft !== null ? new Date((this.dateBeforeDraft as Date).getTime()) : null;
+    if (afterDate !== null && beforeDate !== null && afterDate.getTime() > beforeDate.getTime()) {
+      const temp: Date = afterDate;
+      afterDate = beforeDate;
+      beforeDate = temp;
+    }
     this.draftFilter = this.draftFilter.copyWith({ afterDate: afterDate, beforeDate: beforeDate });
     this.sheetMode = SHEET_FILTER;
-    this.isSheetVisible = true;
   }
 
   private buildAvailableTags(): string[] {
     const tags: string[] = [];
-    for (let i = 0; i < DEFAULT_AVAILABLE_TAGS.length; i++) {
-      const name: string = DEFAULT_AVAILABLE_TAGS[i];
-      if (tags.indexOf(name) < 0) tags.push(name);
+    for (let i = 0; i < this.hotTags.length; i++) {
+      this.pushUniqueTag(tags, this.hotTags[i]);
+    }
+    for (let i = 0; i < this.filter.tags.length; i++) {
+      this.pushUniqueTag(tags, this.filter.tags[i]);
     }
 
     for (let i = 0; i < this.topicResults.length; i++) {
       const t: SearchTopic = this.topicResults[i];
       for (let j = 0; j < t.tags.length; j++) {
-        const name: string = t.tags[j];
-        if (name.length === 0) continue;
-        if (tags.indexOf(name) < 0) tags.push(name);
+        this.pushUniqueTag(tags, t.tags[j]);
       }
     }
 
@@ -438,9 +666,7 @@ export struct SearchPage {
       if (p.topic === null) continue;
       const t: SearchTopic = p.topic as SearchTopic;
       for (let j = 0; j < t.tags.length; j++) {
-        const name: string = t.tags[j];
-        if (name.length === 0) continue;
-        if (tags.indexOf(name) < 0) tags.push(name);
+        this.pushUniqueTag(tags, t.tags[j]);
       }
     }
     return tags;
@@ -496,7 +722,7 @@ export struct SearchPage {
     }
     this.sortOrder = order;
     this.persistSortOrder(order);
-    if (this.query.trim().length > 0) {
+    if (this.hasAppliedSearchCriteria()) {
       this.performSearch();
     }
   }
@@ -599,7 +825,8 @@ export struct SearchPage {
             })
           }
 
-          if (this.query.trim().length > 0 && (!this.isLoading || this.postResults.length > 0 || this.userResults.length > 0)) {
+          if (this.hasAppliedSearchCriteria() &&
+            (!this.isLoading || this.postResults.length > 0 || this.userResults.length > 0 || this.topicResults.length > 0)) {
             this.SearchSortRow()
           }
 
@@ -628,7 +855,7 @@ export struct SearchPage {
             .width('100%')
             .layoutWeight(1)
             .justifyContent(FlexAlign.Center)
-          } else if (this.query.trim().length === 0) {
+          } else if (!this.hasAppliedSearchCriteria()) {
             if (this.isLoadingRecent) {
               Column() {
                 LoadingSpinner({ message: '' })
@@ -739,6 +966,17 @@ export struct SearchPage {
         showClose: false,
         backgroundColor: $r('app.color.surface')
       })
+
+      Column() {
+      }
+      .width(0)
+      .height(0)
+      .bindSheet($$this.isTagMoreSheetVisible, this.TagMoreSheetBuilder, {
+        height: SheetSize.MEDIUM,
+        dragBar: false,
+        showClose: false,
+        backgroundColor: $r('app.color.surface')
+      })
     }
     .backgroundColor($r('app.color.background'))
     .hideTitleBar(true)
@@ -773,7 +1011,7 @@ export struct SearchPage {
         .onChange((value: string) => {
           if (value !== this.query) {
             this.query = value;
-            if (this.query.trim().length === 0) {
+            if (this.query.trim().length === 0 && !this.hasRunnableSearchCriteria('', this.filter)) {
               this.errorMessage = '';
               this.resetSearchResults();
             }
@@ -796,7 +1034,11 @@ export struct SearchPage {
         .onClick(() => {
           this.query = '';
           this.errorMessage = '';
-          this.resetSearchResults();
+          if (this.filter.isNotEmpty) {
+            this.performSearch();
+          } else {
+            this.resetSearchResults();
+          }
         })
       }
 
@@ -1038,7 +1280,7 @@ export struct SearchPage {
       SearchFilterPanel({
         filter: this.draftFilter,
         categories: this.categories,
-        hotTags: DEFAULT_AVAILABLE_TAGS,
+        hotTags: this.hotTags,
         onReset: () => {
           this.resetDraftFilter();
         },
@@ -1064,26 +1306,33 @@ export struct SearchPage {
           this.openTagMoreSheet();
         }
       })
-    } else if (this.sheetMode === SHEET_TAG_MORE) {
-      TagSelectionSheet({
-        title: $r('app.string.search_more_tags'),
-        doneText: $r('app.string.done'),
-        availableTags: this.buildAvailableTags(),
-        selectedTags: this.draftFilter.tags,
-        onToggleTag: (t: string) => {
-          this.toggleDraftTag(t);
-        },
-        onDone: () => {
-          this.sheetMode = SHEET_FILTER;
-          this.isSheetVisible = true;
-        },
-        onClear: () => {
-          this.draftFilter = this.draftFilter.copyWith({ tags: [] });
-        }
-      })
     } else if (this.sheetMode === SHEET_DATE_RANGE) {
       this.DateRangeSheet()
     }
+  }
+
+  @Builder
+  TagMoreSheetBuilder() {
+    TagSelectionSheet({
+      title: $r('app.string.search_more_tags'),
+      doneText: $r('app.string.done'),
+      availableTags: this.buildAvailableTags(),
+      selectedTags: this.draftFilter.tags,
+      categoryId: this.draftFilter.categoryId,
+      showHeaderBar: true,
+      onBack: () => {
+        this.isTagMoreSheetVisible = false;
+      },
+      onToggleTag: (t: string) => {
+        this.toggleDraftTag(t);
+      },
+      onDone: () => {
+        this.isTagMoreSheetVisible = false;
+      },
+      onClear: () => {
+        this.draftFilter = this.draftFilter.copyWith({ tags: [] });
+      }
+    })
   }
 
   @Builder
@@ -1127,7 +1376,7 @@ export struct SearchPage {
           .fontSize(14)
           .fontColor($r('app.color.primary'))
           .onClick(() => {
-            this.applyDateRangeFromText();
+            this.applyDateRangeDraft();
           })
       }
       .width('100%')
@@ -1140,20 +1389,46 @@ export struct SearchPage {
         .margin({ left: 16, right: 16 })
 
       Column() {
-        this.DateInputRow($r('app.string.after_date'), this.dateAfterText, (v: string) => {
-          this.dateAfterText = v;
+        this.DatePickerField($r('app.string.after_date'), this.dateAfterDraft, () => {
+          this.openAfterDatePicker();
+        }, () => {
+          this.clearDateDraft(true);
         })
-        this.DateInputRow($r('app.string.before_date'), this.dateBeforeText, (v: string) => {
-          this.dateBeforeText = v;
+        this.DatePickerField($r('app.string.before_date'), this.dateBeforeDraft, () => {
+          this.openBeforeDatePicker();
+        }, () => {
+          this.clearDateDraft(false);
         })
 
-        Text('YYYY-MM-DD')
+        Text('复用书签中的日期选择器；支持单独选择开始或结束日期。')
           .fontSize(12)
           .fontColor($r('app.color.on_surface_tertiary'))
           .margin({ top: 10 })
       }
       .width('100%')
       .padding({ left: 16, right: 16, top: 18, bottom: 24 })
+
+      Column() {
+      }
+      .width(0)
+      .height(0)
+      .bindSheet($$this.isAfterDateSheetVisible, this.AfterDateSheetBuilder, {
+        height: SheetSize.FIT_CONTENT,
+        dragBar: false,
+        showClose: false,
+        backgroundColor: $r('app.color.surface')
+      })
+
+      Column() {
+      }
+      .width(0)
+      .height(0)
+      .bindSheet($$this.isBeforeDateSheetVisible, this.BeforeDateSheetBuilder, {
+        height: SheetSize.FIT_CONTENT,
+        dragBar: false,
+        showClose: false,
+        backgroundColor: $r('app.color.surface')
+      })
     }
     .width('100%')
     .height('100%')
@@ -1161,25 +1436,150 @@ export struct SearchPage {
   }
 
   @Builder
-  DateInputRow(label: Resource, text: string, onChange: (v: string) => void) {
+  DatePickerField(label: Resource, value: Date | null, onTap: () => void, onClear: () => void) {
     Column() {
       Text(label)
         .fontSize(13)
         .fontColor($r('app.color.on_surface_secondary'))
         .margin({ bottom: 6 })
-      TextInput({ text: text, placeholder: 'YYYY-MM-DD' })
-        .fontSize(15)
-        .fontColor($r('app.color.on_surface'))
-        .placeholderColor($r('app.color.on_surface_tertiary'))
-        .height(44)
-        .padding({ left: 12, right: 12 })
-        .backgroundColor($r('app.color.search_background'))
-        .borderRadius(10)
-        .onChange((v: string) => {
-          onChange(v);
-        })
+      Row() {
+        Row() {
+          SymbolGlyph($r('sys.symbol.calendar'))
+            .fontSize(16)
+            .fontColor([$r('app.color.on_surface_secondary')])
+            .margin({ right: 8 })
+
+          Text(this.getDateDraftText(value))
+            .fontSize(15)
+            .fontColor(value !== null ? $r('app.color.on_surface') : $r('app.color.on_surface_tertiary'))
+            .layoutWeight(1)
+        }
+        .layoutWeight(1)
+        .alignItems(VerticalAlign.Center)
+
+        SymbolGlyph($r('sys.symbol.chevron_right'))
+          .fontSize(14)
+          .fontColor([$r('app.color.on_surface_tertiary')])
+      }
+      .width('100%')
+      .height(48)
+      .padding({ left: 12, right: 12 })
+      .backgroundColor($r('app.color.search_background'))
+      .borderRadius(12)
+      .alignItems(VerticalAlign.Center)
+      .onClick(() => {
+        onTap();
+      })
+
+      if (value !== null) {
+        Text('清空')
+          .fontSize(12)
+          .fontColor($r('app.color.primary'))
+          .margin({ top: 8 })
+          .onClick(() => {
+            onClear();
+          })
+      }
     }
     .width('100%')
     .margin({ bottom: 14 })
+  }
+
+  @Builder
+  private AfterDateSheetBuilder() {
+    Column() {
+      Row() {
+        Text('选择开始日期')
+          .fontSize(18)
+          .fontWeight(FontWeight.Bold)
+          .fontColor($r('app.color.on_surface'))
+          .layoutWeight(1)
+
+        Text('取消')
+          .fontSize(15)
+          .fontColor($r('app.color.on_surface_secondary'))
+          .onClick(() => {
+            this.isAfterDateSheetVisible = false;
+          })
+      }
+      .width('100%')
+      .padding({ left: 18, right: 18, top: 18, bottom: 12 })
+
+      DatePicker({
+        start: new Date('2024-01-01'),
+        end: new Date('2100-12-31'),
+        selected: this.datePickerValue
+      })
+        .width('100%')
+        .lunar(false)
+        .onDateChange((value: Date) => {
+          this.datePickerValue = new Date(value.getTime());
+        })
+
+      Row() {
+        Blank().layoutWeight(1)
+
+        Text('确定')
+          .fontSize(16)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.primary'))
+          .onClick(() => {
+            this.applyAfterDatePicker();
+          })
+      }
+      .width('100%')
+      .padding({ left: 18, right: 18, top: 12, bottom: 18 + WindowManager.getSystemAvoidAreaBottomVp() })
+    }
+    .width('100%')
+    .backgroundColor($r('app.color.surface'))
+  }
+
+  @Builder
+  private BeforeDateSheetBuilder() {
+    Column() {
+      Row() {
+        Text('选择结束日期')
+          .fontSize(18)
+          .fontWeight(FontWeight.Bold)
+          .fontColor($r('app.color.on_surface'))
+          .layoutWeight(1)
+
+        Text('取消')
+          .fontSize(15)
+          .fontColor($r('app.color.on_surface_secondary'))
+          .onClick(() => {
+            this.isBeforeDateSheetVisible = false;
+          })
+      }
+      .width('100%')
+      .padding({ left: 18, right: 18, top: 18, bottom: 12 })
+
+      DatePicker({
+        start: new Date('2024-01-01'),
+        end: new Date('2100-12-31'),
+        selected: this.datePickerValue
+      })
+        .width('100%')
+        .lunar(false)
+        .onDateChange((value: Date) => {
+          this.datePickerValue = new Date(value.getTime());
+        })
+
+      Row() {
+        Blank().layoutWeight(1)
+
+        Text('确定')
+          .fontSize(16)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.primary'))
+          .onClick(() => {
+            this.applyBeforeDatePicker();
+          })
+      }
+      .width('100%')
+      .padding({ left: 18, right: 18, top: 12, bottom: 18 + WindowManager.getSystemAvoidAreaBottomVp() })
+    }
+    .width('100%')
+    .backgroundColor($r('app.color.surface'))
   }
 }

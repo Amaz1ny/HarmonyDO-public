@@ -3,10 +3,12 @@ import { PreferencesUtil } from '../../services/storage/PreferencesUtil';
 import { ExternalLinkService } from '../../common/utils/ExternalLinkService';
 import { RouterManager } from '../../common/utils/RouterManager';
 import { ToastService } from '../../common/utils/ToastService';
+import { WindowManager } from '../../common/utils/WindowManager';
 import { HdsNavDestination } from '@kit.UIDesignKit';
 
 const TAG: string = 'AboutAppPage';
 const PREF_KEY_DEVELOPER_MODE: string = 'about_app_developer_mode_enabled';
+const TOP_BAR_HEIGHT: number = 56;
 
 type AboutAppItemKey = 'openSource' | 'developerModeToggle' | 'sourceCode' | 'appLogs' | 'feedback';
 
@@ -98,6 +100,14 @@ export struct AboutAppPage {
       'HarmonyDO 是 Linux.do 的鸿蒙原生社区客户端',
       '灵感来自 FluxDO，感谢社区与开源作者'
     ];
+  }
+
+  private getTopSafeHeight(): number {
+    return WindowManager.getSystemAvoidAreaTopVp();
+  }
+
+  private getTopBarHeight(): number {
+    return TOP_BAR_HEIGHT + this.getTopSafeHeight();
   }
 
   private resolveItemSymbol(itemKey: AboutAppItemKey): Resource {
@@ -192,8 +202,8 @@ export struct AboutAppPage {
         .height(44);
     }
     .width('100%')
-    .height(56)
-    .padding({ left: 8, right: 8 })
+    .height(this.getTopBarHeight())
+    .padding({ left: 8, right: 8, top: this.getTopSafeHeight() })
     .backgroundColor($r('app.color.background'))
     .alignItems(VerticalAlign.Center);
   }
@@ -364,5 +374,8 @@ export struct AboutAppPage {
       .height('100%')
       .backgroundColor($r('app.color.background'));
     }
+    .backgroundColor($r('app.color.background'))
+    .hideTitleBar(true)
+    .hideToolBar(true)
   }
 }
