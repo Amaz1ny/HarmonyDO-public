@@ -24,6 +24,7 @@ import { resolveTopicListFabRefreshModeByScroll } from '../../common/utils/Topic
 import {
   FLOATING_TAB_BAR_HEIGHT_VP,
   FLOATING_TAB_BAR_MARGIN_BOTTOM_VP,
+  FLOATING_TAB_BAR_OFFSET_UP_VP,
   FLOATING_TAB_BAR_CONTENT_EXTRA_PADDING_VP
 } from '../../common/constants/LayoutConstants';
 
@@ -36,6 +37,7 @@ const BAR_VISIBILITY_EPS: number = 0.01;
 const FAB_BOTTOM_MARGIN_VP: number = 16;
 const PULL_REFRESH_REARM_DELAY_MS: number = 160;
 const FLOATING_TAB_BAR_SHOW_DELAY_MS: number = 1200;
+const FLOATING_TAB_BAR_HIDE_DELAY_MS: number = 1500;
 
 // 游客态“查看新话题”轮询：Discourse 站点通常会把匿名 MessageBus poll 拉长到 ~25s（anon_polling_interval）
 // 为了更“实时”的体验，这里额外用 /latest.json 做轻量轮询并做指数退避，避免触发 CF 频控时刷屏/卡死
@@ -81,6 +83,7 @@ export struct TopicListPage {
   private headerSnapTimerId: number = -1;
   private pullRefreshArmTimerId: number = -1;
   private floatingTabBarShowTimerId: number = -1;
+  private floatingTabBarHideTimerId: number = -1;
   private lastHeaderScrollDirection: number = 0;
   private isListTouchActive: boolean = false;
   private lastReportedBarVisibility: number = 1;
@@ -148,6 +151,7 @@ export struct TopicListPage {
     this.clearHeaderSnapTimer();
     this.clearPullRefreshArmTimer();
     this.clearFloatingTabBarShowTimer();
+    this.clearFloatingTabBarHideTimer();
     this.clearIncomingLoadTimer();
     this.clearIncomingPollTimer();
     this.clearIncomingHighlightTimer();
@@ -603,6 +607,7 @@ export struct TopicListPage {
     return WindowManager.getSystemAvoidAreaBottomVp()
       + FLOATING_TAB_BAR_HEIGHT_VP
       + FLOATING_TAB_BAR_MARGIN_BOTTOM_VP
+      + FLOATING_TAB_BAR_OFFSET_UP_VP
       + FLOATING_TAB_BAR_CONTENT_EXTRA_PADDING_VP;
   }
 
@@ -611,7 +616,8 @@ export struct TopicListPage {
     const bottomSafe: number = WindowManager.getSystemAvoidAreaBottomVp();
     const tabPart: number =
       (FLOATING_TAB_BAR_HEIGHT_VP + FLOATING_TAB_BAR_MARGIN_BOTTOM_VP + FLOATING_TAB_BAR_CONTENT_EXTRA_PADDING_VP) * v;
-    return bottomSafe + tabPart;
+    const offsetPart: number = FLOATING_TAB_BAR_OFFSET_UP_VP * v;
+    return bottomSafe + tabPart + offsetPart;
   }
 
   private getHomeFabTranslateY(visibility: number): number {
@@ -686,6 +692,13 @@ export struct TopicListPage {
     }
   }
 
+  private clearFloatingTabBarHideTimer(): void {
+    if (this.floatingTabBarHideTimerId >= 0) {
+      clearTimeout(this.floatingTabBarHideTimerId);
+      this.floatingTabBarHideTimerId = -1;
+    }
+  }
+
   private resetFabToCreateMode(): void {
     if (this.fabRefreshMode) {
       this.fabRefreshMode = false;
@@ -705,15 +718,36 @@ export struct TopicListPage {
 
   private hideFloatingTabBar(forceReport: boolean = false): void {
     this.clearFloatingTabBarShowTimer();
+    this.clearFloatingTabBarHideTimer();
     this.setFloatingTabBarVisible(false, forceReport);
   }
 
   private showFloatingTabBarImmediate(forceReport: boolean = false): void {
     this.clearFloatingTabBarShowTimer();
+    this.clearFloatingTabBarHideTimer();
     this.setFloatingTabBarVisible(true, forceReport);
   }
 
+  private scheduleFloatingTabBarHide(forceReport: boolean = false): void {
+    this.clearFloatingTabBarShowTimer();
+    if (Math.abs(this.floatingTabBarVisibility) <= BAR_VISIBILITY_EPS) {
+      this.clearFloatingTabBarHideTimer();
+      if (forceReport) {
+        this.reportBarVisibility(true);
+      }
+      return;
+    }
+    if (this.floatingTabBarHideTimerId >= 0) {
+      return;
+    }
+    this.floatingTabBarHideTimerId = setTimeout(() => {
+      this.floatingTabBarHideTimerId = -1;
+      this.setFloatingTabBarVisible(false, forceReport);
+    }, FLOATING_TAB_BAR_HIDE_DELAY_MS);
+  }
+
   private scheduleFloatingTabBarShow(forceReport: boolean = false): void {
+    this.clearFloatingTabBarHideTimer();
     if (Math.abs(this.floatingTabBarVisibility - 1) <= BAR_VISIBILITY_EPS) {
       this.clearFloatingTabBarShowTimer();
       if (forceReport) {
@@ -2551,7 +2585,7 @@ export struct TopicListPage {
                 this.resetFabToCreateMode();
               }
               if (offset > 0.01) {
-                this.hideFloatingTabBar();
+                this.scheduleFloatingTabBarHide();
               } else if (offset < -0.01) {
                 this.showFloatingTabBarImmediate();
               }
@@ -2573,6 +2607,7 @@ export struct TopicListPage {
               return { offsetRemain: remain };
             })
             .onScrollStop(() => {
+              this.clearFloatingTabBarHideTimer();
               this.scheduleFloatingTabBarShow();
               if (this.canTriggerRefreshFromScroll() && !this.isListTouchActive) {
                 this.schedulePullRefreshArm();

@@ -1,5 +1,6 @@
 import { webview } from '@kit.ArkWeb';
 import { hilog } from '@kit.PerformanceAnalysisKit';
+import { ArkWebHelper } from '../../common/utils/ArkWebHelper';
 import { CfClearanceRefreshService } from '../../services/network/CfClearanceRefreshService';
 
 const TAG: string = 'CfRefreshHost';
@@ -17,6 +18,7 @@ export struct CfRefreshHost {
   private controller: webview.WebviewController = new webview.WebviewController('cf_refresh_host');
 
   aboutToAppear(): void {
+    ArkWebHelper.configureLinuxDoHostsUserAgent();
     hilog.info(0x0000, TAG, 'Bind controller, initial src=%{public}s', INITIAL_SRC);
     CfClearanceRefreshService.getInstance().bindController(this.controller);
   }

@@ -97,8 +97,36 @@
       "value": "#334DB8FF"
     },
     {
+      "name": "detail_action_bar_background",
+      "value": "#8A24262B"
+    },
+    {
+      "name": "detail_action_button_background",
+      "value": "#12FFFFFF"
+    },
+    {
+      "name": "detail_action_button_selected_background",
+      "value": "#264DB8FF"
+    },
+    {
+      "name": "detail_action_icon",
+      "value": "#DDE6E6E6"
+    },
+    {
+      "name": "detail_action_selected_icon",
+      "value": "#4DB8FF"
+    },
+    {
+      "name": "detail_action_bar_stroke",
+      "value": "#33FFFFFF"
+    },
+    {
+      "name": "detail_action_bar_shadow",
+      "value": "#66000000"
+    },
+    {
       "name": "tab_glass_mask",
-      "value": "#CC1E1E1E"
+      "value": "#331E1E1E"
     },
     {
       "name": "tab_glass_tint",

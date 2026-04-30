@@ -156,9 +156,9 @@ export class RouterManager {
   /**
    * 返回上一页
    */
-  static pop(): void {
+  static pop(animated: boolean = true): void {
     if (RouterManager.pathStack !== null) {
-      RouterManager.pathStack.pop();
+      RouterManager.pathStack.pop(animated);
     }
   }
 

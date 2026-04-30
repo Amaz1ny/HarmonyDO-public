@@ -46,6 +46,7 @@ export class CfChallengeService {
   private initialCfClearanceSnapshot: string | null = null;
   private backupCfClearance: CookieRecord | null = null;
   private clearanceConfirmed: boolean = false;
+  private overlayVisibilityListener: ((visible: boolean) => void) | null = null;
 
   private constructor() {
   }
@@ -104,6 +105,10 @@ export class CfChallengeService {
     return this.initialCfClearanceSnapshot;
   }
 
+  setOverlayVisibilityListener(listener: ((visible: boolean) => void) | null): void {
+    this.overlayVisibilityListener = listener;
+  }
+
   async waitForCfClearanceReady(): Promise<boolean> {
     if (CfChallengeService.activeClearanceConfirmPromise !== null) {
       return await CfChallengeService.activeClearanceConfirmPromise;
@@ -134,6 +139,15 @@ export class CfChallengeService {
     try {
       await CookieStore.getInstance().init();
     } catch (_) {
+    }
+
+    CookieStore.getInstance().syncFromWebView();
+    const immediateCf: string | null = CookieStore.getInstance().getCookieValue('cf_clearance');
+    if (immediateCf !== null && immediateCf.length > 0) {
+      this.clearanceConfirmed = true;
+      this.backupCfClearance = null;
+      hilog.info(0x0000, TAG, 'Confirm cf_clearance immediate ok=Y len=%{public}d', immediateCf.length);
+      return true;
     }
 
     await this.sleep(CLEARANCE_CONFIRM_DELAY_MS);
@@ -250,14 +264,19 @@ export class CfChallengeService {
     } catch (_) {
     }
 
-    const stack: NavPathStack | null = RouterManager.getPathStack();
-    if (stack === null) {
-      hilog.error(0x0000, TAG, 'No NavPathStack, cannot show challenge page');
-      this.complete(false);
-      return this.activePromise;
-    }
+    if (this.overlayVisibilityListener !== null) {
+      hilog.info(0x0000, TAG, 'Show challenge overlay');
+      this.overlayVisibilityListener(true);
+    } else {
+      const stack: NavPathStack | null = RouterManager.getPathStack();
+      if (stack === null) {
+        hilog.error(0x0000, TAG, 'No NavPathStack/overlay listener, cannot show challenge page');
+        this.complete(false);
+        return this.activePromise;
+      }
 
-    RouterManager.pushPath(RouteConstants.PAGE_CF_CHALLENGE);
+      RouterManager.pushPath(RouteConstants.PAGE_CF_CHALLENGE);
+    }
     return this.activePromise;
   }
 
@@ -267,6 +286,10 @@ export class CfChallengeService {
   complete(success: boolean): void {
     if (this.completed) return;
     this.completed = true;
+
+    if (this.overlayVisibilityListener !== null) {
+      this.overlayVisibilityListener(false);
+    }
 
     if (success) {
       this.resetCooldown();

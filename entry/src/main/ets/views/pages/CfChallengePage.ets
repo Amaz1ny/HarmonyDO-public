@@ -38,10 +38,13 @@ interface ChallengePageSnapshot {
 const NO_CHALLENGE_PRIMARY_DELAY_MS: number = 1500;
 const NO_CHALLENGE_RETRY_DELAY_MS: number = 3500;
 const NO_CHALLENGE_MAX_RETRY_COUNT: number = 2;
+const BASE_URL_FALLBACK_MAX_RETRY_COUNT: number = 8;
 const VERIFY_TIMEOUT_MS: number = 60000;
+const CLEARANCE_POLL_INTERVAL_MS: number = 200;
 
 @ComponentV2
 export struct CfChallengePage {
+  @Param overlayMode: boolean = false;
   @Local isLoading: boolean = true;
   @Local progress: number = 0;
   @Local errorMessage: string = '';
@@ -60,8 +63,8 @@ export struct CfChallengePage {
   private challengePlatformResponseSeen: boolean = false;
   private initialCfClearanceSnapshot: string = '';
   private checkingClearance: boolean = false;
-  private confirmRetryCount: number = 0;
   private noChallengeRetryCount: number = 0;
+  private baseUrlFallbackRetryCount: number = 0;
   private fallbackToBaseUrlUsed: boolean = false;
 
   aboutToAppear(): void {
@@ -124,8 +127,48 @@ export struct CfChallengePage {
     this.rcInterceptTriggered = false;
     this.challengePlatformResponseSeen = false;
     this.noChallengeRetryCount = 0;
+    this.baseUrlFallbackRetryCount = 0;
     this.fallbackToBaseUrlUsed = false;
-    this.confirmRetryCount = 0;
+  }
+
+  private loadVerifyUrl(url: string, reason: string): void {
+    const nextUrl: string = url.trim();
+    if (nextUrl.length === 0) return;
+
+    this.stopNoChallengeCheck();
+    this.verifyUrl = nextUrl;
+    this.isLoading = true;
+    this.progress = 0;
+    this.errorMessage = '';
+
+    hilog.info(
+      0x0000,
+      TAG,
+      'Load verify url by controller.loadUrl reason=%{public}s url=%{public}s',
+      reason,
+      nextUrl
+    );
+    try {
+      this.controller.loadUrl(nextUrl);
+    } catch (err) {
+      hilog.error(0x0000, TAG, 'controller.loadUrl failed: %{public}s', JSON.stringify(err));
+    }
+  }
+
+  private fallbackToBaseUrl(fromUrl: string, reason: string): void {
+    if (this.fallbackToBaseUrlUsed) return;
+    this.fallbackToBaseUrlUsed = true;
+    this.noChallengeRetryCount = 0;
+    this.baseUrlFallbackRetryCount = 0;
+    hilog.warn(
+      0x0000,
+      TAG,
+      'Verify placeholder page fallback to base url reason=%{public}s from=%{public}s to=%{public}s',
+      reason,
+      fromUrl.length > 0 ? fromUrl : '-',
+      AppConstants.BASE_URL
+    );
+    this.loadVerifyUrl(AppConstants.BASE_URL, reason);
   }
 
   private logEnterReason(): void {
@@ -166,8 +209,20 @@ export struct CfChallengePage {
   }
 
   private snapshotInitialClearanceFromWebCookie(): void {
-    // 验证页加载时抓取 WebView 中的 cf_clearance 快照，用于过滤“旧值残留”
+    // 验证页加载时抓取 cf_clearance 快照，用于过滤“旧值残留”
     this.initialCfClearanceSnapshot = '';
+    const serviceSnapshot: string | null = CfChallengeService.getInstance().getInitialCfClearanceSnapshot();
+    if (serviceSnapshot !== null && serviceSnapshot.length > 0) {
+      this.initialCfClearanceSnapshot = serviceSnapshot;
+      hilog.warn(
+        0x0000,
+        TAG,
+        'Initial CookieStore cf_clearance snapshot exists, len=%{public}d (will ignore same value)',
+        serviceSnapshot.length
+      );
+      return;
+    }
+
     try {
       const raw: string = webview.WebCookieManager.fetchCookieSync(AppConstants.BASE_URL, false);
       if (raw.length === 0) return;
@@ -184,7 +239,7 @@ export struct CfChallengePage {
     if (this.pollTimerId >= 0) return;
     this.pollTimerId = setInterval(() => {
       this.checkClearanceCookie();
-    }, 500);
+    }, CLEARANCE_POLL_INTERVAL_MS);
   }
 
   private stopPolling(): void {
@@ -266,36 +321,6 @@ export struct CfChallengePage {
   private async confirmVerificationReady(cf: string): Promise<void> {
     if (this.finished) return;
 
-    const snapshot: ChallengePageSnapshot = await this.readChallengePageSnapshot();
-    if (snapshot.hasActiveChallenge) {
-      // 如果 challenge-platform 响应已收到（RC 验证已完成），给予有限次宽限后强制成功
-      // 因为验证后页面 DOM 可能仍残留 challenge 相关信号（如 cf_chl_opt）
-      if (this.challengePlatformResponseSeen) {
-        this.confirmRetryCount += 1;
-        if (this.confirmRetryCount >= 6) {
-          hilog.info(
-            0x0000,
-            TAG,
-            'Challenge signals still visible after %{public}d checks but RC completed, force success signals=%{public}s',
-            this.confirmRetryCount,
-            snapshot.activeSignals.length > 0 ? snapshot.activeSignals : '-'
-          );
-          this.onSuccess();
-          return;
-        }
-      }
-      hilog.info(
-        0x0000,
-        TAG,
-        'New cf_clearance detected but challenge page still visible, continue waiting signals=%{public}s title=%{public}s url=%{public}s retryCount=%{public}d',
-        snapshot.activeSignals.length > 0 ? snapshot.activeSignals : '-',
-        snapshot.title,
-        snapshot.href,
-        this.confirmRetryCount
-      );
-      return;
-    }
-
     const store: CookieStore = CookieStore.getInstance();
     const syncedHeader: string = store.syncFromWebView();
     const confirmed: string | null = store.getCookieValue('cf_clearance');
@@ -312,9 +337,10 @@ export struct CfChallengePage {
     hilog.info(
       0x0000,
       TAG,
-      'cf_clearance verified ready, rawLen=%{public}d confirmedLen=%{public}d',
+      'cf_clearance verified ready, fast exit rawLen=%{public}d confirmedLen=%{public}d cookieHeaderLen=%{public}d',
       cf.length,
-      confirmed.length
+      confirmed.length,
+      syncedHeader.length
     );
     this.onSuccess();
   }
@@ -375,21 +401,31 @@ export struct CfChallengePage {
       && !this.challengePlatformResponseSeen
       && !this.fallbackToBaseUrlUsed
       && this.isChallengePlaceholderUrl(snapshot.href)) {
-      this.fallbackToBaseUrlUsed = true;
-      this.noChallengeRetryCount = 0;
-      this.isLoading = true;
-      this.progress = 0;
-      this.errorMessage = '';
-      this.verifyUrl = AppConstants.BASE_URL;
+      this.fallbackToBaseUrl(snapshot.href, 'challenge_not_found_fallback');
+      return;
+    }
+
+    const shouldObserveBaseUrlFallback: boolean = this.fallbackToBaseUrlUsed
+      && !notFoundHint
+      && !this.rcInterceptTriggered
+      && !this.challengePlatformResponseSeen
+      && this.baseUrlFallbackRetryCount < BASE_URL_FALLBACK_MAX_RETRY_COUNT;
+    if (shouldObserveBaseUrlFallback) {
+      this.baseUrlFallbackRetryCount += 1;
       hilog.warn(
         0x0000,
         TAG,
-        'Verify placeholder page resolved to notFound without CF signals, fallback to base url from=%{public}s to=%{public}s',
-        snapshot.href,
-        this.verifyUrl
+        'Base url fallback still waiting for delayed Turnstile/cf_clearance retry=%{public}d/%{public}d cookieHeaderLen=%{public}d title=%{public}s url=%{public}s',
+        this.baseUrlFallbackRetryCount,
+        BASE_URL_FALLBACK_MAX_RETRY_COUNT,
+        syncedHeader.length,
+        snapshot.title,
+        snapshot.href
       );
+      this.scheduleNoChallengeCheck(NO_CHALLENGE_RETRY_DELAY_MS);
       return;
     }
+
     const shouldRetryWait: boolean = (notFoundHint || this.rcInterceptTriggered || this.challengePlatformResponseSeen)
       && this.noChallengeRetryCount < NO_CHALLENGE_MAX_RETRY_COUNT;
     if (shouldRetryWait) {
@@ -414,14 +450,15 @@ export struct CfChallengePage {
     hilog.warn(
       0x0000,
       TAG,
-      'No active challenge and no new cf_clearance after delay, auto exit cookieHeaderLen=%{public}d title=%{public}s url=%{public}s notFound=%{public}s rcIntercept=%{public}s challengeResponse=%{public}s retry=%{public}d',
+      'No active challenge and no new cf_clearance after delay, auto exit cookieHeaderLen=%{public}d title=%{public}s url=%{public}s notFound=%{public}s rcIntercept=%{public}s challengeResponse=%{public}s retry=%{public}d baseRetry=%{public}d',
       syncedHeader.length,
       snapshot.title,
       snapshot.href,
       notFoundHint ? 'Y' : 'N',
       this.rcInterceptTriggered ? 'Y' : 'N',
       this.challengePlatformResponseSeen ? 'Y' : 'N',
-      this.noChallengeRetryCount
+      this.noChallengeRetryCount,
+      this.baseUrlFallbackRetryCount
     );
     this.onNoChallengeFailure();
   }
@@ -461,7 +498,21 @@ export struct CfChallengePage {
           || lowerText.indexOf('checking your browser before accessing') >= 0;
         var hasChallengeHtml = lowerHtml.indexOf('challenge-running') >= 0
           || lowerHtml.indexOf('challenge-stage') >= 0
-          || lowerHtml.indexOf('cf_chl_opt') >= 0;
+          || lowerHtml.indexOf('cf_chl_opt') >= 0
+          || lowerHtml.indexOf('cf-turnstile') >= 0;
+        var hasChallengeIframe = false;
+        try {
+          var frames = document && document.querySelectorAll ? document.querySelectorAll('iframe') : [];
+          for (var i = 0; i < frames.length; i++) {
+            var src = frames[i] && frames[i].getAttribute ? String(frames[i].getAttribute('src') || '').toLowerCase() : '';
+            if (src.indexOf('challenges.cloudflare.com') >= 0
+              || src.indexOf('/cdn-cgi/challenge-platform/') >= 0
+              || src.indexOf('turnstile') >= 0) {
+              hasChallengeIframe = true;
+              break;
+            }
+          }
+        } catch (e2) {}
         var signals = [];
         if (hasChallengeTitle) {
           signals.push('title');
@@ -472,7 +523,10 @@ export struct CfChallengePage {
         if (hasChallengeHtml) {
           signals.push('html');
         }
-        var hasActive = !hasNotFoundHint && (hasChallengeTitle || hasChallengeText || hasChallengeHtml);
+        if (hasChallengeIframe) {
+          signals.push('iframe');
+        }
+        var hasActive = !hasNotFoundHint && (hasChallengeTitle || hasChallengeText || hasChallengeHtml || hasChallengeIframe);
         return JSON.stringify({
           href: href,
           title: title,
@@ -962,6 +1016,12 @@ export struct CfChallengePage {
     if (!isMainFrame) {
       return;
     }
+    if (code === 404
+      && !this.fallbackToBaseUrlUsed
+      && this.isChallengePlaceholderUrl(requestUrl)) {
+      this.fallbackToBaseUrl(requestUrl, 'challenge_http_404_fallback');
+      return;
+    }
     this.isLoading = false;
     this.errorMessage = message.length > 0 ? message : '加载失败';
   }
@@ -983,12 +1043,14 @@ export struct CfChallengePage {
       this.noChallengeRetryCount,
       cfLen
     );
-    // 先 pop 触发页面返回动画，再延迟一帧 resolve Promise
-    // 避免 complete(true) 立即唤醒 HttpClient 重试，与 pop 动画竞争再次 push CF 页面
-    RouterManager.pop();
-    setTimeout(() => {
+    if (this.overlayMode) {
       CfChallengeService.getInstance().complete(true);
-    }, 16);
+    } else {
+      RouterManager.pop(false);
+      setTimeout(() => {
+        CfChallengeService.getInstance().complete(true);
+      }, 16);
+    }
   }
 
   private onNoChallengeFailure(): void {
@@ -1005,10 +1067,14 @@ export struct CfChallengePage {
       this.challengePlatformResponseSeen ? 'Y' : 'N',
       this.noChallengeRetryCount
     );
-    RouterManager.pop();
-    setTimeout(() => {
+    if (this.overlayMode) {
       CfChallengeService.getInstance().complete(false);
-    }, 16);
+    } else {
+      RouterManager.pop();
+      setTimeout(() => {
+        CfChallengeService.getInstance().complete(false);
+      }, 16);
+    }
   }
 
   private onCancel(): void {
@@ -1025,8 +1091,12 @@ export struct CfChallengePage {
       this.challengePlatformResponseSeen ? 'Y' : 'N',
       this.noChallengeRetryCount
     );
-    CfChallengeService.getInstance().complete(false);
-    RouterManager.pop();
+    if (this.overlayMode) {
+      CfChallengeService.getInstance().complete(false);
+    } else {
+      CfChallengeService.getInstance().complete(false);
+      RouterManager.pop();
+    }
   }
 
   private onRetry(): void {
@@ -1082,8 +1152,8 @@ export struct CfChallengePage {
     .alignItems(VerticalAlign.Center)
   }
 
-  build() {
-    HdsNavDestination() {
+  @Builder
+  PageContent() {
       Column() {
         this.TopBar()
 
@@ -1202,10 +1272,20 @@ export struct CfChallengePage {
       }
       .width('100%')
       .height('100%')
+      .backgroundColor($r('app.color.background'))
+  }
+
+  build() {
+    if (this.overlayMode) {
+      this.PageContent()
+    } else {
+      HdsNavDestination() {
+        this.PageContent()
+      }
+      .hideTitleBar(true)
+      .hideToolBar(true)
+      .backgroundColor($r('app.color.background'))
     }
-    .hideTitleBar(true)
-    .hideToolBar(true)
-    .backgroundColor($r('app.color.background'))
   }
 }
 

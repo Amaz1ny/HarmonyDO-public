@@ -32,6 +32,7 @@ import { TopicTrackingService } from '../services/messagebus/TopicTrackingServic
 import { PreloadedDataService } from '../services/messagebus/PreloadedDataService';
 import { NotificationTrackingService } from '../services/messagebus/NotificationTrackingService';
 import { AuthService } from '../services/auth/AuthService';
+import { CfChallengeService } from '../services/network/CfChallengeService';
 import {
   RouterManager,
   RouteConstants,
@@ -42,25 +43,31 @@ import {
   FollowListRouteParam,
   WebViewRouteParam
 } from '../common/utils/RouterManager';
-import { HdsNavigation, HdsTabs } from '@kit.UIDesignKit';
+import {
+  HdsAnimationMode,
+  HdsNavigation,
+  HdsTabs,
+  HdsTabsController,
+  HdsTabsFloatingStyle,
+  hdsMaterial
+} from '@kit.UIDesignKit';
 import { WindowManager } from '../common/utils/WindowManager';
 import {
   FLOATING_TAB_BAR_HEIGHT_VP,
-  FLOATING_TAB_BAR_RADIUS_VP,
   FLOATING_TAB_BAR_MARGIN_H_VP,
-  FLOATING_TAB_BAR_MARGIN_BOTTOM_VP
+  FLOATING_TAB_BAR_MARGIN_BOTTOM_VP,
+  FLOATING_TAB_BAR_OFFSET_UP_VP,
+  FLOATING_TAB_BAR_OPACITY,
+  FLOATING_TAB_BAR_WIDTH_LARGE_VP,
+  FLOATING_TAB_BAR_WIDTH_MEDIUM_VP,
+  FLOATING_TAB_BAR_WIDTH_SMALL_VP
 } from '../common/constants/LayoutConstants';
 import { SmartAvatar } from '../views/components/SmartAvatar';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { AppLogService } from '../common/utils/AppLogService';
 
 const TAG: string = 'Index';
-const FLOATING_TAB_BAR_ANIM_DURATION: number = 180;
 const FLOATING_TAB_SWITCH_ANIM_DURATION: number = 260;
-const FLOATING_TAB_ITEM_ANIM_DURATION: number = 220;
-const FLOATING_TAB_INDICATOR_WIDTH_VP: number = 66;
-const FLOATING_TAB_INDICATOR_HEIGHT_VP: number = 46;
-const FLOATING_TAB_ICON_BOX_HEIGHT_VP: number = 28;
 
 /**
  * 应用主页面 -
@@ -79,8 +86,9 @@ struct Index {
   @Local pathStack: NavPathStack = new NavPathStack();
   @Local currentTabUser: User | null = null;
   @Local currentTabUsername: string = '';
-  @Local floatingTabBarContentWidth: number = 0;
+  @Local showCfChallengeOverlay: boolean = false;
 
+  private tabsController: HdsTabsController = new HdsTabsController();
   private authStateListener: (() => void) | null = null;
   private backgroundSessionSyncId: number = 0;
   private backgroundSessionBootstrapped: boolean = false;
@@ -88,6 +96,9 @@ struct Index {
 
   aboutToAppear(): void {
     RouterManager.init(this.pathStack);
+    CfChallengeService.getInstance().setOverlayVisibilityListener((visible: boolean) => {
+      this.showCfChallengeOverlay = visible;
+    });
     this.attachAuthStateListener();
     this.syncProfileTabUser().catch(() => {
     });
@@ -95,6 +106,7 @@ struct Index {
   }
 
   aboutToDisappear(): void {
+    CfChallengeService.getInstance().setOverlayVisibilityListener(null);
     this.detachAuthStateListener();
   }
 
@@ -106,55 +118,36 @@ struct Index {
     return WindowManager.getSystemAvoidAreaBottomVp();
   }
 
-  private getFloatingTabBarHideTranslate(): number {
-    return FLOATING_TAB_BAR_HEIGHT_VP + this.getBottomSafeHeight() + FLOATING_TAB_BAR_MARGIN_BOTTOM_VP + 24;
+  private getHdsFloatingTabBarBottomMargin(): number {
+    return this.getBottomSafeHeight() + FLOATING_TAB_BAR_MARGIN_BOTTOM_VP + FLOATING_TAB_BAR_OFFSET_UP_VP;
   }
 
-  private updateFloatingTabBarContentWidth(widthValue: number | string | Resource): void {
-    const rawWidth: number = (widthValue !== undefined && widthValue !== null && typeof widthValue === 'number')
-      ? (widthValue as number)
-      : 0;
-    if (rawWidth <= 0) {
-      return;
-    }
-
-    let resolvedWidthVp: number = rawWidth;
-    const uiContext = this.getUIContext();
-    if (uiContext !== undefined && uiContext !== null) {
-      try {
-        const convertedVp: number = uiContext.px2vp(rawWidth);
-        if (convertedVp > 0) {
-          resolvedWidthVp = convertedVp;
-
-          // onAreaChange 在这里更像是直接给了 vp；若再 px2vp 一次会让位移明显偏小。
-          if (convertedVp < 140 && rawWidth > 220) {
-            resolvedWidthVp = rawWidth;
-          }
-        }
-      } catch (_) {
-      }
-    }
-
-    if (Math.abs(resolvedWidthVp - this.floatingTabBarContentWidth) <= 0.5) {
-      return;
-    }
-    this.floatingTabBarContentWidth = resolvedWidthVp;
+  private getHdsFloatingTabBarGradientMaskHeight(): number {
+    return FLOATING_TAB_BAR_HEIGHT_VP + this.getHdsFloatingTabBarBottomMargin() + 16;
   }
 
-  private getFloatingTabIndicatorOffsetX(): number {
-    if (this.floatingTabBarContentWidth <= 0) {
-      return 0;
-    }
-    return this.floatingTabBarContentWidth / 4;
-  }
-
-  private getFloatingTabIndicatorTranslateX(): number {
-    const offsetX: number = this.getFloatingTabIndicatorOffsetX();
-    return this.currentIndex === 0 ? -offsetX : offsetX;
-  }
-
-  private isFloatingTabSelected(index: number): boolean {
-    return this.currentIndex === index;
+  private getHdsTabsFloatingStyle(): HdsTabsFloatingStyle {
+    return {
+      // API 23 官方能力：HdsTabsFloatingStyle.barWidth 支持按 HdsTabs 宽度分档设置悬浮页签栏宽度。
+      // 这里使用固定 vp 分档，不再使用百分比，规避真机上百分比宽度导致胶囊贴右/越界的问题。
+      barWidth: {
+        smallWidth: FLOATING_TAB_BAR_WIDTH_SMALL_VP,
+        mediumWidth: FLOATING_TAB_BAR_WIDTH_MEDIUM_VP,
+        largeWidth: FLOATING_TAB_BAR_WIDTH_LARGE_VP
+      },
+      barSideMargin: FLOATING_TAB_BAR_MARGIN_H_VP,
+      barBottomMargin: this.getHdsFloatingTabBarBottomMargin(),
+      gradientMask: {
+        maskColor: $r('app.color.tab_glass_mask'),
+        maskHeight: this.getHdsFloatingTabBarGradientMaskHeight()
+      },
+      systemMaterialEffect: {
+        materialType: hdsMaterial.MaterialType.ADAPTIVE,
+        materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
+      },
+      thermoCtrl: true,
+      barOpacity: FLOATING_TAB_BAR_OPACITY
+    };
   }
 
   private switchMainTab(index: number): void {
@@ -164,10 +157,10 @@ struct Index {
     const uiContext = this.getUIContext();
     if (uiContext !== undefined && uiContext !== null) {
       uiContext.animateTo({ duration: FLOATING_TAB_SWITCH_ANIM_DURATION, curve: Curve.EaseInOut }, () => {
-        this.currentIndex = index;
+        this.setMainTabIndex(index, HdsAnimationMode.CLICK_ANIMATION);
       });
     } else {
-      this.currentIndex = index;
+      this.setMainTabIndex(index, HdsAnimationMode.CLICK_ANIMATION);
     }
   }
 
@@ -176,13 +169,33 @@ struct Index {
     if (Math.abs(v - this.tabBarVisibility) <= 0.001) {
       return;
     }
-    const uiContext = this.getUIContext();
-    if (uiContext !== undefined && uiContext !== null) {
-      uiContext.animateTo({ duration: FLOATING_TAB_BAR_ANIM_DURATION, curve: Curve.EaseOut }, () => {
-        this.tabBarVisibility = v;
-      });
-    } else {
-      this.tabBarVisibility = v;
+    const wasVisible: boolean = this.getEffectiveTabBarVisibility() > 0.05;
+    this.tabBarVisibility = v;
+    const shouldVisible: boolean = this.getEffectiveTabBarVisibility() > 0.05;
+    if (wasVisible !== shouldVisible) {
+      this.applyNativeTabBarVisibility(shouldVisible, HdsAnimationMode.SCROLL_ANIMATION);
+    }
+  }
+
+  private setMainTabIndex(index: number, mode: HdsAnimationMode): void {
+    this.currentIndex = index;
+    this.applyNativeTabBarVisibilityForIndex(index, mode);
+  }
+
+  private applyNativeTabBarVisibilityForIndex(index: number, mode: HdsAnimationMode): void {
+    const shouldVisible: boolean = index === 0 ? this.tabBarVisibility > 0.05 : true;
+    this.applyNativeTabBarVisibility(shouldVisible, mode);
+  }
+
+  private applyNativeTabBarVisibility(visible: boolean, mode: HdsAnimationMode): void {
+    try {
+      if (visible) {
+        this.tabsController.applyShowAnimation(mode);
+      } else {
+        this.tabsController.applyHideAnimation(mode);
+      }
+    } catch (err) {
+      hilog.warn(0x0000, TAG, 'Apply HdsTabs floating animation failed. Cause: %{public}s', JSON.stringify(err));
     }
   }
 
@@ -426,47 +439,60 @@ struct Index {
   }
 
   build() {
-    HdsNavigation(this.pathStack) {
-      Stack({ alignContent: Alignment.Bottom }) {
-        // Cloudflare: cf_clearance 自动续期宿主（隐藏 Web）
-        CfRefreshHost()
+    Stack() {
+      HdsNavigation(this.pathStack) {
+        Stack({ alignContent: Alignment.Bottom }) {
+          // Cloudflare: cf_clearance 自动续期宿主（隐藏 Web）
+          CfRefreshHost()
 
-        HdsTabs({ barPosition: BarPosition.End, index: this.currentIndex }) {
-          // Tab 1: 首页
-          TabContent() {
-            TopicListPage({
-              onTopicClick: (topic: Topic) => {
-                this.pathStack.pushPath({ name: RouteConstants.PAGE_TOPIC_DETAIL, param: topic.id });
-              },
-              onBarVisibilityChange: (v: number) => {
-                this.updateTabBarVisibility(v);
-              }
-            })
-          }
-          .tabBar(this.TabBarItem(0, '首页', $r('sys.symbol.house'), $r('sys.symbol.house_fill')))
+          HdsTabs({ controller: this.tabsController, index: this.currentIndex }) {
+            // Tab 1: 首页
+            TabContent() {
+              TopicListPage({
+                onTopicClick: (topic: Topic) => {
+                  this.pathStack.pushPath({ name: RouteConstants.PAGE_TOPIC_DETAIL, param: topic.id });
+                },
+                onBarVisibilityChange: (v: number) => {
+                  this.updateTabBarVisibility(v);
+                }
+              })
+            }
+            .tabBar(this.TabBarItem(0, '首页', $r('sys.symbol.house'), $r('sys.symbol.house_fill')))
 
-          // Tab 2: 我的
-          TabContent() {
-            ProfilePage()
+            // Tab 2: 我的
+            TabContent() {
+              ProfilePage()
+            }
+            .tabBar(this.TabBarItem(1, '我的', $r('sys.symbol.person'), $r('sys.symbol.person_fill')))
           }
-          .tabBar(this.TabBarItem(1, '我的', $r('sys.symbol.person'), $r('sys.symbol.person_fill')))
+          // API 23：使用 HDS 原生悬浮页签与沉浸光感材质，不再手写外层玻璃胶囊容器
+          .barOverlap(true)
+          .vertical(false)
+          .barPosition(BarPosition.End)
+          .barFloatingStyle(this.getHdsTabsFloatingStyle())
+          .onChange((index: number) => {
+            this.setMainTabIndex(index, HdsAnimationMode.CLICK_ANIMATION);
+          })
+          .scrollable(false)
+
+          ReadLaterBubble()
         }
-        // 使用自定义“悬浮胶囊”TabBar：隐藏 HdsTabs 默认 TabBar（只保留内容切换能力）
-        .barHeight(0)
-        .onChange((index: number) => {
-          this.currentIndex = index;
-        })
-        .scrollable(false)
-
-        this.FloatingTabBar()
-        ReadLaterBubble()
+        .width('100%')
+        .height('100%')
       }
+      .navDestination(this.routeMap)
+      .hideTitleBar(true)
+      .hideToolBar(true)
       .width('100%')
       .height('100%')
+
+      if (this.showCfChallengeOverlay) {
+        CfChallengePage({ overlayMode: true })
+          .width('100%')
+          .height('100%')
+          .zIndex(1000)
+      }
     }
-    .navDestination(this.routeMap)
-    .hideTitleBar(true)
-    .hideToolBar(true)
     .width('100%')
     .height('100%')
   }
@@ -518,113 +544,7 @@ struct Index {
         .margin({ top: 2 })
     }
     .width('100%')
-    .height(56 + this.getBottomSafeHeight())
-    .padding({ bottom: this.getBottomSafeHeight() })
-    .justifyContent(FlexAlign.Center)
-    .alignItems(HorizontalAlign.Center)
-    .opacity(this.getEffectiveTabBarVisibility())
-  }
-
-  @Builder
-  FloatingTabBar() {
-    Row() {
-      Stack({ alignContent: Alignment.Center }) {
-        Stack()
-          .width('100%')
-          .height('100%')
-          .backgroundEffect(
-            {
-              radius: 64,
-              saturation: 2.2,
-              brightness: 1.08,
-              color: $r('app.color.tab_glass_tint'),
-              adaptiveColor: AdaptiveColor.DEFAULT,
-              policy: BlurStyleActivePolicy.ALWAYS_ACTIVE,
-              inactiveColor: $r('app.color.tab_glass_tint')
-            },
-            { disableSystemAdaptation: true }
-          )
-
-        Stack()
-          .width(FLOATING_TAB_INDICATOR_WIDTH_VP)
-          .height(FLOATING_TAB_INDICATOR_HEIGHT_VP)
-          .borderRadius(FLOATING_TAB_INDICATOR_HEIGHT_VP / 2)
-          .backgroundColor($r('app.color.tab_selected_pill'))
-          .border({ width: 0.5, color: $r('app.color.tab_glass_stroke') })
-          .shadow({ radius: 10, color: '#14000000', offsetX: 0, offsetY: 4 })
-          .opacity(this.floatingTabBarContentWidth > 0 ? 1 : 0)
-          .translate({ x: this.getFloatingTabIndicatorTranslateX(), y: 0 })
-          .animation({ duration: FLOATING_TAB_SWITCH_ANIM_DURATION, curve: Curve.EaseInOut })
-
-        Row() {
-          this.FloatingTabItem(0, '首页', $r('sys.symbol.house'), $r('sys.symbol.house_fill'))
-          this.FloatingTabItem(1, '我的', $r('sys.symbol.person'), $r('sys.symbol.person_fill'))
-        }
-        .width('100%')
-        .height('100%')
-      }
-      .width('100%')
-      .height(FLOATING_TAB_BAR_HEIGHT_VP)
-      .onAreaChange((_: Area, newArea: Area) => {
-        this.updateFloatingTabBarContentWidth(newArea.width);
-      })
-      .border({ width: 0.5, color: $r('app.color.tab_glass_stroke') })
-      .borderRadius(FLOATING_TAB_BAR_RADIUS_VP)
-      .clip(true)
-      .shadow({ radius: 18, color: $r('app.color.tab_glass_shadow'), offsetX: 0, offsetY: 10 })
-    }
-    .width('100%')
-    .padding({ left: FLOATING_TAB_BAR_MARGIN_H_VP, right: FLOATING_TAB_BAR_MARGIN_H_VP })
-    .margin({ bottom: this.getBottomSafeHeight() + FLOATING_TAB_BAR_MARGIN_BOTTOM_VP })
-    .opacity(this.getEffectiveTabBarVisibility())
-    .translate({ x: 0, y: (1 - this.getEffectiveTabBarVisibility()) * this.getFloatingTabBarHideTranslate() })
-    .enabled(this.getEffectiveTabBarVisibility() > 0.05)
-    .animation({ duration: FLOATING_TAB_BAR_ANIM_DURATION, curve: Curve.EaseOut })
-  }
-
-  @Builder
-  FloatingTabItem(index: number, label: string, icon: Resource, selectedIcon: Resource) {
-    Column() {
-      Column() {
-        if (index === 1 && this.shouldShowProfileTabAvatar()) {
-          SmartAvatar({
-            avatarUrl: this.getProfileTabAvatarUrl(),
-            avatarSize: 24,
-            avatarRadius: 12,
-            fallbackText: this.getProfileTabFallbackText(),
-            bgColor: '#E8EAF0'
-          })
-            .scale({ x: this.isFloatingTabSelected(index) ? 1 : 0.92, y: this.isFloatingTabSelected(index) ? 1 : 0.92 })
-            .opacity(this.isFloatingTabSelected(index) ? 1 : 0.86)
-            .animation({ duration: FLOATING_TAB_ITEM_ANIM_DURATION, curve: Curve.EaseOut })
-        } else {
-          SymbolGlyph(this.isFloatingTabSelected(index) ? selectedIcon : icon)
-            .fontSize(22)
-            .fontColor([this.isFloatingTabSelected(index) ? $r('app.color.primary') : $r('app.color.on_surface_secondary')])
-            .scale({ x: this.isFloatingTabSelected(index) ? 1 : 0.88, y: this.isFloatingTabSelected(index) ? 1 : 0.88 })
-            .opacity(this.isFloatingTabSelected(index) ? 1 : 0.74)
-            .animation({ duration: FLOATING_TAB_ITEM_ANIM_DURATION, curve: Curve.EaseOut })
-        }
-      }
-      .width(FLOATING_TAB_INDICATOR_WIDTH_VP)
-      .height(FLOATING_TAB_ICON_BOX_HEIGHT_VP)
-      .justifyContent(FlexAlign.Center)
-      .alignItems(HorizontalAlign.Center)
-      .translate({ x: 0, y: this.isFloatingTabSelected(index) ? 0 : 1 })
-      .animation({ duration: FLOATING_TAB_ITEM_ANIM_DURATION, curve: Curve.EaseOut })
-
-      Text(label)
-        .fontSize(11)
-        .lineHeight(12)
-        .fontWeight(this.isFloatingTabSelected(index) ? FontWeight.Medium : FontWeight.Regular)
-        .fontColor(this.isFloatingTabSelected(index) ? $r('app.color.primary') : $r('app.color.on_surface_secondary'))
-        .opacity(this.isFloatingTabSelected(index) ? 1 : 0.8)
-        .translate({ x: 0, y: this.isFloatingTabSelected(index) ? 0 : 1 })
-        .margin({ top: 1 })
-        .animation({ duration: FLOATING_TAB_ITEM_ANIM_DURATION, curve: Curve.EaseOut })
-    }
-    .layoutWeight(1)
-    .height('100%')
+    .height(FLOATING_TAB_BAR_HEIGHT_VP)
     .justifyContent(FlexAlign.Center)
     .alignItems(HorizontalAlign.Center)
     .onClick(() => {

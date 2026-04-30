@@ -16,7 +16,8 @@ import { TimeUtils } from '../../common/utils/TimeUtils';
 import { UrlUtils } from '../../common/utils/UrlUtils';
 import { RouterManager } from '../../common/utils/RouterManager';
 import { TagBadge as TopicTagBadge } from '../components/TopicBadges';
-import { HdsNavDestination } from '@kit.UIDesignKit';
+import { ActionBarButton, ActionBarStyle, HdsActionBar, HdsNavDestination } from '@kit.UIDesignKit';
+import { ColorMetrics, LengthMetrics } from '@ohos.arkui.node';
 import { WindowManager } from '../../common/utils/WindowManager';
 import { SearchPost, SearchResult } from '../../models/SearchResult';
 import { ShareUtils } from '../../common/utils/ShareUtils';
@@ -46,9 +47,11 @@ import { HoldingHandService, HoldingHandState } from '../../services/device/Hold
 import { ScreenTrack, OnPostsRead } from '../../services/tracking/ScreenTrack';
 import {
   FLOATING_TAB_BAR_HEIGHT_VP,
-  FLOATING_TAB_BAR_RADIUS_VP,
-  FLOATING_TAB_BAR_MARGIN_H_VP,
   FLOATING_TAB_BAR_MARGIN_BOTTOM_VP,
+  FLOATING_TAB_BAR_OFFSET_UP_VP,
+  FLOATING_TAB_BAR_WIDTH_LARGE_VP,
+  FLOATING_TAB_BAR_WIDTH_MEDIUM_VP,
+  FLOATING_TAB_BAR_WIDTH_SMALL_VP,
   FLOATING_TAB_BAR_CONTENT_EXTRA_PADDING_VP
 } from '../../common/constants/LayoutConstants';
 
@@ -60,6 +63,7 @@ const BOTTOM_BAR_HIDE_DELTA: number = 50;
 const BOTTOM_BAR_ANIM_DURATION: number = 180;
 const BOTTOM_BAR_SHOW_DELAY_MS: number = 1200;
 const BOTTOM_BAR_HIDE_EXTRA_TRANSLATE: number = 24;
+const DETAIL_ACTION_BAR_OPACITY: number = 0.86;
 const PROGRESS_CAPSULE_HEIGHT: number = 32;
 const PROGRESS_BOTTOM_NO_BAR: number = 24;
 const PROGRESS_GAP_ABOVE_BAR: number = 16;
@@ -134,6 +138,9 @@ export struct TopicDetailPage {
   @Local timeTick: number = 0;
   @Local showBottomBar: boolean = true;
   @Local bottomBarVisibility: number = 1;
+  @Local detailActionBarExpanded: boolean = true;
+  @Local detailRootWidthVp: number = 0;
+  @Local detailRootHeightVp: number = 0;
   @Local isSummaryMode: boolean = false;
   @Local isAuthorOnlyMode: boolean = false;
   @Local isClosed: boolean = false;
@@ -212,6 +219,9 @@ export struct TopicDetailPage {
   @Local timelineInput: string = '';
   @Local timelineSelected: number = 1;
   @Local isTimelineEditMode: boolean = false;
+
+  // 详情页底部 HDS ActionBar 分享操作 Sheet
+  @Local isTopicShareActionSheetVisible: boolean = false;
 
   // 生成分享图片（Sheet）
   @Local isShareImageSheetVisible: boolean = false;
@@ -860,6 +870,8 @@ export struct TopicDetailPage {
     this.reactionPickerRootY = this.readAreaPositionValue(area, 'y');
     this.reactionPickerRootWidth = this.parseSafeNumber(area.width);
     this.reactionPickerRootHeight = this.parseSafeNumber(area.height);
+    this.detailRootWidthVp = this.reactionPickerRootWidth;
+    this.detailRootHeightVp = this.reactionPickerRootHeight;
     if (this.reactionPickerPostId > 0) {
       this.layoutReactionPicker(this.reactionPickerPostId);
     }
@@ -3880,25 +3892,218 @@ export struct TopicDetailPage {
     return WindowManager.getSystemAvoidAreaBottomVp();
   }
 
+  private getFloatingTabBarBottomOffsetVp(): number {
+    return this.getBottomSafeHeight() + FLOATING_TAB_BAR_MARGIN_BOTTOM_VP + FLOATING_TAB_BAR_OFFSET_UP_VP;
+  }
+
+  private getDetailBottomBarWidthVp(): number {
+    const rootWidth: number = this.detailRootWidthVp;
+    if (rootWidth <= 0 || rootWidth < 440) {
+      return FLOATING_TAB_BAR_WIDTH_SMALL_VP;
+    }
+    if (rootWidth < 600) {
+      return FLOATING_TAB_BAR_WIDTH_MEDIUM_VP;
+    }
+    if (rootWidth < 840) {
+      const rootHeight: number = this.detailRootHeightVp > 0 ? this.detailRootHeightVp : 0;
+      const aspectRatio: number = rootHeight > 0 ? rootHeight / rootWidth : 1;
+      return aspectRatio < 0.8 ? FLOATING_TAB_BAR_WIDTH_MEDIUM_VP : FLOATING_TAB_BAR_WIDTH_LARGE_VP;
+    }
+    return FLOATING_TAB_BAR_WIDTH_LARGE_VP;
+  }
+
+  private getDetailActionBarButtonSizeVp(): number {
+    return FLOATING_TAB_BAR_HEIGHT_VP - 12;
+  }
+
+  private getDetailActionBarButtonCount(): number {
+    return this.hasSummary ? 5 : 4;
+  }
+
+  private getDetailActionBarInnerSpaceVp(): number {
+    const buttonCount: number = this.getDetailActionBarButtonCount();
+    if (buttonCount <= 1) {
+      return 8;
+    }
+
+    const sideSpace: number = 14;
+    const availableWidth: number = this.getDetailBottomBarWidthVp()
+      - buttonCount * this.getDetailActionBarButtonSizeVp()
+      - sideSpace * 2;
+    const rawSpace: number = availableWidth / (buttonCount - 1);
+    return Math.max(8, Math.min(38, rawSpace));
+  }
+
+  private createColorMetrics(color: ResourceColor, fallbackValue: number): ColorMetrics {
+    try {
+      return ColorMetrics.resourceColor(color);
+    } catch (_) {
+      return ColorMetrics.numeric(fallbackValue);
+    }
+  }
+
+  private getDetailActionBarIconColor(selected: boolean): ColorMetrics {
+    if (selected) {
+      return this.createColorMetrics($r('app.color.detail_action_selected_icon'), 0xFF0088CC);
+    }
+    return this.createColorMetrics($r('app.color.detail_action_icon'), 0xE64A5562);
+  }
+
+  private getDetailActionBarButtonBackgroundColor(selected: boolean): ColorMetrics {
+    if (selected) {
+      return this.createColorMetrics($r('app.color.detail_action_button_selected_background'), 0x220088CC);
+    }
+    return this.createColorMetrics($r('app.color.detail_action_button_background'), 0x0FFFFFFF);
+  }
+
+  private getDetailActionBarStyle(): ActionBarStyle {
+    return new ActionBarStyle({
+      height: LengthMetrics.vp(FLOATING_TAB_BAR_HEIGHT_VP),
+      backgroundBlurStyle: BlurStyle.COMPONENT_ULTRA_THIN,
+      backgroundColor: this.createColorMetrics($r('app.color.detail_action_bar_background'), 0x8AF8FAFC),
+      innerSpace: LengthMetrics.vp(this.getDetailActionBarInnerSpaceVp()),
+      startSpace: LengthMetrics.vp(14),
+      endSpace: LengthMetrics.vp(14),
+      isHorizontal: true,
+      enabled: this.bottomBarVisibility > 0.05,
+      margin: LengthMetrics.vp(0)
+    });
+  }
+
+  private createBackTopActionButton(): ActionBarButton {
+    return new ActionBarButton({
+      id: 'detail_action_top',
+      width: LengthMetrics.vp(this.getDetailActionBarButtonSizeVp()),
+      backgroundColor: this.getDetailActionBarButtonBackgroundColor(false),
+      shadowStyle: { radius: 0, color: '#00000000', offsetX: 0, offsetY: 0 },
+      baseIcon: $r('sys.symbol.arrow_up'),
+      iconFillColor: this.getDetailActionBarIconColor(false),
+      iconSize: LengthMetrics.vp(20),
+      accessibilityText: '回到顶部',
+      hoverTips: '回到顶部',
+      onClick: () => {
+        this.listScroller.scrollToIndex(0, true, ScrollAlign.START);
+        this.scrollOffset = 0;
+        this.showTitle = false;
+        this.setBottomBarVisibleInstant(true);
+        this._bottomBarDelta = 0;
+      }
+    });
+  }
+
+  private createSummaryActionButton(): ActionBarButton {
+    return new ActionBarButton({
+      id: 'detail_action_summary',
+      width: LengthMetrics.vp(this.getDetailActionBarButtonSizeVp()),
+      backgroundColor: this.getDetailActionBarButtonBackgroundColor(this.isSummaryMode),
+      shadowStyle: { radius: 0, color: '#00000000', offsetX: 0, offsetY: 0 },
+      baseIcon: $r('sys.symbol.flame'),
+      iconFillColor: this.getDetailActionBarIconColor(this.isSummaryMode),
+      iconSize: LengthMetrics.vp(20),
+      accessibilityText: '热门回复',
+      hoverTips: '热门回复',
+      onClick: () => {
+        this.toggleSummaryMode();
+      }
+    });
+  }
+
+  private createAuthorOnlyActionButton(): ActionBarButton {
+    return new ActionBarButton({
+      id: 'detail_action_author',
+      width: LengthMetrics.vp(this.getDetailActionBarButtonSizeVp()),
+      backgroundColor: this.getDetailActionBarButtonBackgroundColor(this.isAuthorOnlyMode),
+      shadowStyle: { radius: 0, color: '#00000000', offsetX: 0, offsetY: 0 },
+      baseIcon: $r('sys.symbol.person'),
+      iconFillColor: this.getDetailActionBarIconColor(this.isAuthorOnlyMode),
+      iconSize: LengthMetrics.vp(20),
+      accessibilityText: '只看题主',
+      hoverTips: '只看题主',
+      onClick: () => {
+        this.toggleAuthorOnlyMode();
+      }
+    });
+  }
+
+  private createOpenBrowserActionButton(): ActionBarButton {
+    return new ActionBarButton({
+      id: 'detail_action_browser',
+      width: LengthMetrics.vp(this.getDetailActionBarButtonSizeVp()),
+      backgroundColor: this.getDetailActionBarButtonBackgroundColor(false),
+      shadowStyle: { radius: 0, color: '#00000000', offsetX: 0, offsetY: 0 },
+      baseIcon: $r('sys.symbol.compass'),
+      iconFillColor: this.getDetailActionBarIconColor(false),
+      iconSize: LengthMetrics.vp(20),
+      accessibilityText: '浏览器打开',
+      hoverTips: '浏览器打开',
+      onClick: () => {
+        this.openTopicInBrowser();
+      }
+    });
+  }
+
+  private createShareActionButton(): ActionBarButton {
+    return new ActionBarButton({
+      id: 'detail_action_share',
+      width: LengthMetrics.vp(this.getDetailActionBarButtonSizeVp()),
+      backgroundColor: this.getDetailActionBarButtonBackgroundColor(false),
+      shadowStyle: { radius: 0, color: '#00000000', offsetX: 0, offsetY: 0 },
+      baseIcon: $r('sys.symbol.share'),
+      iconFillColor: this.getDetailActionBarIconColor(false),
+      iconSize: LengthMetrics.vp(20),
+      accessibilityText: '分享',
+      hoverTips: '分享',
+      onClick: () => {
+        this.openTopicShareActionSheet();
+      }
+    });
+  }
+
+  private getDetailActionBarStartButtons(): Array<ActionBarButton> {
+    const buttons: Array<ActionBarButton> = [];
+    buttons.push(this.createBackTopActionButton());
+    if (this.hasSummary) {
+      buttons.push(this.createSummaryActionButton());
+    }
+    buttons.push(this.createAuthorOnlyActionButton());
+    return buttons;
+  }
+
+  private getDetailActionBarEndButtons(): Array<ActionBarButton> {
+    const buttons: Array<ActionBarButton> = [];
+    buttons.push(this.createOpenBrowserActionButton());
+    return buttons;
+  }
+
+  private openTopicShareActionSheet(): void {
+    this.isTopicShareActionSheetVisible = true;
+  }
+
+  private closeTopicShareActionSheet(): void {
+    this.isTopicShareActionSheetVisible = false;
+  }
+
   private getDetailBottomBarVisibleTranslateY(): number {
-    return -(this.getBottomSafeHeight() + FLOATING_TAB_BAR_MARGIN_BOTTOM_VP + FLOATING_TAB_BAR_HEIGHT_VP);
+    return -(this.getFloatingTabBarBottomOffsetVp() + FLOATING_TAB_BAR_HEIGHT_VP);
   }
 
   private getDetailBottomBarHideTranslate(): number {
-    return FLOATING_TAB_BAR_HEIGHT_VP + this.getBottomSafeHeight() + FLOATING_TAB_BAR_MARGIN_BOTTOM_VP
+    return FLOATING_TAB_BAR_HEIGHT_VP + this.getFloatingTabBarBottomOffsetVp()
       + BOTTOM_BAR_HIDE_EXTRA_TRANSLATE;
   }
 
   private getDetailBottomBarReservedBottomVp(): number {
     const v: number = Math.max(0, Math.min(1, this.bottomBarVisibility));
     return this.getBottomSafeHeight()
-      + v * (FLOATING_TAB_BAR_HEIGHT_VP + FLOATING_TAB_BAR_MARGIN_BOTTOM_VP + FLOATING_TAB_BAR_CONTENT_EXTRA_PADDING_VP);
+      + v * (FLOATING_TAB_BAR_HEIGHT_VP + FLOATING_TAB_BAR_MARGIN_BOTTOM_VP + FLOATING_TAB_BAR_OFFSET_UP_VP
+      + FLOATING_TAB_BAR_CONTENT_EXTRA_PADDING_VP);
   }
 
   private getProgressBottomOffset(): number {
     return this.getBottomSafeHeight()
       + PROGRESS_BOTTOM_NO_BAR
-      + this.bottomBarVisibility * (BOTTOM_BAR_HEIGHT + FLOATING_TAB_BAR_MARGIN_BOTTOM_VP + PROGRESS_GAP_ABOVE_BAR);
+      + this.bottomBarVisibility * (BOTTOM_BAR_HEIGHT + FLOATING_TAB_BAR_MARGIN_BOTTOM_VP
+      + FLOATING_TAB_BAR_OFFSET_UP_VP + PROGRESS_GAP_ABOVE_BAR);
   }
 
   private getProgressTranslateY(): number {
@@ -4519,123 +4724,26 @@ export struct TopicDetailPage {
             this.openTimelineSheet();
           })
 
-          // 底部工具栏：改为首页同款悬浮玻璃胶囊
-          Row() {
-            Stack() {
-              Column() {
-              }
-              .width('100%')
-              .height('100%')
-              .backgroundEffect(
-                {
-                  radius: 64,
-                  saturation: 2.2,
-                  brightness: 1.08,
-                  color: $r('app.color.tab_glass_tint'),
-                  adaptiveColor: AdaptiveColor.DEFAULT,
-                  policy: BlurStyleActivePolicy.ALWAYS_ACTIVE,
-                  inactiveColor: $r('app.color.tab_glass_tint')
-                },
-                { disableSystemAdaptation: true }
-              )
-
-              Row() {
-                // 回到顶部
-                Column() {
-                  SymbolGlyph($r('sys.symbol.arrow_up'))
-                    .fontSize(20)
-                    .fontColor([$r('app.color.on_surface_secondary')])
-                }
-                .layoutWeight(1)
-                .justifyContent(FlexAlign.Center)
-                .alignItems(HorizontalAlign.Center)
-                .height('100%')
-                .onClick(() => {
-                  this.listScroller.scrollToIndex(0, true, ScrollAlign.START);
-                  this.scrollOffset = 0;
-                  this.showTitle = false;
-                  this.setBottomBarVisibleInstant(true);
-                  this._bottomBarDelta = 0;
-                })
-
-                // 热门回复
-                if (this.hasSummary) {
-                  Column() {
-                    SymbolGlyph($r('sys.symbol.flame'))
-                      .fontSize(20)
-                      .fontColor(this.isSummaryMode ? [$r('app.color.primary')] : [$r('app.color.on_surface_secondary')])
-                  }
-                  .layoutWeight(1)
-                  .justifyContent(FlexAlign.Center)
-                  .alignItems(HorizontalAlign.Center)
-                  .height('100%')
-                  .backgroundColor(this.isSummaryMode ? $r('app.color.tab_selected_pill') : Color.Transparent)
-                  .borderRadius(20)
-                  .margin({ top: 8, bottom: 8 })
-                  .onClick(() => {
-                    this.toggleSummaryMode();
-                  })
-                }
-
-                // 只看题主
-                Column() {
-                  SymbolGlyph($r('sys.symbol.person'))
-                    .fontSize(20)
-                    .fontColor(this.isAuthorOnlyMode ? [$r('app.color.primary')] : [$r('app.color.on_surface_secondary')])
-                }
-                .layoutWeight(1)
-                .justifyContent(FlexAlign.Center)
-                .alignItems(HorizontalAlign.Center)
-                .height('100%')
-                .backgroundColor(this.isAuthorOnlyMode ? $r('app.color.tab_selected_pill') : Color.Transparent)
-                .borderRadius(20)
-                .margin({ top: 8, bottom: 8 })
-                .onClick(() => {
-                  this.toggleAuthorOnlyMode();
-                })
-
-                // 分享
-                Column() {
-                  SymbolGlyph($r('sys.symbol.share'))
-                    .fontSize(20)
-                    .fontColor([$r('app.color.on_surface_secondary')])
-                }
-                .layoutWeight(1)
-                .justifyContent(FlexAlign.Center)
-                .alignItems(HorizontalAlign.Center)
-                .height('100%')
-                .bindMenu(this.ShareMenuBuilder())
-
-                // 浏览器打开
-                Column() {
-                  SymbolGlyph($r('sys.symbol.compass'))
-                    .fontSize(20)
-                    .fontColor([$r('app.color.on_surface_secondary')])
-                }
-                .layoutWeight(1)
-                .justifyContent(FlexAlign.Center)
-                .alignItems(HorizontalAlign.Center)
-                .height('100%')
-                .onClick(() => {
-                  this.openTopicInBrowser();
-                })
-              }
-              .width('100%')
-              .height('100%')
+          // 底部工具栏：使用 UIDesignKit 原生 HdsActionBar，复用 HDS 背板/按钮/模糊能力
+          HdsActionBar({
+            startButtons: this.getDetailActionBarStartButtons(),
+            primaryButton: this.createShareActionButton(),
+            endButtons: this.getDetailActionBarEndButtons(),
+            actionBarStyle: this.getDetailActionBarStyle(),
+            isExpand: this.detailActionBarExpanded,
+            $isExpand: (isExpand: boolean) => {
+              this.detailActionBarExpanded = isExpand;
             }
-            .width('100%')
-            .height(FLOATING_TAB_BAR_HEIGHT_VP)
-            .border({ width: 0.5, color: $r('app.color.tab_glass_stroke') })
-            .borderRadius(FLOATING_TAB_BAR_RADIUS_VP)
-            .clip(true)
-            .shadow({ radius: 18, color: $r('app.color.tab_glass_shadow'), offsetX: 0, offsetY: 10 })
-          }
-          .width('100%')
-          .padding({ left: FLOATING_TAB_BAR_MARGIN_H_VP, right: FLOATING_TAB_BAR_MARGIN_H_VP })
-          .opacity(this.bottomBarVisibility)
-          .position({ x: 0, y: '100%' })
+          })
+          .width(this.getDetailBottomBarWidthVp())
+          .height(FLOATING_TAB_BAR_HEIGHT_VP)
+          .borderRadius(FLOATING_TAB_BAR_HEIGHT_VP / 2)
+          .border({ width: 0.5, color: $r('app.color.detail_action_bar_stroke') })
+          .shadow({ radius: 22, color: $r('app.color.detail_action_bar_shadow'), offsetX: 0, offsetY: 8 })
+          .opacity(this.bottomBarVisibility * DETAIL_ACTION_BAR_OPACITY)
+          .position({ x: '50%', y: '100%' })
           .translate({
-            x: 0,
+            x: '-50%',
             y: this.getDetailBottomBarVisibleTranslateY()
               + (1 - this.bottomBarVisibility) * this.getDetailBottomBarHideTranslate()
           })
@@ -4692,6 +4800,18 @@ export struct TopicDetailPage {
             })
           }, (cardId: string) => cardId)
         }
+
+        // 底部 HDS ActionBar 分享操作 Sheet 宿主（避免在 HDS CustomBuilder 内 bindMenu 丢失页面上下文）
+        Column() {
+        }
+        .width(0)
+        .height(0)
+        .bindSheet($$this.isTopicShareActionSheetVisible, this.TopicShareActionSheetBuilder, {
+          height: SheetSize.FIT_CONTENT,
+          dragBar: true,
+          showClose: false,
+          backgroundColor: $r('app.color.surface')
+        })
 
         // 分享图片 Sheet 宿主（避免与时间线 Sheet 冲突）
         Column() {
@@ -5606,6 +5726,96 @@ export struct TopicDetailPage {
     } else {
       ToastService.show('保存失败，请检查权限或系统限制');
     }
+  }
+
+  @Builder
+  TopicShareActionSheetBuilder() {
+    Column() {
+      Row() {
+        Text('分享')
+          .fontSize(18)
+          .fontWeight(FontWeight.Bold)
+          .fontColor($r('app.color.on_surface'))
+
+        Blank()
+
+        Button() {
+          SymbolGlyph($r('sys.symbol.xmark'))
+            .fontSize(18)
+            .fontColor([$r('app.color.on_surface_secondary')])
+        }
+        .width(36)
+        .height(36)
+        .borderRadius(18)
+        .backgroundColor($r('app.color.surface_variant'))
+        .onClick(() => {
+          this.closeTopicShareActionSheet();
+        })
+      }
+      .width('100%')
+      .padding({ left: 20, right: 16, top: 16, bottom: 8 })
+      .alignItems(VerticalAlign.Center)
+
+      Row() {
+        SymbolGlyph($r('sys.symbol.link'))
+          .fontSize(20)
+          .fontColor([$r('app.color.on_surface')])
+          .margin({ right: 14 })
+        Text('分享链接')
+          .fontSize(16)
+          .fontColor($r('app.color.on_surface'))
+        Blank()
+      }
+      .height(52)
+      .width('100%')
+      .padding({ left: 20, right: 20 })
+      .alignItems(VerticalAlign.Center)
+      .onClick(() => {
+        this.closeTopicShareActionSheet();
+        this.shareTopic();
+      })
+
+      Row() {
+        SymbolGlyph($r('sys.symbol.shutter_photo'))
+          .fontSize(20)
+          .fontColor([$r('app.color.on_surface')])
+          .margin({ right: 14 })
+        Text('生成分享图片')
+          .fontSize(16)
+          .fontColor($r('app.color.on_surface'))
+        Blank()
+      }
+      .height(52)
+      .width('100%')
+      .padding({ left: 20, right: 20 })
+      .alignItems(VerticalAlign.Center)
+      .onClick(() => {
+        this.closeTopicShareActionSheet();
+        this.openTopicShareImage();
+      })
+
+      Row() {
+        SymbolGlyph($r('sys.symbol.doc_text'))
+          .fontSize(20)
+          .fontColor([$r('app.color.on_surface')])
+          .margin({ right: 14 })
+        Text('导出文章')
+          .fontSize(16)
+          .fontColor($r('app.color.on_surface'))
+        Blank()
+      }
+      .height(52)
+      .width('100%')
+      .padding({ left: 20, right: 20, bottom: WindowManager.getSystemAvoidAreaBottomVp() > 0 ? 0 : 8 })
+      .alignItems(VerticalAlign.Center)
+      .onClick(() => {
+        this.closeTopicShareActionSheet();
+        this.openExportSheet();
+      })
+    }
+    .width('100%')
+    .padding({ bottom: WindowManager.getSystemAvoidAreaBottomVp() })
+    .backgroundColor($r('app.color.surface'))
   }
 
   @Builder

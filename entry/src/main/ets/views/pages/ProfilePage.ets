@@ -19,6 +19,7 @@ import { NotificationQuickPanel } from '../components/NotificationQuickPanel';
 import {
   FLOATING_TAB_BAR_HEIGHT_VP,
   FLOATING_TAB_BAR_MARGIN_BOTTOM_VP,
+  FLOATING_TAB_BAR_OFFSET_UP_VP,
   FLOATING_TAB_BAR_CONTENT_EXTRA_PADDING_VP
 } from '../../common/constants/LayoutConstants';
 
@@ -84,6 +85,7 @@ export struct ProfilePage {
     return WindowManager.getSystemAvoidAreaBottomVp()
       + FLOATING_TAB_BAR_HEIGHT_VP
       + FLOATING_TAB_BAR_MARGIN_BOTTOM_VP
+      + FLOATING_TAB_BAR_OFFSET_UP_VP
       + FLOATING_TAB_BAR_CONTENT_EXTRA_PADDING_VP;
   }
 

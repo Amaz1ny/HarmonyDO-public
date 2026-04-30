@@ -3,7 +3,8 @@ import { RouterManager } from '../../common/utils/RouterManager';
 import { WindowManager } from '../../common/utils/WindowManager';
 import {
   FLOATING_TAB_BAR_HEIGHT_VP,
-  FLOATING_TAB_BAR_MARGIN_BOTTOM_VP
+  FLOATING_TAB_BAR_MARGIN_BOTTOM_VP,
+  FLOATING_TAB_BAR_OFFSET_UP_VP
 } from '../../common/constants/LayoutConstants';
 import {
   MAX_READ_LATER_ITEMS,
@@ -108,6 +109,7 @@ export struct ReadLaterBubble {
     return WindowManager.getSystemAvoidAreaBottomVp()
       + FLOATING_TAB_BAR_HEIGHT_VP
       + FLOATING_TAB_BAR_MARGIN_BOTTOM_VP
+      + FLOATING_TAB_BAR_OFFSET_UP_VP
       + 24;
   }
 
