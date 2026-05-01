@@ -9,6 +9,7 @@ import { SystemShareService } from '../../common/utils/SystemShareService';
 import { ToastService } from '../../common/utils/ToastService';
 import { DownloadedImage, ImageDownloadService } from '../../common/utils/ImageDownloadService';
 import { ZoomableImage } from '../components/ZoomableImage';
+import { ImagePreviewChromeHelper } from '../components/ImagePreviewChromeHelper';
 
 @ComponentV2
 export struct ImagePreviewPage {
@@ -193,6 +194,11 @@ export struct ImagePreviewPage {
     .backgroundColor($r('app.color.image_preview_background'))
     .hideTitleBar(true)
     .hideToolBar(true)
+    .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
+    .systemBarStyle(
+      { statusBarContentColor: ImagePreviewChromeHelper.getStatusBarContentColor() },
+      { statusBarContentColor: ImagePreviewChromeHelper.getStatusBarContentColor() }
+    )
   }
 
   @Builder
@@ -200,18 +206,7 @@ export struct ImagePreviewPage {
     Column() {
       Row() {
         // 返回按钮（左上角浮动圆形）
-        Row() {
-          SymbolGlyph($r('sys.symbol.chevron_left'))
-            .fontSize(20)
-            .fontColor([Color.White])
-        }
-        .width(40)
-        .height(40)
-        .justifyContent(FlexAlign.Center)
-        .alignItems(VerticalAlign.Center)
-        .backgroundColor('#80000000')
-        .borderRadius(20)
-        .onClick(() => {
+        this.FloatingIconButton($r('sys.symbol.chevron_left'), 1, () => {
           RouterManager.pop();
         })
 
@@ -219,40 +214,88 @@ export struct ImagePreviewPage {
 
         // 画廊指示器（多图时居中显示）
         if (this.urls.length > 1) {
-          Text(this.getIndexText())
-            .fontSize(14)
-            .fontColor(Color.White)
-            .padding({ left: 12, right: 12, top: 6, bottom: 6 })
-            .backgroundColor('#80000000')
-            .borderRadius(20)
+          this.FloatingIndexIndicator()
         }
 
         Blank().layoutWeight(1)
 
         // 保存按钮（右上角浮动圆形）
-        Row() {
-          SymbolGlyph($r('sys.symbol.arrow_down'))
-            .fontSize(20)
-            .fontColor([Color.White])
-        }
-        .width(40)
-        .height(40)
-        .justifyContent(FlexAlign.Center)
-        .alignItems(VerticalAlign.Center)
-        .backgroundColor('#80000000')
-        .borderRadius(20)
-        .opacity(this.isDownloading ? 0.6 : 1)
-        .onClick(() => {
+        this.FloatingIconButton($r('sys.symbol.arrow_down'), this.isDownloading ? 0.6 : 1, () => {
           if (this.isDownloading) return;
           this.saveToGallery();
         })
       }
       .width('100%')
-      .padding({ left: 20, right: 20 })
+      .padding({
+        left: ImagePreviewChromeHelper.getControlHorizontalPaddingVp(),
+        right: ImagePreviewChromeHelper.getControlHorizontalPaddingVp()
+      })
       .alignItems(VerticalAlign.Center)
     }
     .width('100%')
-    .position({ x: 0, y: WindowManager.getSystemAvoidAreaTopVp() + 10 })
+    .position({ x: 0, y: ImagePreviewChromeHelper.getTopControlsOffsetVp() })
+  }
+
+  @Builder
+  private FloatingIconButton(icon: Resource, buttonOpacity: number, onClick: () => void) {
+    Row() {
+      SymbolGlyph(icon)
+        .fontSize(ImagePreviewChromeHelper.getControlIconSizeVp())
+        .fontColor([$r('app.color.image_preview_control_icon')])
+    }
+    .width(ImagePreviewChromeHelper.getControlSizeVp())
+    .height(ImagePreviewChromeHelper.getControlSizeVp())
+    .justifyContent(FlexAlign.Center)
+    .alignItems(VerticalAlign.Center)
+    .backgroundColor(Color.Transparent)
+    .backgroundEffect(
+      {
+        radius: ImagePreviewChromeHelper.getControlBlurRadiusVp(),
+        saturation: 1.7,
+        brightness: 1.08,
+        color: $r('app.color.image_preview_control_tint'),
+        adaptiveColor: AdaptiveColor.DEFAULT,
+        policy: BlurStyleActivePolicy.ALWAYS_ACTIVE,
+        inactiveColor: $r('app.color.image_preview_control_tint')
+      },
+      { disableSystemAdaptation: true }
+    )
+    .border({ width: 0.5, color: $r('app.color.image_preview_control_stroke') })
+    .borderRadius(ImagePreviewChromeHelper.getControlRadiusVp())
+    .shadow({ radius: 14, color: $r('app.color.image_preview_control_shadow'), offsetX: 0, offsetY: 6 })
+    .opacity(buttonOpacity)
+    .onClick(() => {
+      onClick();
+    })
+  }
+
+  @Builder
+  private FloatingIndexIndicator() {
+    Row() {
+      Text(this.getIndexText())
+        .fontSize(14)
+        .fontColor($r('app.color.image_preview_control_icon'))
+    }
+    .height(ImagePreviewChromeHelper.getIndicatorHeightVp())
+    .padding({ left: 12, right: 12 })
+    .justifyContent(FlexAlign.Center)
+    .alignItems(VerticalAlign.Center)
+    .backgroundColor(Color.Transparent)
+    .backgroundEffect(
+      {
+        radius: ImagePreviewChromeHelper.getControlBlurRadiusVp(),
+        saturation: 1.7,
+        brightness: 1.08,
+        color: $r('app.color.image_preview_control_tint'),
+        adaptiveColor: AdaptiveColor.DEFAULT,
+        policy: BlurStyleActivePolicy.ALWAYS_ACTIVE,
+        inactiveColor: $r('app.color.image_preview_control_tint')
+      },
+      { disableSystemAdaptation: true }
+    )
+    .border({ width: 0.5, color: $r('app.color.image_preview_control_stroke') })
+    .borderRadius(ImagePreviewChromeHelper.getControlRadiusVp())
+    .shadow({ radius: 14, color: $r('app.color.image_preview_control_shadow'), offsetX: 0, offsetY: 6 })
   }
 
   @Builder

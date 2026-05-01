@@ -36,6 +36,8 @@ import { PostLinks } from '../components/PostLinks';
 import { ReplyComposerSheet } from '../components/ReplyComposerSheet';
 import { BookmarkEditSheet } from '../components/BookmarkEditSheet';
 import { UserStatusEmoji } from '../components/UserStatusEmoji';
+import { TopicDetailChromeHelper } from '../components/TopicDetailChromeHelper';
+import { FloatingActionChromeHelper } from '../components/FloatingActionChromeHelper';
 import { AppContext } from '../../common/utils/AppContext';
 import { PostShareImageParams, postShareImageBuilder } from '../components/PostShareImageCard';
 import { PreferencesUtil } from '../../services/storage/PreferencesUtil';
@@ -238,6 +240,8 @@ export struct TopicDetailPage {
   @Local isImageContextSheetVisible: boolean = false;
   @Local imageContextThumbUrl: string = '';
   @Local imageContextPreviewUrl: string = '';
+  @Local imageContextPreviewUrls: string[] = [];
+  @Local imageContextPreviewIndex: number = 0;
   @Local imageContextPostNumber: number = 0;
   @Local imageContextUsername: string = '';
   @Local imageContextAvatarTemplate: string = '';
@@ -545,11 +549,13 @@ export struct TopicDetailPage {
   }
 
   private getReplyFabTranslateX(): number {
-    return this.isReplyFabLeftAligned() ? 0 : -72;
+    return this.isReplyFabLeftAligned() ? 0 : FloatingActionChromeHelper.getRightTranslateXVp();
   }
 
   private getReplyFabTranslateY(): number {
-    return -(56 + FAB_BOTTOM_MARGIN_VP + this.getDetailBottomBarReservedBottomVp());
+    return FloatingActionChromeHelper.getBottomTranslateYVp(
+      FAB_BOTTOM_MARGIN_VP + this.getDetailBottomBarReservedBottomVp()
+    );
   }
 
   @Monitor('isShareImageSheetVisible')
@@ -1995,7 +2001,7 @@ export struct TopicDetailPage {
   }
 
   private isUserAtListBottom(): boolean {
-    const total: number = 1
+    const total: number = 2
       + (this.shouldShowLoadPreviousEntry() ? 1 : 0)
       + this.posts.length
       + ((this.hasMoreAfter || this.isLoadingMore || this.isLoadMoreFailed) ? 1 : 0);
@@ -2749,9 +2755,69 @@ export struct TopicDetailPage {
     this.copyQuoteText(quote);
   }
 
-  private openImageContextSheet(post: Post, imageUrl: string, previewUrl: string): void {
+  private buildImageContextPreviewUrls(previewUrls: string[], fallbackUrl: string): string[] {
+    const urls: string[] = [];
+    for (let i = 0; i < previewUrls.length; i++) {
+      const source: string = previewUrls[i] !== undefined && previewUrls[i] !== null ? previewUrls[i] : '';
+      const raw: string = source.trim();
+      if (raw.length > 0) {
+        urls.push(raw);
+      }
+    }
+
+    const fallback: string = fallbackUrl !== undefined && fallbackUrl !== null ? fallbackUrl.trim() : '';
+    if (urls.length === 0 && fallback.length > 0) {
+      urls.push(fallback);
+    }
+    return urls;
+  }
+
+  private findImageContextPreviewIndex(previewUrls: string[], previewUrl: string): number {
+    if (previewUrl.length === 0) {
+      return -1;
+    }
+    for (let i = 0; i < previewUrls.length; i++) {
+      const candidate: string = previewUrls[i] !== undefined && previewUrls[i] !== null ? previewUrls[i] : '';
+      if (candidate === previewUrl) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  private normalizeImageContextPreviewIndex(previewUrls: string[], initialIndex: number, previewUrl: string): number {
+    if (previewUrls.length === 0) {
+      return 0;
+    }
+    let index: number = initialIndex;
+    if (index < 0 || index >= previewUrls.length) {
+      index = this.findImageContextPreviewIndex(previewUrls, previewUrl);
+    }
+    if (index < 0) {
+      index = 0;
+    }
+    if (index >= previewUrls.length) {
+      index = previewUrls.length - 1;
+    }
+    return index;
+  }
+
+  private openImageContextSheet(
+    post: Post,
+    imageUrl: string,
+    previewUrl: string,
+    previewUrls: string[],
+    initialIndex: number
+  ): void {
+    const fallbackUrl: string = previewUrl.length > 0 ? previewUrl : imageUrl;
     this.imageContextThumbUrl = imageUrl;
     this.imageContextPreviewUrl = previewUrl;
+    this.imageContextPreviewUrls = this.buildImageContextPreviewUrls(previewUrls, fallbackUrl);
+    this.imageContextPreviewIndex = this.normalizeImageContextPreviewIndex(
+      this.imageContextPreviewUrls,
+      initialIndex,
+      fallbackUrl
+    );
     this.imageContextPostNumber = post.postNumber;
     this.imageContextUsername = post.username;
     this.imageContextAvatarTemplate = post.avatarTemplate;
@@ -2860,6 +2926,7 @@ export struct TopicDetailPage {
     setTimeout(() => {
       try {
         this.listScroller.scrollToIndex(listIndex, true, ScrollAlign.START);
+        this.adjustListScrollForTopOverlay();
       } catch (_) {
       }
     }, 80);
@@ -3014,7 +3081,8 @@ export struct TopicDetailPage {
   }
 
   private getPostListStartIndex(): number {
-    return 1 + (this.shouldShowLoadPreviousEntry() ? 1 : 0);
+    // List 结构：顶部沉浸占位 + 话题头 + 可选“加载更早回复” + 帖子流。
+    return 2 + (this.shouldShowLoadPreviousEntry() ? 1 : 0);
   }
 
   private blockAutoLoadPrevious(durationMs: number = 1200): void {
@@ -3319,6 +3387,7 @@ export struct TopicDetailPage {
     setTimeout(() => {
       try {
         this.listScroller.scrollToIndex(listIndex, true, ScrollAlign.START);
+        this.adjustListScrollForTopOverlay();
       } catch (_) {
       }
     }, 30);
@@ -3486,6 +3555,7 @@ export struct TopicDetailPage {
           setTimeout(() => {
             try {
               this.listScroller.scrollToIndex(this.getListIndexForPostArrayIndex(anchorIndex), false, ScrollAlign.START);
+              this.adjustListScrollForTopOverlay();
             } catch (_) {
             }
           }, 30);
@@ -4123,6 +4193,15 @@ export struct TopicDetailPage {
     }, 0);
   }
 
+  private adjustListScrollForTopOverlay(): void {
+    setTimeout(() => {
+      try {
+        this.listScroller.scrollBy(0, -TopicDetailChromeHelper.getContentTopSpacerHeightVp());
+      } catch (_) {
+      }
+    }, 70);
+  }
+
   private clearScrollSyncTimer(): void {
     if (this.scrollSyncTimerId >= 0) {
       clearTimeout(this.scrollSyncTimerId);
@@ -4547,16 +4626,9 @@ export struct TopicDetailPage {
 
   build() {
     HdsNavDestination() {
-      Stack() {
+      Stack({ alignContent: Alignment.TopStart }) {
         // 主体内容层
         Column() {
-          // 自定义 AppBar（Navigation 全局 TitleBar 已隐藏）
-          if (this.isSearchMode) {
-            this.TopicSearchTopBar()
-          } else {
-            this.TopBar()
-          }
-
           if (this.isLoading) {
             Column() {
               LoadingSpinner({ message: '' })
@@ -4585,6 +4657,14 @@ export struct TopicDetailPage {
               Refresh({ refreshing: false }) {
                 // 帖子列表
                 List({ scroller: this.listScroller }) {
+                  // 顶部沉浸占位：首屏内容不被覆盖；滚动后正文可进入顶栏背后产生光感。
+                  ListItem() {
+                    Row() {
+                    }
+                    .width('100%')
+                    .height(TopicDetailChromeHelper.getContentTopSpacerHeightVp())
+                  }
+
                   // 头部信息区（随列表一起滚动）
                   ListItem() {
                     this.TopicHeader()
@@ -4699,8 +4779,14 @@ export struct TopicDetailPage {
         }
         .width('100%')
         .height('100%')
-        // 全局沉浸式：为顶部状态栏安全区预留 padding，避免内容被挖孔/状态栏遮挡
-        .padding({ top: WindowManager.getSystemAvoidAreaTopVp() })
+        .backgroundColor($r('app.color.surface'))
+
+        // 顶部定制阅读栏覆盖在内容上方，保留阅读页操作密度，同时让内容滚入背后形成沉浸光感。
+        if (this.isSearchMode) {
+          this.TopicSearchTopBar()
+        } else {
+          this.TopBar()
+        }
 
         // 浮层：进度胶囊 + 底部工具栏 + FAB
         if (!this.isLoading && this.errorMessage.length === 0 && !this.isSearchMode) {
@@ -4757,15 +4843,15 @@ export struct TopicDetailPage {
               .fontSize(22)
               .fontColor([$r('app.color.primary')])
           }
-          .width(56)
-          .height(56)
-          .borderRadius(16)
+          .width(FloatingActionChromeHelper.getButtonSizeVp())
+          .height(FloatingActionChromeHelper.getButtonSizeVp())
+          .borderRadius(FloatingActionChromeHelper.getReplyRadiusVp())
           .backgroundColor(Color.Transparent)
           .backgroundEffect(
             {
-              radius: 64,
-              saturation: 2.2,
-              brightness: 1.08,
+              radius: FloatingActionChromeHelper.getBlurRadiusVp(),
+              saturation: FloatingActionChromeHelper.getSaturation(),
+              brightness: FloatingActionChromeHelper.getBrightness(),
               color: $r('app.color.fab_glass_tint'),
               adaptiveColor: AdaptiveColor.DEFAULT,
               policy: BlurStyleActivePolicy.ALWAYS_ACTIVE,
@@ -4775,7 +4861,12 @@ export struct TopicDetailPage {
           )
           .border({ width: 0.5, color: $r('app.color.fab_glass_stroke') })
           .clip(true)
-          .shadow({ radius: 18, color: $r('app.color.tab_glass_shadow'), offsetX: 0, offsetY: 10 })
+          .shadow({
+            radius: FloatingActionChromeHelper.getShadowRadiusVp(),
+            color: $r('app.color.tab_glass_shadow'),
+            offsetX: 0,
+            offsetY: FloatingActionChromeHelper.getShadowOffsetYVp()
+          })
           .position({ x: this.getReplyFabPositionX(), y: '100%' })
           .translate({ x: this.getReplyFabTranslateX(), y: this.getReplyFabTranslateY() })
           .animation({ duration: 220, curve: Curve.EaseOut })
@@ -4891,9 +4982,9 @@ export struct TopicDetailPage {
         .width(0)
         .height(0)
         .bindSheet($$this.isReplySheetVisible, this.ReplySheetBuilder, {
-          height: SheetSize.LARGE,
-          dragBar: false,
+          detents: [SheetSize.MEDIUM, SheetSize.LARGE],
           showClose: false,
+          enableFloatingDragBar: true,
           backgroundColor: $r('app.color.surface')
         })
       }
@@ -4912,11 +5003,20 @@ export struct TopicDetailPage {
     .backgroundColor($r('app.color.surface'))
     .hideTitleBar(true)
     .hideToolBar(true)
+    .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
+    .systemBarStyle(
+      { statusBarContentColor: TopicDetailChromeHelper.getStatusBarContentColor() },
+      { statusBarContentColor: TopicDetailChromeHelper.getStatusBarContentColor() }
+    )
   }
 
   @Builder
   TopBar() {
     Column() {
+      Blank()
+        .width('100%')
+        .height(TopicDetailChromeHelper.getTopSafeHeightVp())
+
       Stack() {
         if (this.showTitle) {
           Row() {
@@ -4930,7 +5030,7 @@ export struct TopicDetailPage {
               .width('100%')
           }
           .width('100%')
-          .height(56)
+          .height(TopicDetailChromeHelper.getTopBarBaseHeightVp())
           .padding({ left: 56, right: 96 })
           .justifyContent(FlexAlign.Center)
           .alignItems(VerticalAlign.Center)
@@ -4976,26 +5076,46 @@ export struct TopicDetailPage {
           .bindMenu(this.MoreMenuBuilder())
         }
         .width('100%')
-        .height(56)
-        .padding({ left: 8, right: 8 })
+        .height(TopicDetailChromeHelper.getTopBarBaseHeightVp())
+        .padding({
+          left: TopicDetailChromeHelper.getTopBarHorizontalPaddingVp(),
+          right: TopicDetailChromeHelper.getTopBarHorizontalPaddingVp()
+        })
         .alignItems(VerticalAlign.Center)
       }
       .width('100%')
-      .height(56)
+      .height(TopicDetailChromeHelper.getTopBarBaseHeightVp())
 
       if (this.scrollOffset > 0) {
         Divider()
-          .color($r('app.color.divider_light'))
+          .color($r('app.color.topic_detail_top_bar_divider'))
           .strokeWidth(0.5)
       }
     }
     .width('100%')
-    .backgroundColor($r('app.color.surface'))
+    .height(TopicDetailChromeHelper.getTopBarTotalHeightVp())
+    .backgroundColor(Color.Transparent)
+    .backgroundEffect(
+      {
+        radius: TopicDetailChromeHelper.getTopBarBlurRadiusVp(),
+        saturation: 1.7,
+        brightness: 1.06,
+        color: $r('app.color.topic_detail_top_bar_tint'),
+        adaptiveColor: AdaptiveColor.DEFAULT,
+        policy: BlurStyleActivePolicy.ALWAYS_ACTIVE,
+        inactiveColor: $r('app.color.topic_detail_top_bar_tint')
+      },
+      { disableSystemAdaptation: true }
+    )
   }
 
   @Builder
   TopicSearchTopBar() {
     Column() {
+      Blank()
+        .width('100%')
+        .height(TopicDetailChromeHelper.getTopSafeHeightVp())
+
       Row() {
         // 返回（退出话题内搜索模式）
         Row() {
@@ -5054,10 +5174,23 @@ export struct TopicDetailPage {
             })
           }
         }
-        .height(40)
+        .height(TopicDetailChromeHelper.getSearchFieldHeightVp())
         .padding({ left: 14, right: 10 })
-        .backgroundColor($r('app.color.search_background'))
-        .borderRadius(20)
+        .backgroundColor(Color.Transparent)
+        .backgroundEffect(
+          {
+            radius: TopicDetailChromeHelper.getTopBarBlurRadiusVp(),
+            saturation: 1.55,
+            brightness: 1.04,
+            color: $r('app.color.topic_detail_search_field_tint'),
+            adaptiveColor: AdaptiveColor.DEFAULT,
+            policy: BlurStyleActivePolicy.ALWAYS_ACTIVE,
+            inactiveColor: $r('app.color.topic_detail_search_field_tint')
+          },
+          { disableSystemAdaptation: true }
+        )
+        .border({ width: 0.5, color: $r('app.color.topic_detail_search_field_stroke') })
+        .borderRadius(TopicDetailChromeHelper.getSearchFieldRadiusVp())
         .layoutWeight(1)
         .margin({ left: 6, right: 6 })
         .alignItems(VerticalAlign.Center)
@@ -5077,16 +5210,32 @@ export struct TopicDetailPage {
         })
       }
       .width('100%')
-      .height(56)
-      .padding({ left: 8, right: 8 })
+      .height(TopicDetailChromeHelper.getTopBarBaseHeightVp())
+      .padding({
+        left: TopicDetailChromeHelper.getTopBarHorizontalPaddingVp(),
+        right: TopicDetailChromeHelper.getTopBarHorizontalPaddingVp()
+      })
       .alignItems(VerticalAlign.Center)
 
       Divider()
-        .color($r('app.color.divider_light'))
+        .color($r('app.color.topic_detail_top_bar_divider'))
         .strokeWidth(0.5)
     }
     .width('100%')
-    .backgroundColor($r('app.color.surface'))
+    .height(TopicDetailChromeHelper.getTopBarTotalHeightVp())
+    .backgroundColor(Color.Transparent)
+    .backgroundEffect(
+      {
+        radius: TopicDetailChromeHelper.getTopBarBlurRadiusVp(),
+        saturation: 1.7,
+        brightness: 1.06,
+        color: $r('app.color.topic_detail_top_bar_tint'),
+        adaptiveColor: AdaptiveColor.DEFAULT,
+        policy: BlurStyleActivePolicy.ALWAYS_ACTIVE,
+        inactiveColor: $r('app.color.topic_detail_top_bar_tint')
+      },
+      { disableSystemAdaptation: true }
+    )
   }
 
   @Builder
@@ -5115,6 +5264,13 @@ export struct TopicDetailPage {
         .justifyContent(FlexAlign.Center)
       } else {
         List({ scroller: this.searchScroller }) {
+          ListItem() {
+            Row() {
+            }
+            .width('100%')
+            .height(TopicDetailChromeHelper.getContentTopSpacerHeightVp())
+          }
+
           if (!this.isSearchLoading && this.searchResults.length === 0) {
             ListItem() {
               Column() {
@@ -6435,11 +6591,15 @@ export struct TopicDetailPage {
   private handleImageContextAction(action: string): void {
     const previewUrl: string = this.imageContextPreviewUrl;
     const thumbUrl: string = this.imageContextThumbUrl;
+    const previewUrls: string[] = this.imageContextPreviewUrls;
+    const previewIndex: number = this.imageContextPreviewIndex;
     this.isImageContextSheetVisible = false;
 
     if (action === 'view') {
-      if (previewUrl.length > 0) {
-        RouterManager.pushImagePreview([previewUrl], 0);
+      const fallbackUrl: string = previewUrl.length > 0 ? previewUrl : thumbUrl;
+      const viewUrls: string[] = previewUrls.length > 0 ? previewUrls : this.buildImageContextPreviewUrls([], fallbackUrl);
+      if (viewUrls.length > 0) {
+        RouterManager.pushImagePreview(viewUrls, this.normalizeImageContextPreviewIndex(viewUrls, previewIndex, fallbackUrl));
       }
     } else if (action === 'copy_image') {
       const url: string = previewUrl.length > 0 ? previewUrl : thumbUrl;
@@ -6481,6 +6641,8 @@ export struct TopicDetailPage {
 
     this.imageContextThumbUrl = '';
     this.imageContextPreviewUrl = '';
+    this.imageContextPreviewUrls = [];
+    this.imageContextPreviewIndex = 0;
     this.imageContextPostNumber = 0;
     this.imageContextUsername = '';
     this.imageContextAvatarTemplate = '';
@@ -6618,6 +6780,7 @@ export struct TopicDetailPage {
       initialContent: this.replySheetInitialContent,
       requestKey: this.replySheetRequestKey,
       editingPost: this.editingReplyPost,
+      showDragHandle: false,
       onSubmitted: (post: Post) => {
         this.handleReplySubmitted(post);
       },
@@ -7016,8 +7179,8 @@ export struct TopicDetailPage {
             onCopyQuoteSelection: (selectedText: string, sourceHtml: string) => {
               this.copySelectionQuote(post, selectedText, sourceHtml);
             },
-            onLongPressImage: (imageUrl: string, previewUrl: string) => {
-              this.openImageContextSheet(post, imageUrl, previewUrl);
+            onLongPressImage: (imageUrl: string, previewUrl: string, previewUrls: string[], initialIndex: number) => {
+              this.openImageContextSheet(post, imageUrl, previewUrl, previewUrls, initialIndex);
             },
             onPostUpdated: (updatedPost: Post) => {
               this.replacePostInstance(updatedPost);

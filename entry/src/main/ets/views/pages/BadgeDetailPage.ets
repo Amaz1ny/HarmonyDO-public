@@ -1,4 +1,4 @@
-import { HdsNavDestination } from '@kit.UIDesignKit';
+import { HdsNavDestination, HdsNavDestinationTitleMode } from '@kit.UIDesignKit';
 import { Badge, BadgeDetailResponse, BadgeUser, UserBadge } from '../../models/Badge';
 import { ApiClient } from '../../services/network/ApiClient';
 import { RouterManager } from '../../common/utils/RouterManager';
@@ -11,8 +11,8 @@ import { ErrorView } from '../components/ErrorView';
 import { SmartAvatar } from '../components/SmartAvatar';
 import { TimeUtils } from '../../common/utils/TimeUtils';
 import { PostRichContent } from '../components/PostRichContent';
+import { ImmersiveHdsTitleBarHelper } from '../components/ImmersiveHdsTitleBarHelper';
 
-const TOP_BAR_HEIGHT: number = 56;
 const HERO_HEIGHT: number = 210;
 
 @ComponentV2
@@ -26,6 +26,8 @@ export struct BadgeDetailPage {
   @Local isRefreshing: boolean = false;
   @Local errorMessage: string = '';
   @Local heroImageFailed: boolean = false;
+
+  private contentScroller: Scroller = new Scroller();
 
   aboutToAppear(): void {
     WindowManager.applyDefaultSystemChrome();
@@ -165,12 +167,13 @@ export struct BadgeDetailPage {
     return WindowManager.getSystemAvoidAreaTopVp();
   }
 
-  private getTopBarHeight(): number {
-    return TOP_BAR_HEIGHT + this.getTopSafeHeight();
-  }
-
   private getHeroHeight(): number {
     return HERO_HEIGHT + this.getTopSafeHeight();
+  }
+
+  private getNavigationTitle(): string {
+    const badgeName: string = this.detail.badge.name.trim();
+    return badgeName.length > 0 ? badgeName : '徽章';
   }
 
   private escapeHtml(raw: string): string {
@@ -225,7 +228,7 @@ export struct BadgeDetailPage {
             .height('100%')
             .justifyContent(FlexAlign.Center)
           } else {
-            Scroll() {
+            Scroll(this.contentScroller) {
               Column() {
                 this.HeroSection()
 
@@ -255,6 +258,7 @@ export struct BadgeDetailPage {
             .height('100%')
             .backgroundColor($r('app.color.background'))
             .scrollBar(BarState.Off)
+            .edgeEffect(EdgeEffect.Spring)
           }
         }
         .onRefreshing(() => {
@@ -263,41 +267,23 @@ export struct BadgeDetailPage {
         })
         .width('100%')
         .height('100%')
-
-        this.TopBar()
       }
       .width('100%')
       .height('100%')
       .backgroundColor($r('app.color.background'))
     }
     .backgroundColor($r('app.color.background'))
-    .hideTitleBar(true)
+    .titleMode(HdsNavDestinationTitleMode.MINI)
+    .titleBar(ImmersiveHdsTitleBarHelper.buildImmersiveTitleBar(this.getNavigationTitle()))
+    .hideTitleBar(false)
+    .hideBackButton(false)
     .hideToolBar(true)
-  }
-
-  @Builder
-  private TopBar() {
-    Row() {
-      Row() {
-        SymbolGlyph($r('sys.symbol.chevron_left'))
-          .fontSize(18)
-          .fontColor([$r('app.color.on_surface')])
-      }
-      .width(44)
-      .height(44)
-      .justifyContent(FlexAlign.Center)
-      .alignItems(VerticalAlign.Center)
-      .onClick(() => {
-        RouterManager.pop();
-      })
-
-      Blank().layoutWeight(1)
-      Blank().width(44)
-    }
-    .width('100%')
-    .height(this.getTopBarHeight())
-    .padding({ left: 8, right: 8, top: this.getTopSafeHeight() })
-    .alignItems(VerticalAlign.Center)
+    .bindToScrollable([this.contentScroller])
+    .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
+    .systemBarStyle(
+      { statusBarContentColor: ImmersiveHdsTitleBarHelper.getStatusBarContentColor() },
+      { statusBarContentColor: ImmersiveHdsTitleBarHelper.getStatusBarContentColor() }
+    )
   }
 
   @Builder

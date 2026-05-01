@@ -1,3 +1,26 @@
+import { LengthMetrics } from '@kit.ArkUI';
+import {
+  HdsNavigation,
+  HdsNavigationBackgroundStyle,
+  HdsNavigationBadgeIconOptions,
+  HdsNavigationIconItemStyle,
+  HdsNavigationIconOptions,
+  HdsNavigationMenuContentOptions,
+  HdsNavigationMenuItemOptions,
+  HdsNavigationTitle,
+  HdsNavigationTitleBarOptions,
+  HdsNavigationTitleBarStyle,
+  HdsNavigationTitleMode,
+  HdsNavigationTitleStyle,
+  HdsTitleBarContentStyle,
+  IconStyleMode,
+  ScrollEffectOptions,
+  ScrollEffectType,
+  SystemMaterialParams,
+  TitleBarContentOptions,
+  TitleBarStyleOptions,
+  hdsMaterial
+} from '@kit.UIDesignKit';
 import { DiscourseNotification, NotificationType } from '../../models/Notification';
 import { User } from '../../models/User';
 import { TimeUtils } from '../../common/utils/TimeUtils';
@@ -10,6 +33,11 @@ import { NotificationTrackingService } from '../../services/messagebus/Notificat
 import { LoadingSpinner } from './LoadingSpinner';
 import { SmartAvatar } from './SmartAvatar';
 
+const MODAL_TITLE_BAR_SCROLL_EFFECT_START_OFFSET_VP: number = 0;
+const MODAL_TITLE_BAR_SCROLL_EFFECT_END_OFFSET_VP: number = 56;
+const MODAL_TITLE_BAR_MASK_EXTRA_HEIGHT_VP: number = 20;
+const MODAL_TITLE_BAR_BLUR_RADIUS: number = 22;
+
 @ComponentV2
 export struct NotificationQuickPanel {
   @Param onClose: () => void = () => {};
@@ -21,6 +49,7 @@ export struct NotificationQuickPanel {
   @Local errorMessage: string = '';
 
   private loadRequestId: number = 0;
+  private modalScroller: Scroller = new Scroller();
 
   aboutToAppear(): void {
     this.loadNotifications().catch((err: Object) => {
@@ -224,101 +253,200 @@ export struct NotificationQuickPanel {
     return '#546E7A';
   }
 
+  private buildModalTitle(): HdsNavigationTitle {
+    const title: HdsNavigationTitle = {
+      mainTitle: '通知'
+    };
+    return title;
+  }
+
+  private buildModalTitleStyle(): HdsNavigationTitleStyle {
+    const titleStyle: HdsNavigationTitleStyle = {
+      mainTitleColor: $r('app.color.on_surface')
+    };
+    return titleStyle;
+  }
+
+  private buildModalIconItemStyle(): HdsNavigationIconItemStyle {
+    const iconItemStyle: HdsNavigationIconItemStyle = {
+      backgroundColor: Color.Transparent,
+      iconColor: $r('app.color.on_surface'),
+      textColor: $r('app.color.on_surface')
+    };
+    return iconItemStyle;
+  }
+
+  private buildModalContentStyle(): HdsTitleBarContentStyle {
+    const contentStyle: HdsTitleBarContentStyle = {
+      titleStyle: this.buildModalTitleStyle(),
+      menuStyle: this.buildModalIconItemStyle()
+    };
+    return contentStyle;
+  }
+
+  private buildModalTitleBarStyle(includeMaskStyle: boolean): HdsNavigationTitleBarStyle {
+    let backgroundStyle: HdsNavigationBackgroundStyle;
+    if (includeMaskStyle) {
+      backgroundStyle = {
+        backgroundColor: Color.Transparent,
+        maskExtraHeight: MODAL_TITLE_BAR_MASK_EXTRA_HEIGHT_VP,
+        blurRadius: MODAL_TITLE_BAR_BLUR_RADIUS
+      };
+    } else {
+      backgroundStyle = {
+        backgroundColor: Color.Transparent
+      };
+    }
+    const titleBarStyle: HdsNavigationTitleBarStyle = {
+      backgroundStyle: backgroundStyle,
+      contentStyle: this.buildModalContentStyle()
+    };
+    return titleBarStyle;
+  }
+
+  private buildModalScrollEffectOptions(): ScrollEffectOptions {
+    const scrollEffectOptions: ScrollEffectOptions = {
+      enableScrollEffect: true,
+      scrollEffectType: ScrollEffectType.GRADIENT_BLUR,
+      enableRefreshOffsetChange: true,
+      blurEffectiveStartOffset: LengthMetrics.vp(MODAL_TITLE_BAR_SCROLL_EFFECT_START_OFFSET_VP),
+      blurEffectiveEndOffset: LengthMetrics.vp(MODAL_TITLE_BAR_SCROLL_EFFECT_END_OFFSET_VP)
+    };
+    return scrollEffectOptions;
+  }
+
+  private buildModalSystemMaterialParams(): SystemMaterialParams {
+    const systemMaterialParams: SystemMaterialParams = {
+      materialType: hdsMaterial.MaterialType.ADAPTIVE,
+      materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
+    };
+    return systemMaterialParams;
+  }
+
+  private buildModalTitleBar(): HdsNavigationTitleBarOptions {
+    const closeIcon: HdsNavigationIconOptions = {
+      icon: $r('sys.symbol.xmark'),
+      label: '关闭通知',
+      type: IconStyleMode.SMALL,
+      action: () => {
+        this.onClose();
+      }
+    };
+    const closeMenuItem: HdsNavigationBadgeIconOptions = {
+      content: closeIcon
+    };
+    const menuItems: Array<HdsNavigationMenuItemOptions> = [
+      closeMenuItem
+    ];
+    const menu: HdsNavigationMenuContentOptions = {
+      value: menuItems,
+      maxCount: 1
+    };
+    const content: TitleBarContentOptions = {
+      title: this.buildModalTitle(),
+      menu: menu
+    };
+    const style: TitleBarStyleOptions = {
+      scrollEffectOpts: this.buildModalScrollEffectOptions(),
+      originalStyle: this.buildModalTitleBarStyle(false),
+      scrollEffectStyle: this.buildModalTitleBarStyle(true),
+      systemMaterialEffect: this.buildModalSystemMaterialParams(),
+      thermoCtrl: true
+    };
+    const titleBarOptions: HdsNavigationTitleBarOptions = {
+      enableComponentSafeArea: true,
+      content: content,
+      style: style
+    };
+    return titleBarOptions;
+  }
+
   build() {
-    Column() {
-      Column() {
-        Blank()
-          .width(32)
-          .height(4)
-          .borderRadius(2)
-          .backgroundColor($r('app.color.divider'))
-      }
-      .width('100%')
-      .padding({ top: 10, bottom: 6 })
-      .alignItems(HorizontalAlign.Center)
+    HdsNavigation() {
+      Scroll(this.modalScroller) {
+        Column() {
+          Row() {
+            Row() {
+              if (this.isMarkingAllRead) {
+                LoadingProgress().width(16).height(16)
+              } else {
+                SymbolGlyph($r('sys.symbol.checkmark_circle'))
+                  .fontSize(18)
+                  .fontColor([$r('app.color.on_surface_secondary')])
+              }
+              Text(this.isMarkingAllRead ? '标记中' : '全部已读')
+                .fontSize(14)
+                .fontColor($r('app.color.on_surface_secondary'))
+                .margin({ left: 6 })
+            }
+            .height(34)
+            .padding({ left: 12, right: 12 })
+            .borderRadius(17)
+            .backgroundColor($r('app.color.search_background'))
+            .enabled(this.notifications.length > 0 && !this.isMarkingAllRead)
+            .opacity(this.notifications.length > 0 ? 1 : 0.36)
+            .justifyContent(FlexAlign.Center)
+            .alignItems(VerticalAlign.Center)
+            .onClick(() => {
+              this.markAllAsRead().catch(() => {
+              });
+            })
 
-      Row() {
-        Text('通知')
-          .fontSize(20)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.on_surface'))
+            Blank().layoutWeight(1)
 
-        Blank().layoutWeight(1)
-
-        Row() {
-          if (this.isMarkingAllRead) {
-            LoadingProgress().width(16).height(16)
-          } else {
-            SymbolGlyph($r('sys.symbol.checkmark_circle'))
-              .fontSize(18)
-              .fontColor([$r('app.color.on_surface_secondary')])
+            Row() {
+              Text('查看全部')
+                .fontSize(14)
+                .fontColor($r('app.color.on_surface_secondary'))
+              SymbolGlyph($r('sys.symbol.chevron_right'))
+                .fontSize(16)
+                .fontColor([$r('app.color.on_surface_secondary')])
+                .margin({ left: 2 })
+            }
+            .height(34)
+            .padding({ left: 12, right: 8 })
+            .borderRadius(17)
+            .backgroundColor($r('app.color.search_background'))
+            .onClick(() => {
+              this.onViewAll();
+            })
           }
-        }
-        .width(34)
-        .height(34)
-        .borderRadius(17)
-        .justifyContent(FlexAlign.Center)
-        .alignItems(VerticalAlign.Center)
-        .onClick(() => {
-          this.markAllAsRead().catch(() => {
-          });
-        })
+          .width('100%')
+          .padding({ left: 16, right: 16, top: 10, bottom: 8 })
+          .alignItems(VerticalAlign.Center)
 
-        Row() {
-          Text('查看全部')
-            .fontSize(14)
-            .fontColor($r('app.color.on_surface_secondary'))
-          SymbolGlyph($r('sys.symbol.chevron_right'))
-            .fontSize(16)
-            .fontColor([$r('app.color.on_surface_secondary')])
-            .margin({ left: 2 })
-        }
-        .height(34)
-        .padding({ left: 10, right: 6 })
-        .borderRadius(17)
-        .margin({ left: 6 })
-        .onClick(() => {
-          this.onViewAll();
-        })
-      }
-      .width('100%')
-      .padding({ left: 20, right: 12, top: 2, bottom: 8 })
-      .alignItems(VerticalAlign.Center)
-
-      if (this.isLoading && this.notifications.length === 0 && this.errorMessage.length === 0) {
-        Column() {
-          LoadingSpinner({ message: '' })
-        }
-        .width('100%')
-        .layoutWeight(1)
-        .justifyContent(FlexAlign.Center)
-        .alignItems(HorizontalAlign.Center)
-      } else if (this.errorMessage.length > 0 && this.notifications.length === 0) {
-        Column() {
-          SymbolGlyph($r('sys.symbol.exclamationmark_triangle'))
-            .fontSize(30)
-            .fontColor([$r('app.color.on_surface_tertiary')])
-            .margin({ bottom: 10 })
-          Text(this.errorMessage)
-            .fontSize(14)
-            .fontColor($r('app.color.on_surface_secondary'))
-          Text('点击重试')
-            .fontSize(13)
-            .fontColor($r('app.color.primary'))
-            .margin({ top: 12 })
-        }
-        .width('100%')
-        .layoutWeight(1)
-        .justifyContent(FlexAlign.Center)
-        .alignItems(HorizontalAlign.Center)
-        .onClick(() => {
-          this.loadNotifications().catch(() => {
-          });
-        })
-      } else {
-        List() {
-          if (!this.isLoading && this.notifications.length === 0) {
-            ListItem() {
+          if (this.isLoading && this.notifications.length === 0 && this.errorMessage.length === 0) {
+            Column() {
+              LoadingSpinner({ message: '' })
+            }
+            .width('100%')
+            .height(320)
+            .justifyContent(FlexAlign.Center)
+            .alignItems(HorizontalAlign.Center)
+          } else if (this.errorMessage.length > 0 && this.notifications.length === 0) {
+            Column() {
+              SymbolGlyph($r('sys.symbol.exclamationmark_triangle'))
+                .fontSize(30)
+                .fontColor([$r('app.color.on_surface_tertiary')])
+                .margin({ bottom: 10 })
+              Text(this.errorMessage)
+                .fontSize(14)
+                .fontColor($r('app.color.on_surface_secondary'))
+              Text('点击重试')
+                .fontSize(13)
+                .fontColor($r('app.color.primary'))
+                .margin({ top: 12 })
+            }
+            .width('100%')
+            .height(320)
+            .justifyContent(FlexAlign.Center)
+            .alignItems(HorizontalAlign.Center)
+            .onClick(() => {
+              this.loadNotifications().catch(() => {
+              });
+            })
+          } else {
+            if (!this.isLoading && this.notifications.length === 0) {
               Column() {
                 SymbolGlyph($r('sys.symbol.bell'))
                   .fontSize(32)
@@ -331,24 +459,26 @@ export struct NotificationQuickPanel {
               .width('100%')
               .padding({ top: 96, bottom: 96 })
               .alignItems(HorizontalAlign.Center)
-            }
-          } else {
-            ForEach(this.notifications, (notification: DiscourseNotification) => {
-              ListItem() {
+            } else {
+              ForEach(this.notifications, (notification: DiscourseNotification) => {
                 this.NotificationRow(notification)
-              }
-            }, (notification: DiscourseNotification) => notification.id.toString())
+              }, (notification: DiscourseNotification) => notification.id.toString())
+            }
           }
         }
         .width('100%')
-        .layoutWeight(1)
         .padding({ left: 16, right: 16, bottom: 12 + WindowManager.getSystemAvoidAreaBottomVp() })
-        .scrollBar(BarState.Off)
       }
+      .clip(false)
+      .scrollBar(BarState.Off)
+      .edgeEffect(EdgeEffect.Spring)
     }
     .width('100%')
     .height('100%')
     .backgroundColor($r('app.color.surface'))
+    .titleBar(this.buildModalTitleBar())
+    .titleMode(HdsNavigationTitleMode.MODAL)
+    .bindToScrollable([this.modalScroller])
   }
 
   @Builder

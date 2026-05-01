@@ -1,7 +1,7 @@
 {
   "app": {
-    "bundleName": "com.HarmonyDo.myApp",
-    "vendor": "example",
+    "bundleName": "com.bigfanqie.ldocommunity",
+    "vendor": "bigfanqie",
     "versionCode": 1000000,
     "versionName": "1.0.0",
     "icon": "$media:layered_image",

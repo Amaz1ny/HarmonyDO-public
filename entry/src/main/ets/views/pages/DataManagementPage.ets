@@ -1,16 +1,14 @@
-import { HdsNavDestination } from '@kit.UIDesignKit';
+import { HdsNavDestination, HdsNavDestinationTitleMode } from '@kit.UIDesignKit';
 import { fileIo } from '@kit.CoreFileKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
-import { RouterManager } from '../../common/utils/RouterManager';
-import { WindowManager } from '../../common/utils/WindowManager';
 import { ToastService } from '../../common/utils/ToastService';
 import { AppContext } from '../../common/utils/AppContext';
 import { PreferencesUtil } from '../../services/storage/PreferencesUtil';
 import { CookieStore, CookieRecord } from '../../services/network/CookieStore';
 import { AuthService } from '../../services/auth/AuthService';
+import { ImmersiveHdsTitleBarHelper } from '../components/ImmersiveHdsTitleBarHelper';
 
 const TAG: string = 'DataManagementPage';
-const TOP_BAR_HEIGHT: number = 56;
 const PAGE_HORIZONTAL_PADDING: number = 16;
 const CARD_CORNER_RADIUS: number = 20;
 const PREF_CLEAR_CACHE_ON_EXIT: string = 'pref_clear_cache_on_exit';
@@ -23,6 +21,8 @@ export struct DataManagementPage {
   @Local isClearingCookie: boolean = false;
   @Local isClearingAll: boolean = false;
   @Local clearOnExit: boolean = false;
+
+  private contentScroller: Scroller = new Scroller();
 
   aboutToAppear(): void {
     this.loadSettings().catch(() => {});
@@ -189,40 +189,6 @@ export struct DataManagementPage {
   }
 
   @Builder
-  private TopBar() {
-    Row() {
-      Row() {
-        SymbolGlyph($r('sys.symbol.chevron_left'))
-          .fontSize(18)
-          .fontColor([$r('app.color.on_surface')]);
-      }
-      .width(44)
-      .height(44)
-      .justifyContent(FlexAlign.Center)
-      .alignItems(VerticalAlign.Center)
-      .onClick(() => {
-        RouterManager.pop();
-      });
-
-      Text($r('app.string.dm_page_title'))
-        .layoutWeight(1)
-        .textAlign(TextAlign.Center)
-        .fontSize(18)
-        .fontWeight(FontWeight.Medium)
-        .fontColor($r('app.color.on_surface'));
-
-      Blank()
-        .width(44)
-        .height(44);
-    }
-    .width('100%')
-    .height(TOP_BAR_HEIGHT)
-    .padding({ left: 8, right: 8 })
-    .backgroundColor($r('app.color.background'))
-    .alignItems(VerticalAlign.Center);
-  }
-
-  @Builder
   private SectionHeader(title: Resource) {
     Text(title)
       .fontSize(14)
@@ -359,10 +325,12 @@ export struct DataManagementPage {
   build() {
     HdsNavDestination() {
       Column() {
-        this.TopBar();
-
-        Scroll() {
+        Scroll(this.contentScroller) {
           Column() {
+            Blank()
+              .height(ImmersiveHdsTitleBarHelper.getContentTopSpacerHeightVp())
+              .width('100%');
+
             // --- 缓存管理 ---
             this.SectionHeader($r('app.string.dm_section_cache_title'));
 
@@ -469,11 +437,19 @@ export struct DataManagementPage {
       }
       .width('100%')
       .height('100%')
-      .padding({ top: WindowManager.getSystemAvoidAreaTopVp() })
       .backgroundColor($r('app.color.background'));
     }
-    .hideTitleBar(true)
+    .titleMode(HdsNavDestinationTitleMode.MINI)
+    .titleBar(ImmersiveHdsTitleBarHelper.buildImmersiveTitleBar($r('app.string.dm_page_title')))
+    .hideTitleBar(false)
+    .hideBackButton(false)
     .hideToolBar(true)
+    .bindToScrollable([this.contentScroller])
+    .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
+    .systemBarStyle(
+      { statusBarContentColor: ImmersiveHdsTitleBarHelper.getStatusBarContentColor() },
+      { statusBarContentColor: ImmersiveHdsTitleBarHelper.getStatusBarContentColor() }
+    )
     .backgroundColor($r('app.color.background'));
   }
 }

@@ -1,4 +1,7 @@
-import { HdsNavDestination } from '@kit.UIDesignKit';
+import {
+  HdsNavDestination,
+  HdsNavDestinationTitleMode
+} from '@kit.UIDesignKit';
 import { Topic, TopicUser } from '../../models/Topic';
 import { Category } from '../../models/Category';
 import { SearchInType } from '../../models/SearchFilter';
@@ -11,8 +14,7 @@ import { LoadingSpinner } from '../components/LoadingSpinner';
 import { ErrorView } from '../components/ErrorView';
 import { TopicCard } from '../components/TopicCard';
 import { TopicPreviewDialog } from '../components/TopicPreviewDialog';
-
-const TOP_BAR_HEIGHT: number = 56;
+import { ImmersiveHdsTitleBarHelper } from '../components/ImmersiveHdsTitleBarHelper';
 
 @ComponentV2
 export struct BrowsingHistoryPage {
@@ -32,6 +34,7 @@ export struct BrowsingHistoryPage {
   private page: number = 0;
   private categoryMap: Map<number, Category> = new Map();
   private isResetLoading: boolean = false;
+  private contentScroller: Scroller = new Scroller();
 
   aboutToAppear(): void {
     this.loadTopics(true, this.topics.length === 0, false).catch(() => {
@@ -183,177 +186,165 @@ export struct BrowsingHistoryPage {
     RouterManager.pushSearch('', SearchInType.SEEN.value);
   }
 
-  build() {
-    HdsNavDestination() {
-      Stack({ alignContent: Alignment.Center }) {
-        Column() {
-          this.TopBar()
-
-          Refresh({ refreshing: this.isRefreshing }) {
-            if (this.isLoading && this.topics.length === 0 && this.errorMessage.length === 0) {
-              Column() {
-                LoadingSpinner({ message: '' })
-              }
-              .width('100%')
-              .height('100%')
-              .justifyContent(FlexAlign.Center)
-              .alignItems(HorizontalAlign.Center)
-            } else if (this.errorMessage.length > 0 && this.topics.length === 0) {
-              Column() {
-                ErrorView({
-                  title: '加载失败',
-                  message: this.errorMessage,
-                  onRetry: () => {
-                    this.loadTopics(true, true).catch(() => {
-                    });
-                  }
-                })
-              }
-              .width('100%')
-              .height('100%')
-              .justifyContent(FlexAlign.Center)
-            } else {
-              List() {
-                if (!this.isLoading && this.topics.length === 0) {
-                  ListItem() {
-                    Column() {
-                      SymbolGlyph($r('sys.symbol.clock'))
-                        .fontSize(30)
-                        .fontColor([$r('app.color.on_surface_tertiary')])
-                        .margin({ bottom: 12 })
-                      Text('暂无浏览历史')
-                        .fontSize(14)
-                        .fontColor($r('app.color.on_surface_secondary'))
-                    }
-                    .width('100%')
-                    .padding({ top: 96, bottom: 96 })
-                    .alignItems(HorizontalAlign.Center)
-                  }
-                } else {
-                  ForEach(this.topics, (topic: Topic) => {
-                    ListItem() {
-                      TopicCard({
-                        topic: topic,
-                        category: this.getCategory(topic),
-                        opAvatarUrl: this.getOpAvatarUrl(topic),
-                        onCardClick: (t: Topic) => {
-                          RouterManager.pushTopicDetail(t.id, t.lastReadPostNumber);
-                        },
-                        onCardLongPress: (t: Topic) => {
-                          this.openTopicPreview(t);
-                        }
-                      })
-                    }
-                  }, (topic: Topic) => topic.id.toString())
-                }
-
-                if (this.loadMoreFailed) {
-                  ListItem() {
-                    Text('加载更多失败，点击重试')
-                      .fontSize(13)
-                      .fontColor($r('app.color.primary'))
-                      .width('100%')
-                      .textAlign(TextAlign.Center)
-                      .padding({ top: 12, bottom: 12 })
-                      .onClick(() => {
-                        this.loadTopics(false, false).catch(() => {
-                        });
-                      })
-                  }
-                } else if (this.isLoadingMore) {
-                  ListItem() {
-                    Row() {
-                      LoadingProgress().width(18).height(18)
-                      Text('加载中...')
-                        .fontSize(13)
-                        .fontColor($r('app.color.on_surface_tertiary'))
-                        .margin({ left: 8 })
-                    }
-                    .width('100%')
-                    .height(44)
-                    .justifyContent(FlexAlign.Center)
-                  }
-                } else if (!this.hasMore && this.topics.length > 0) {
-                  ListItem() {
-                    Text('没有更多了')
-                      .fontSize(12)
-                      .fontColor($r('app.color.on_surface_tertiary'))
-                      .width('100%')
-                      .textAlign(TextAlign.Center)
-                      .padding({ top: 16, bottom: 12 })
-                  }
-                }
-              }
-              .width('100%')
-              .height('100%')
-              .padding({ left: 12, right: 12, top: 12, bottom: 12 + WindowManager.getSystemAvoidAreaBottomVp() })
-              .backgroundColor($r('app.color.background'))
-              .scrollBar(BarState.Off)
-              .onReachEnd(() => {
-                this.loadTopics(false, false).catch(() => {
-                });
-              })
-            }
-          }
-          .onRefreshing(() => {
-            this.loadTopics(true, false, true).catch(() => {
-            });
-          })
-          .layoutWeight(1)
-        }
-        .width('100%')
-        .height('100%')
-        .backgroundColor($r('app.color.background'))
-        .padding({ top: WindowManager.getSystemAvoidAreaTopVp() })
-
-        this.TopicPreviewOverlay()
-      }
-    }
-    .backgroundColor($r('app.color.background'))
-    .hideTitleBar(true)
-    .hideToolBar(true)
+  private getStatusBarContentColor(): string {
+    return ImmersiveHdsTitleBarHelper.getStatusBarContentColor();
   }
 
-  @Builder
-  private TopBar() {
-    Row() {
-      Row() {
-        SymbolGlyph($r('sys.symbol.chevron_left'))
-          .fontSize(18)
-          .fontColor([$r('app.color.on_surface')])
-      }
-      .width(44)
-      .height(44)
-      .justifyContent(FlexAlign.Center)
-      .alignItems(VerticalAlign.Center)
-      .onClick(() => {
-        RouterManager.pop();
-      })
+  private getContentTopSpacerHeight(): number {
+    return ImmersiveHdsTitleBarHelper.getContentTopSpacerHeightVp();
+  }
 
-      Text('浏览历史')
-        .fontSize(17)
-        .fontWeight(FontWeight.Bold)
-        .fontColor($r('app.color.on_surface'))
-        .layoutWeight(1)
+  build() {
+    Stack({ alignContent: Alignment.TopStart }) {
+      HdsNavDestination() {
+        Stack({ alignContent: Alignment.Center }) {
+          Column() {
+            Refresh({ refreshing: this.isRefreshing }) {
+              if (this.isLoading && this.topics.length === 0 && this.errorMessage.length === 0) {
+                Column() {
+                  LoadingSpinner({ message: '' })
+                }
+                .width('100%')
+                .height('100%')
+                .justifyContent(FlexAlign.Center)
+                .alignItems(HorizontalAlign.Center)
+              } else if (this.errorMessage.length > 0 && this.topics.length === 0) {
+                Column() {
+                  ErrorView({
+                    title: '加载失败',
+                    message: this.errorMessage,
+                    onRetry: () => {
+                      this.loadTopics(true, true).catch(() => {
+                      });
+                    }
+                  })
+                }
+                .width('100%')
+                .height('100%')
+                .justifyContent(FlexAlign.Center)
+              } else {
+                Scroll(this.contentScroller) {
+                  Column() {
+                    // 参考 chatcube 的沉浸式结构：NavDestination 自身延伸进状态栏，
+                    // 内容列表只在首项留出“状态栏 + MINI 标题栏 + 渐变蒙版”高度。
+                    // 这样首屏不被标题栏遮挡，滚动时内容仍可进入状态栏/标题栏背后。
+                    Blank()
+                      .height(this.getContentTopSpacerHeight())
+                      .width('100%')
 
-      Row() {
-        SymbolGlyph($r('sys.symbol.magnifyingglass'))
-          .fontSize(18)
-          .fontColor([$r('app.color.on_surface')])
+                    if (!this.isLoading && this.topics.length === 0) {
+                      Column() {
+                        SymbolGlyph($r('sys.symbol.clock'))
+                          .fontSize(30)
+                          .fontColor([$r('app.color.on_surface_tertiary')])
+                          .margin({ bottom: 12 })
+                        Text('暂无浏览历史')
+                          .fontSize(14)
+                          .fontColor($r('app.color.on_surface_secondary'))
+                      }
+                      .width('100%')
+                      .padding({ top: 96, bottom: 96 })
+                      .alignItems(HorizontalAlign.Center)
+                    } else {
+                      ForEach(this.topics, (topic: Topic) => {
+                        TopicCard({
+                          topic: topic,
+                          category: this.getCategory(topic),
+                          opAvatarUrl: this.getOpAvatarUrl(topic),
+                          onCardClick: (t: Topic) => {
+                            RouterManager.pushTopicDetail(t.id, t.lastReadPostNumber);
+                          },
+                          onCardLongPress: (t: Topic) => {
+                            this.openTopicPreview(t);
+                          }
+                        })
+                      }, (topic: Topic) => topic.id.toString())
+                    }
+
+                    if (this.loadMoreFailed) {
+                      Text('加载更多失败，点击重试')
+                        .fontSize(13)
+                        .fontColor($r('app.color.primary'))
+                        .width('100%')
+                        .textAlign(TextAlign.Center)
+                        .padding({ top: 12, bottom: 12 })
+                        .onClick(() => {
+                          this.loadTopics(false, false).catch(() => {
+                          });
+                        })
+                    } else if (this.isLoadingMore) {
+                      Row() {
+                        LoadingProgress().width(18).height(18)
+                        Text('加载中...')
+                          .fontSize(13)
+                          .fontColor($r('app.color.on_surface_tertiary'))
+                          .margin({ left: 8 })
+                      }
+                      .width('100%')
+                      .height(44)
+                      .justifyContent(FlexAlign.Center)
+                    } else if (!this.hasMore && this.topics.length > 0) {
+                      Text('没有更多了')
+                        .fontSize(12)
+                        .fontColor($r('app.color.on_surface_tertiary'))
+                        .width('100%')
+                        .textAlign(TextAlign.Center)
+                        .padding({ top: 16, bottom: 12 })
+                    }
+                  }
+                  .width('100%')
+                  .padding({ left: 12, right: 12, top: 12, bottom: 12 + WindowManager.getSystemAvoidAreaBottomVp() })
+                  .alignItems(HorizontalAlign.Center)
+                }
+                .width('100%')
+                .height('100%')
+                .backgroundColor($r('app.color.background'))
+                .scrollBar(BarState.Off)
+                .edgeEffect(EdgeEffect.Spring)
+                .onReachEnd(() => {
+                  this.loadTopics(false, false).catch(() => {
+                  });
+                })
+              }
+            }
+            .onRefreshing(() => {
+              this.loadTopics(true, false, true).catch(() => {
+              });
+            })
+            .layoutWeight(1)
+          }
+          .width('100%')
+          .height('100%')
+          .backgroundColor($r('app.color.background'))
+
+          this.TopicPreviewOverlay()
+        }
       }
-      .width(44)
-      .height(44)
-      .justifyContent(FlexAlign.Center)
-      .alignItems(VerticalAlign.Center)
-      .onClick(() => {
-        this.openSearch();
-      })
+      .width('100%')
+      .height('100%')
+      .backgroundColor($r('app.color.background'))
+      .titleMode(HdsNavDestinationTitleMode.MINI)
+      .titleBar(ImmersiveHdsTitleBarHelper.buildImmersiveTitleBarWithMenu(
+        '浏览历史',
+        $r('sys.symbol.magnifyingglass'),
+        '搜索浏览历史',
+        () => {
+          this.openSearch();
+        }
+      ))
+      .hideTitleBar(false)
+      .hideBackButton(false)
+      .hideToolBar(true)
+      .bindToScrollable([this.contentScroller])
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
+      .systemBarStyle(
+        { statusBarContentColor: this.getStatusBarContentColor() },
+        { statusBarContentColor: this.getStatusBarContentColor() }
+      )
     }
     .width('100%')
-    .height(TOP_BAR_HEIGHT)
-    .padding({ left: 8, right: 8 })
+    .height('100%')
     .backgroundColor($r('app.color.background'))
-    .alignItems(VerticalAlign.Center)
   }
 
   @Builder

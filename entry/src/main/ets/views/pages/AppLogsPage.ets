@@ -1,8 +1,8 @@
-import { HdsNavDestination } from '@kit.UIDesignKit';
-import { RouterManager } from '../../common/utils/RouterManager';
+import { HdsNavDestination, HdsNavDestinationTitleMode } from '@kit.UIDesignKit';
 import { AppLogEntry, AppLogService } from '../../common/utils/AppLogService';
 import { ClipboardService } from '../../common/utils/ClipboardService';
 import { ToastService } from '../../common/utils/ToastService';
+import { ImmersiveHdsTitleBarHelper } from '../components/ImmersiveHdsTitleBarHelper';
 
 export type AppLogsFilterType = 'all' | 'error' | 'lifecycle' | 'general';
 
@@ -25,6 +25,8 @@ export struct AppLogsPage {
   @Local filter: AppLogsFilterType = 'all';
   @Local selectedEntry: AppLogEntry | null = null;
   @Local clearConfirmVisible: boolean = false;
+
+  private contentScroller: Scroller = new Scroller();
 
   aboutToAppear(): void {
     this.reload();
@@ -65,46 +67,6 @@ export struct AppLogsPage {
     this.selectedEntry = null;
     this.reload();
     ToastService.show('已清空日志');
-  }
-
-  @Builder
-  private TopBar() {
-    Row() {
-      Row() {
-        SymbolGlyph($r('sys.symbol.chevron_left'))
-          .fontSize(18)
-          .fontColor([$r('app.color.on_surface')]);
-      }
-      .width(44)
-      .height(44)
-      .justifyContent(FlexAlign.Center)
-      .alignItems(VerticalAlign.Center)
-      .onClick(() => {
-        RouterManager.pop();
-      });
-
-      Text('应用日志')
-        .layoutWeight(1)
-        .textAlign(TextAlign.Center)
-        .fontSize(18)
-        .fontWeight(FontWeight.Medium)
-        .fontColor($r('app.color.on_surface'));
-
-      Text('清空')
-        .width(44)
-        .height(44)
-        .textAlign(TextAlign.Center)
-        .fontSize(13)
-        .fontColor($r('app.color.primary'))
-        .onClick(() => {
-          this.clearConfirmVisible = true;
-        });
-    }
-    .width('100%')
-    .height(56)
-    .padding({ left: 8, right: 8 })
-    .backgroundColor($r('app.color.background'))
-    .alignItems(VerticalAlign.Center);
   }
 
   @Builder
@@ -279,28 +241,30 @@ export struct AppLogsPage {
   build() {
     HdsNavDestination() {
       Stack({ alignContent: Alignment.Bottom }) {
-        Column() {
-          this.TopBar();
-          this.FilterBar();
+        Scroll(this.contentScroller) {
+          Column() {
+            Blank()
+              .height(ImmersiveHdsTitleBarHelper.getContentTopSpacerHeightVp())
+              .width('100%')
 
-          if (this.getVisibleEntries().length === 0) {
-            this.EmptyState();
-          } else {
-            List() {
+            this.FilterBar();
+
+            if (this.getVisibleEntries().length === 0) {
+              this.EmptyState();
+            } else {
               ForEach(this.getVisibleEntries(), (entry: AppLogEntry, index: number) => {
-                ListItem() {
-                  this.EntryRow(entry, index === this.getVisibleEntries().length - 1);
-                }
+                this.EntryRow(entry, index === this.getVisibleEntries().length - 1);
               }, (entry: AppLogEntry) => `${entry.timestamp}_${entry.message}`);
             }
-            .width('100%')
-            .layoutWeight(1)
-            .scrollBar(BarState.Off);
           }
+          .width('100%')
+          .padding({ bottom: 16 })
         }
         .width('100%')
         .height('100%')
-        .backgroundColor($r('app.color.background'));
+        .backgroundColor($r('app.color.background'))
+        .scrollBar(BarState.Off)
+        .edgeEffect(EdgeEffect.Spring);
 
         this.DetailOverlay();
         this.ClearConfirmOverlay();
@@ -308,5 +272,24 @@ export struct AppLogsPage {
       .width('100%')
       .height('100%');
     }
+    .titleMode(HdsNavDestinationTitleMode.MINI)
+    .titleBar(ImmersiveHdsTitleBarHelper.buildImmersiveTitleBarWithMenu(
+      '应用日志',
+      $r('sys.symbol.trash'),
+      '清空日志',
+      () => {
+        this.clearConfirmVisible = true;
+      }
+    ))
+    .hideTitleBar(false)
+    .hideBackButton(false)
+    .hideToolBar(true)
+    .bindToScrollable([this.contentScroller])
+    .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
+    .systemBarStyle(
+      { statusBarContentColor: ImmersiveHdsTitleBarHelper.getStatusBarContentColor() },
+      { statusBarContentColor: ImmersiveHdsTitleBarHelper.getStatusBarContentColor() }
+    )
+    .backgroundColor($r('app.color.background'));
   }
 }

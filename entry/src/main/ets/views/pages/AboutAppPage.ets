@@ -3,12 +3,11 @@ import { PreferencesUtil } from '../../services/storage/PreferencesUtil';
 import { ExternalLinkService } from '../../common/utils/ExternalLinkService';
 import { RouterManager } from '../../common/utils/RouterManager';
 import { ToastService } from '../../common/utils/ToastService';
-import { WindowManager } from '../../common/utils/WindowManager';
-import { HdsNavDestination } from '@kit.UIDesignKit';
+import { HdsNavDestination, HdsNavDestinationTitleMode } from '@kit.UIDesignKit';
+import { ImmersiveHdsTitleBarHelper } from '../components/ImmersiveHdsTitleBarHelper';
 
 const TAG: string = 'AboutAppPage';
 const PREF_KEY_DEVELOPER_MODE: string = 'about_app_developer_mode_enabled';
-const TOP_BAR_HEIGHT: number = 56;
 
 type AboutAppItemKey = 'openSource' | 'developerModeToggle' | 'sourceCode' | 'appLogs' | 'feedback';
 
@@ -23,6 +22,8 @@ export struct AboutAppPage {
   @Local developerModeEnabled: boolean = false;
   @Local versionTapCount: number = 0;
   @Local lastTapTimestamp: number = 0;
+
+  private contentScroller: Scroller = new Scroller();
 
   private static readonly TAP_THRESHOLD: number = 7;
   private static readonly TAP_INTERVAL_MS: number = 2000;
@@ -97,17 +98,9 @@ export struct AboutAppPage {
 
   private getFooterLines(): string[] {
     return [
-      'HarmonyDO 是 Linux.do 的鸿蒙原生社区客户端',
+      'LDO社区是 Linux.do 的第三方鸿蒙客户端',
       '灵感来自 FluxDO，感谢社区与开源作者'
     ];
-  }
-
-  private getTopSafeHeight(): number {
-    return WindowManager.getSystemAvoidAreaTopVp();
-  }
-
-  private getTopBarHeight(): number {
-    return TOP_BAR_HEIGHT + this.getTopSafeHeight();
   }
 
   private resolveItemSymbol(itemKey: AboutAppItemKey): Resource {
@@ -143,7 +136,7 @@ export struct AboutAppPage {
   private resolveItemSubtitle(itemKey: AboutAppItemKey): string {
     switch (itemKey) {
       case 'openSource':
-        return '查看 HarmonyDO 与 FluxDO 的开源说明';
+        return '查看 LDO社区与 FluxDO 的开源说明';
       case 'sourceCode':
         return 'GitHub';
       case 'appLogs':
@@ -172,40 +165,6 @@ export struct AboutAppPage {
       default:
         return;
     }
-  }
-
-  @Builder
-  private TopBar() {
-    Row() {
-      Row() {
-        SymbolGlyph($r('sys.symbol.chevron_left'))
-          .fontSize(18)
-          .fontColor([$r('app.color.on_surface')]);
-      }
-      .width(44)
-      .height(44)
-      .justifyContent(FlexAlign.Center)
-      .alignItems(VerticalAlign.Center)
-      .onClick(() => {
-        RouterManager.pop();
-      });
-
-      Text('关于 HarmonyDO')
-        .layoutWeight(1)
-        .textAlign(TextAlign.Center)
-        .fontSize(18)
-        .fontWeight(FontWeight.Medium)
-        .fontColor($r('app.color.on_surface'));
-
-      Blank()
-        .width(44)
-        .height(44);
-    }
-    .width('100%')
-    .height(this.getTopBarHeight())
-    .padding({ left: 8, right: 8, top: this.getTopSafeHeight() })
-    .backgroundColor($r('app.color.background'))
-    .alignItems(VerticalAlign.Center);
   }
 
   @Builder
@@ -339,10 +298,12 @@ export struct AboutAppPage {
   build() {
     HdsNavDestination() {
       Column() {
-        this.TopBar();
-
-        Scroll() {
+        Scroll(this.contentScroller) {
           Column() {
+            Blank()
+              .height(ImmersiveHdsTitleBarHelper.getContentTopSpacerHeightVp())
+              .width('100%');
+
             this.HeaderSection();
 
             ForEach(this.getSections(), (section: AboutAppSectionDescriptor, sectionIndex: number) => {
@@ -374,8 +335,17 @@ export struct AboutAppPage {
       .height('100%')
       .backgroundColor($r('app.color.background'));
     }
+    .titleMode(HdsNavDestinationTitleMode.MINI)
+    .titleBar(ImmersiveHdsTitleBarHelper.buildImmersiveTitleBar($r('app.string.profile_about_app')))
     .backgroundColor($r('app.color.background'))
-    .hideTitleBar(true)
+    .hideTitleBar(false)
+    .hideBackButton(false)
     .hideToolBar(true)
+    .bindToScrollable([this.contentScroller])
+    .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
+    .systemBarStyle(
+      { statusBarContentColor: ImmersiveHdsTitleBarHelper.getStatusBarContentColor() },
+      { statusBarContentColor: ImmersiveHdsTitleBarHelper.getStatusBarContentColor() }
+    )
   }
 }

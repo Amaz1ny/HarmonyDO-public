@@ -11,10 +11,11 @@ import { UrlUtils } from '../../common/utils/UrlUtils';
 import { RouterManager, RouteConstants } from '../../common/utils/RouterManager';
 import { PillIconButton, PillMenuButton, SORT_FILTER_OPTIONS, SORT_FILTER_OPTIONS_LOGGED_IN, SORT_ORDER_OPTIONS } from '../components/PillControls';
 import { DEFAULT_AVAILABLE_TAGS, TagChip, TagSelectionSheet } from '../components/TagControls';
-import { HdsNavDestination } from '@kit.UIDesignKit';
+import { HdsNavDestination, HdsNavDestinationTitleMode } from '@kit.UIDesignKit';
 import { WindowManager } from '../../common/utils/WindowManager';
 import { TopicTrackingService } from '../../services/messagebus/TopicTrackingService';
 import { TopicListPreferences } from '../../services/storage/TopicListPreferences';
+import { ImmersiveHdsTitleBarHelper } from '../components/ImmersiveHdsTitleBarHelper';
 
 const TAG: string = 'CategoryTopicPage';
 
@@ -50,7 +51,7 @@ export struct CategoryTopicPage {
   @Local previewParentCategory: Category | null = null;
   @Local isTopicPreviewVisible: boolean = false;
 
-  private listScroller: Scroller = new Scroller();
+  private contentScroller: Scroller = new Scroller();
   private trackingListener: (() => void) | null = null;
   private authStateListener: (() => void) | null = null;
   private isResetLoading: boolean = false;
@@ -673,148 +674,112 @@ export struct CategoryTopicPage {
     })
   }
 
-  @Builder
-  TopBar() {
-    Row() {
-      // 返回
-      Row() {
-        SymbolGlyph($r('sys.symbol.chevron_left'))
-          .fontSize(18)
-          .fontColor([$r('app.color.on_surface')])
-      }
-      .width(44)
-      .height(44)
-      .justifyContent(FlexAlign.Center)
-      .alignItems(VerticalAlign.Center)
-      .onClick(() => {
-        RouterManager.pop();
-      })
-
-      Text(this.getCategoryTitle())
-        .fontSize(20)
-        .fontWeight(FontWeight.Bold)
-        .fontColor($r('app.color.on_surface'))
-        .layoutWeight(1)
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-        .margin({ left: 6, right: 10 })
-
-      // 右侧占位（搜索按钮）
-      Row() {
-        SymbolGlyph($r('sys.symbol.magnifyingglass'))
-          .fontSize(18)
-          .fontColor([$r('app.color.on_surface_secondary')])
-      }
-      .width(44)
-      .height(44)
-      .justifyContent(FlexAlign.Center)
-      .alignItems(VerticalAlign.Center)
-        .onClick(() => {
-          RouterManager.pushPath(RouteConstants.PAGE_SEARCH);
-        })
-    }
-    .width('100%')
-    .height(56)
-    .padding({ left: 8, right: 8, top: 6, bottom: 6 })
-    .backgroundColor($r('app.color.background'))
-  }
-
   build() {
     HdsNavDestination() {
       Stack() {
         Column() {
-        this.TopBar()
-        this.FilterBar()
-
-        Divider().color($r('app.color.divider_light')).strokeWidth(1).margin({ left: 16, right: 16 })
-
-        if (this.isLoading) {
-          Column() {
-            LoadingSpinner({ message: '' })
-          }
-          .width('100%')
-          .layoutWeight(1)
-          .justifyContent(FlexAlign.Center)
-        } else if (this.errorMessage.length > 0) {
-          Column() {
-            ErrorView({
-              title: '加载失败',
-              message: this.errorMessage,
-              showRetry: true,
-              onRetry: () => {
-                this.loadTopics(true);
-              }
-            })
-          }
-          .width('100%')
-          .layoutWeight(1)
-          .justifyContent(FlexAlign.Center)
-        } else {
           Refresh({ refreshing: this.isRefreshing }) {
-            List({ scroller: this.listScroller }) {
-              ForEach(this.topics, (topic: Topic) => {
-                ListItem() {
-                  if (topic.pinned) {
-                    CompactTopicCard({
-                      topic: topic,
-                      category: this.getCategory(topic),
-                      onCardClick: (t: Topic) => {
-                        RouterManager.pushTopicDetail(t.id);
-                      },
-                      onCardLongPress: (t: Topic) => {
-                        this.openTopicPreview(t);
-                      }
-                    })
-                  } else {
-                    TopicCard({
-                      topic: topic,
-                      category: this.getCategory(topic),
-                      opAvatarUrl: this.getOpAvatarUrl(topic),
-                      onCardClick: (t: Topic) => {
-                        RouterManager.pushTopicDetail(t.id);
-                      },
-                      onCardLongPress: (t: Topic) => {
-                        this.openTopicPreview(t);
-                      }
-                    })
+            if (this.isLoading) {
+              Column() {
+                LoadingSpinner({ message: '' })
+              }
+              .width('100%')
+              .height('100%')
+              .justifyContent(FlexAlign.Center)
+              .alignItems(HorizontalAlign.Center)
+            } else if (this.errorMessage.length > 0) {
+              Column() {
+                ErrorView({
+                  title: '加载失败',
+                  message: this.errorMessage,
+                  showRetry: true,
+                  onRetry: () => {
+                    this.loadTopics(true);
                   }
-                }
-              })
+                })
+              }
+              .width('100%')
+              .height('100%')
+              .justifyContent(FlexAlign.Center)
+            } else {
+              Scroll(this.contentScroller) {
+                Column() {
+                  Blank()
+                    .height(ImmersiveHdsTitleBarHelper.getContentTopSpacerHeightVp())
+                    .width('100%')
 
-              if (this.isLoadingMore) {
-                ListItem() {
-                  Row() {
-                    LoadingProgress().width(20).height(20)
-                    Text('加载中...')
-                      .fontSize(13)
-                      .fontColor($r('app.color.on_surface_tertiary'))
-                      .margin({ left: 8 })
+                  this.FilterBar()
+
+                  Divider()
+                    .color($r('app.color.divider_light'))
+                    .strokeWidth(1)
+                    .margin({ left: 16, right: 16 })
+
+                  Column() {
+                    ForEach(this.topics, (topic: Topic) => {
+                      if (topic.pinned) {
+                        CompactTopicCard({
+                          topic: topic,
+                          category: this.getCategory(topic),
+                          onCardClick: (t: Topic) => {
+                            RouterManager.pushTopicDetail(t.id);
+                          },
+                          onCardLongPress: (t: Topic) => {
+                            this.openTopicPreview(t);
+                          }
+                        })
+                      } else {
+                        TopicCard({
+                          topic: topic,
+                          category: this.getCategory(topic),
+                          opAvatarUrl: this.getOpAvatarUrl(topic),
+                          onCardClick: (t: Topic) => {
+                            RouterManager.pushTopicDetail(t.id);
+                          },
+                          onCardLongPress: (t: Topic) => {
+                            this.openTopicPreview(t);
+                          }
+                        })
+                      }
+                    }, (topic: Topic) => topic.id.toString())
+
+                    if (this.isLoadingMore) {
+                      Row() {
+                        LoadingProgress().width(20).height(20)
+                        Text('加载中...')
+                          .fontSize(13)
+                          .fontColor($r('app.color.on_surface_tertiary'))
+                          .margin({ left: 8 })
+                      }
+                      .width('100%')
+                      .height(48)
+                      .justifyContent(FlexAlign.Center)
+                    }
                   }
                   .width('100%')
-                  .height(48)
-                  .justifyContent(FlexAlign.Center)
+                  .padding({ left: 12, right: 12, top: 8, bottom: 12 + WindowManager.getSystemAvoidAreaBottomVp() })
                 }
+                .width('100%')
+                .backgroundColor($r('app.color.background'))
               }
-            }
-            .width('100%')
-            .layoutWeight(1)
-            .padding({ left: 12, right: 12, top: 8 })
-            .backgroundColor($r('app.color.background'))
-            .onReachEnd(() => {
-              this.loadTopics(false);
-            })
-          }
-              .onRefreshing(() => {
-                this.loadTopics(true, false, true);
+              .width('100%')
+              .height('100%')
+              .backgroundColor($r('app.color.background'))
+              .scrollBar(BarState.Off)
+              .edgeEffect(EdgeEffect.Spring)
+              .onReachEnd(() => {
+                this.loadTopics(false);
               })
+            }
+          }
+          .onRefreshing(() => {
+            this.loadTopics(true, false, true);
+          })
           .layoutWeight(1)
-        }
         }
         .width('100%')
         .height('100%')
         .backgroundColor($r('app.color.background'))
-        // 全局沉浸式：为顶部状态栏安全区预留 padding，避免内容被挖孔/状态栏遮挡
-        .padding({ top: WindowManager.getSystemAvoidAreaTopVp() })
 
         this.TopicPreviewOverlay()
       }
@@ -828,7 +793,24 @@ export struct CategoryTopicPage {
         backgroundColor: $r('app.color.surface')
       })
     }
-    .hideTitleBar(true)
+    .backgroundColor($r('app.color.background'))
+    .titleMode(HdsNavDestinationTitleMode.MINI)
+    .titleBar(ImmersiveHdsTitleBarHelper.buildImmersiveTitleBarWithMenu(
+      this.getCategoryTitle(),
+      $r('sys.symbol.magnifyingglass'),
+      '搜索',
+      () => {
+        RouterManager.pushPath(RouteConstants.PAGE_SEARCH);
+      }
+    ))
+    .hideTitleBar(false)
+    .hideBackButton(false)
     .hideToolBar(true)
+    .bindToScrollable([this.contentScroller])
+    .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
+    .systemBarStyle(
+      { statusBarContentColor: ImmersiveHdsTitleBarHelper.getStatusBarContentColor() },
+      { statusBarContentColor: ImmersiveHdsTitleBarHelper.getStatusBarContentColor() }
+    )
   }
 }

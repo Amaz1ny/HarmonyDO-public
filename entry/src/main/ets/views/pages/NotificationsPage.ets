@@ -1,4 +1,4 @@
-import { HdsNavDestination } from '@kit.UIDesignKit';
+import { HdsNavDestination, HdsNavDestinationTitleMode } from '@kit.UIDesignKit';
 import { DiscourseNotification, NotificationType } from '../../models/Notification';
 import { User } from '../../models/User';
 import { ThemeManager } from '../../common/theme/ThemeManager';
@@ -12,8 +12,7 @@ import { NotificationTrackingService } from '../../services/messagebus/Notificat
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { ErrorView } from '../components/ErrorView';
 import { SmartAvatar } from '../components/SmartAvatar';
-
-const TOP_BAR_HEIGHT: number = 56;
+import { ImmersiveHdsTitleBarHelper } from '../components/ImmersiveHdsTitleBarHelper';
 
 @ComponentV2
 export struct NotificationsPage {
@@ -27,6 +26,7 @@ export struct NotificationsPage {
   @Local loadMoreFailed: boolean = false;
 
   private totalRows: number = 0;
+  private contentScroller: Scroller = new Scroller();
 
   aboutToAppear(): void {
     if (this.notifications.length === 0) {
@@ -277,9 +277,7 @@ export struct NotificationsPage {
   build() {
     HdsNavDestination() {
       Column() {
-        this.TopBar()
-
-        Refresh({ refreshing: false }) {
+        Refresh({ refreshing: this.isRefreshing }) {
           if (this.isLoading && this.notifications.length === 0 && this.errorMessage.length === 0) {
             Column() {
               LoadingSpinner({ message: '' })
@@ -302,77 +300,75 @@ export struct NotificationsPage {
             .height('100%')
             .justifyContent(FlexAlign.Center)
           } else {
-            List() {
-              if (!this.isLoading && this.notifications.length === 0) {
-                ListItem() {
-                  Column() {
-                    SymbolGlyph($r('sys.symbol.bell'))
-                      .fontSize(32)
-                      .fontColor([$r('app.color.on_surface_tertiary')])
-                      .margin({ bottom: 12 })
-                    Text('暂无通知')
-                      .fontSize(14)
-                      .fontColor($r('app.color.on_surface_secondary'))
-                  }
+            Scroll(this.contentScroller) {
+              Column() {
+                Blank()
+                  .height(ImmersiveHdsTitleBarHelper.getContentTopSpacerHeightVp())
                   .width('100%')
-                  .padding({ top: 96, bottom: 96 })
-                  .alignItems(HorizontalAlign.Center)
+
+              if (!this.isLoading && this.notifications.length === 0) {
+                Column() {
+                  SymbolGlyph($r('sys.symbol.bell'))
+                    .fontSize(32)
+                    .fontColor([$r('app.color.on_surface_tertiary')])
+                    .margin({ bottom: 12 })
+                  Text('暂无通知')
+                    .fontSize(14)
+                    .fontColor($r('app.color.on_surface_secondary'))
                 }
+                .width('100%')
+                .padding({ top: 96, bottom: 96 })
+                .alignItems(HorizontalAlign.Center)
               } else {
                 ForEach(this.notifications, (notification: DiscourseNotification) => {
-                  ListItem() {
-                    this.NotificationRow(notification)
-                  }
+                  this.NotificationRow(notification)
                 }, (notification: DiscourseNotification) => notification.id.toString())
               }
 
               if (this.loadMoreFailed) {
-                ListItem() {
-                  Row() {
-                    SymbolGlyph($r('sys.symbol.arrow_clockwise'))
-                      .fontSize(14)
-                      .fontColor([$r('app.color.primary')])
-                    Text('加载更多失败，点击重试')
-                      .fontSize(13)
-                      .fontColor($r('app.color.primary'))
-                      .margin({ left: 6 })
-                  }
-                  .width('100%')
-                  .height(44)
-                  .justifyContent(FlexAlign.Center)
-                  .onClick(() => {
-                    this.loadNotifications(false, false).catch(() => {});
-                  })
+                Row() {
+                  SymbolGlyph($r('sys.symbol.arrow_clockwise'))
+                    .fontSize(14)
+                    .fontColor([$r('app.color.primary')])
+                  Text('加载更多失败，点击重试')
+                    .fontSize(13)
+                    .fontColor($r('app.color.primary'))
+                    .margin({ left: 6 })
                 }
+                .width('100%')
+                .height(44)
+                .justifyContent(FlexAlign.Center)
+                .onClick(() => {
+                  this.loadNotifications(false, false).catch(() => {});
+                })
               } else if (this.isLoadingMore) {
-                ListItem() {
-                  Row() {
-                    LoadingProgress().width(18).height(18)
-                    Text('加载中...')
-                      .fontSize(13)
-                      .fontColor($r('app.color.on_surface_tertiary'))
-                      .margin({ left: 8 })
-                  }
-                  .width('100%')
-                  .height(44)
-                  .justifyContent(FlexAlign.Center)
-                }
-              } else if (!this.hasMore && this.notifications.length > 0) {
-                ListItem() {
-                  Text('没有更多了')
-                    .fontSize(12)
+                Row() {
+                  LoadingProgress().width(18).height(18)
+                  Text('加载中...')
+                    .fontSize(13)
                     .fontColor($r('app.color.on_surface_tertiary'))
-                    .width('100%')
-                    .textAlign(TextAlign.Center)
-                    .padding({ top: 16, bottom: 12 })
+                    .margin({ left: 8 })
                 }
+                .width('100%')
+                .height(44)
+                .justifyContent(FlexAlign.Center)
+              } else if (!this.hasMore && this.notifications.length > 0) {
+                Text('没有更多了')
+                  .fontSize(12)
+                  .fontColor($r('app.color.on_surface_tertiary'))
+                  .width('100%')
+                  .textAlign(TextAlign.Center)
+                  .padding({ top: 16, bottom: 12 })
               }
+              }
+              .width('100%')
+              .padding({ left: 16, right: 16, top: 12, bottom: 12 + WindowManager.getSystemAvoidAreaBottomVp() })
             }
             .width('100%')
             .height('100%')
-            .padding({ left: 16, right: 16, top: 12, bottom: 12 + WindowManager.getSystemAvoidAreaBottomVp() })
             .backgroundColor($r('app.color.background'))
             .scrollBar(BarState.Off)
+            .edgeEffect(EdgeEffect.Spring)
             .onReachEnd(() => {
               this.loadNotifications(false, false).catch(() => {});
             })
@@ -386,59 +382,27 @@ export struct NotificationsPage {
       .width('100%')
       .height('100%')
       .backgroundColor($r('app.color.background'))
-      .padding({ top: WindowManager.getSystemAvoidAreaTopVp() })
     }
     .backgroundColor($r('app.color.background'))
-    .hideTitleBar(true)
-    .hideToolBar(true)
-  }
-
-  @Builder
-  private TopBar() {
-    Row() {
-      Row() {
-        SymbolGlyph($r('sys.symbol.chevron_left'))
-          .fontSize(18)
-          .fontColor([$r('app.color.on_surface')])
-      }
-      .width(44)
-      .height(44)
-      .justifyContent(FlexAlign.Center)
-      .alignItems(VerticalAlign.Center)
-      .onClick(() => {
-        RouterManager.pop();
-      })
-
-      Text('通知')
-        .fontSize(17)
-        .fontWeight(FontWeight.Bold)
-        .fontColor($r('app.color.on_surface'))
-        .layoutWeight(1)
-
-      Row() {
-        if (this.isMarkingAllRead) {
-          LoadingProgress().width(16).height(16)
-        } else {
-          SymbolGlyph($r('sys.symbol.checkmark_circle'))
-            .fontSize(18)
-            .fontColor([$r('app.color.primary')])
-        }
-      }
-      .width(44)
-      .height(44)
-      .justifyContent(FlexAlign.Center)
-      .alignItems(VerticalAlign.Center)
-      .enabled(this.notifications.length > 0)
-      .opacity(this.notifications.length > 0 ? 1 : 0.3)
-      .onClick(() => {
+    .titleMode(HdsNavDestinationTitleMode.MINI)
+    .titleBar(ImmersiveHdsTitleBarHelper.buildImmersiveTitleBarWithMenu(
+      $r('app.string.tab_notifications'),
+      this.isMarkingAllRead ? $r('sys.symbol.arrow_clockwise') : $r('sys.symbol.checkmark_circle'),
+      this.isMarkingAllRead ? '正在标为已读' : '全部标为已读',
+      () => {
         this.markAllAsRead().catch(() => {});
-      })
-    }
-    .width('100%')
-    .height(TOP_BAR_HEIGHT)
-    .padding({ left: 8, right: 8 })
-    .backgroundColor($r('app.color.background'))
-    .alignItems(VerticalAlign.Center)
+      },
+      this.notifications.length > 0 && !this.isMarkingAllRead
+    ))
+    .hideTitleBar(false)
+    .hideBackButton(false)
+    .hideToolBar(true)
+    .bindToScrollable([this.contentScroller])
+    .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
+    .systemBarStyle(
+      { statusBarContentColor: ImmersiveHdsTitleBarHelper.getStatusBarContentColor() },
+      { statusBarContentColor: ImmersiveHdsTitleBarHelper.getStatusBarContentColor() }
+    )
   }
 
   @Builder

@@ -1,16 +1,15 @@
 import { webview } from '@kit.ArkWeb';
 import { hilog } from '@kit.PerformanceAnalysisKit';
-import { HdsNavDestination } from '@kit.UIDesignKit';
+import { HdsNavDestination, HdsNavDestinationTitleMode } from '@kit.UIDesignKit';
 import { ArkWebHelper } from '../../common/utils/ArkWebHelper';
-import { RouterManager } from '../../common/utils/RouterManager';
 import { WindowManager } from '../../common/utils/WindowManager';
 import { ThemeManager } from '../../common/theme/ThemeManager';
 import { CookieStore } from '../../services/network/CookieStore';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { ErrorView } from '../components/ErrorView';
+import { ImmersiveHdsTitleBarHelper } from '../components/ImmersiveHdsTitleBarHelper';
 
 const TAG: string = 'TrustLevelPage';
-const TOP_BAR_HEIGHT: number = 56;
 const CONNECT_URL: string = 'https://connect.linux.do/';
 const EXTRACT_DELAY_MS: number = 600;
 const MAX_PAGE_LOADS: number = 10;
@@ -80,6 +79,7 @@ export struct TrustLevelPage {
   private finished: boolean = false;
   private webViewReady: boolean = false;
   private loadUrl: string = CONNECT_URL;
+  private contentScroller: Scroller = new Scroller();
 
   aboutToAppear(): void {
     WindowManager.applyDefaultSystemChrome();
@@ -564,14 +564,6 @@ export struct TrustLevelPage {
 
   // ── Layout Helpers ──
 
-  private getTopSafeHeight(): number {
-    return WindowManager.getSystemAvoidAreaTopVp();
-  }
-
-  private getTopBarHeight(): number {
-    return TOP_BAR_HEIGHT + this.getTopSafeHeight();
-  }
-
   private getMetColor(): string {
     return '#43A047';
   }
@@ -695,10 +687,11 @@ export struct TrustLevelPage {
             .height('100%')
             .justifyContent(FlexAlign.Center)
           } else if (this.data !== null) {
-            Scroll() {
+            Scroll(this.contentScroller) {
               Column() {
-                // Top spacing for fixed TopBar
-                Blank().height(this.getTopBarHeight())
+                Blank()
+                  .height(ImmersiveHdsTitleBarHelper.getContentTopSpacerHeightVp())
+                  .width('100%')
 
                 if (this.data !== null) {
                   this.HeaderPanel(this.data as TrustLevelData)
@@ -707,10 +700,14 @@ export struct TrustLevelPage {
                 }
 
                 // Bottom padding
-                Blank().height(40)
+                Blank()
+                  .height(40 + WindowManager.getSystemAvoidAreaBottomVp())
+                  .width('100%')
               }
               .width('100%')
             }
+            .width('100%')
+            .height('100%')
             .scrollBar(BarState.Off)
             .edgeEffect(EdgeEffect.Spring)
           }
@@ -719,48 +716,22 @@ export struct TrustLevelPage {
           this.reload();
         })
         .visibility(this.webViewVisible ? Visibility.Hidden : Visibility.Visible)
-
-        this.TopBar()
       }
       .width('100%')
       .height('100%')
     }
     .backgroundColor($r('app.color.background'))
-    .hideTitleBar(true)
+    .titleMode(HdsNavDestinationTitleMode.MINI)
+    .titleBar(ImmersiveHdsTitleBarHelper.buildImmersiveTitleBar($r('app.string.trust_level_page_title')))
+    .hideTitleBar(false)
+    .hideBackButton(false)
     .hideToolBar(true)
-  }
-
-  // ── TopBar ──
-
-  @Builder
-  private TopBar() {
-    Row() {
-      Row() {
-        SymbolGlyph($r('sys.symbol.chevron_left'))
-          .fontSize(24)
-          .fontColor([$r('app.color.on_surface')])
-      }
-      .width(44)
-      .height(44)
-      .justifyContent(FlexAlign.Center)
-      .alignItems(VerticalAlign.Center)
-      .onClick(() => {
-        RouterManager.pop();
-      })
-
-      Text($r('app.string.trust_level_page_title'))
-        .fontSize(18)
-        .fontWeight(FontWeight.Bold)
-        .fontColor($r('app.color.on_surface'))
-        .layoutWeight(1)
-        .textAlign(TextAlign.Center)
-
-      Blank().width(44)
-    }
-    .width('100%')
-    .height(this.getTopBarHeight())
-    .padding({ top: this.getTopSafeHeight(), left: 4, right: 4 })
-    .backgroundColor($r('app.color.background'))
+    .bindToScrollable([this.contentScroller])
+    .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
+    .systemBarStyle(
+      { statusBarContentColor: ImmersiveHdsTitleBarHelper.getStatusBarContentColor() },
+      { statusBarContentColor: ImmersiveHdsTitleBarHelper.getStatusBarContentColor() }
+    )
   }
 
   // ── Header Panel ──
@@ -1032,13 +1003,11 @@ export struct TrustLevelPage {
             .fontSize(18)
             .fontColor([veto.isMet ? this.getMetColor() : this.getUnmetColor()])
 
-          Column({ space: 2 }) {
-            Text(veto.label)
-              .fontSize(13)
-              .fontColor($r('app.color.on_surface'))
-          }
-          .layoutWeight(1)
-          .margin({ left: 10 })
+          Text(veto.label)
+            .fontSize(13)
+            .fontColor($r('app.color.on_surface'))
+            .layoutWeight(1)
+            .margin({ left: 10 })
 
           Text(veto.value)
             .fontSize(13)

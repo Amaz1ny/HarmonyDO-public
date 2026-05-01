@@ -1,15 +1,13 @@
 import { webview } from '@kit.ArkWeb';
 import { hilog } from '@kit.PerformanceAnalysisKit';
-import { HdsNavDestination } from '@kit.UIDesignKit';
+import { HdsNavDestination, HdsNavDestinationTitleMode } from '@kit.UIDesignKit';
 import { ArkWebHelper } from '../../common/utils/ArkWebHelper';
 import { ExternalLinkService } from '../../common/utils/ExternalLinkService';
-import { RouterManager } from '../../common/utils/RouterManager';
 import { UrlUtils } from '../../common/utils/UrlUtils';
-import { WindowManager } from '../../common/utils/WindowManager';
 import { CookieStore } from '../../services/network/CookieStore';
 import { LoadingSpinner } from '../components/LoadingSpinner';
+import { ImmersiveHdsTitleBarHelper } from '../components/ImmersiveHdsTitleBarHelper';
 
-const TOP_BAR_HEIGHT: number = 56;
 const DEFAULT_TITLE: string = '网页';
 const BLANK_URL: string = 'about:blank';
 const TAG: string = 'WebViewPage';
@@ -134,70 +132,12 @@ export struct WebViewPage {
     this.errorMessage = message.length > 0 ? message : '页面加载失败';
   }
 
-  @Builder
-  TopBar() {
-    Row() {
-      Row() {
-        SymbolGlyph($r('sys.symbol.chevron_left'))
-          .fontSize(18)
-          .fontColor([$r('app.color.on_surface')])
-      }
-      .width(44)
-      .height(44)
-      .justifyContent(FlexAlign.Center)
-      .alignItems(VerticalAlign.Center)
-      .onClick(() => {
-        RouterManager.pop();
-      })
-
-      Text(this.getDisplayTitle())
-        .fontSize(17)
-        .fontWeight(FontWeight.Bold)
-        .fontColor($r('app.color.on_surface'))
-        .layoutWeight(1)
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-
-      Row() {
-        Row() {
-          SymbolGlyph($r('sys.symbol.arrow_clockwise'))
-            .fontSize(18)
-            .fontColor([$r('app.color.on_surface')])
-        }
-        .width(44)
-        .height(44)
-        .justifyContent(FlexAlign.Center)
-        .alignItems(VerticalAlign.Center)
-        .onClick(() => {
-          this.reloadPage();
-        })
-
-        Row() {
-          SymbolGlyph($r('sys.symbol.link'))
-            .fontSize(17)
-            .fontColor([$r('app.color.on_surface')])
-        }
-        .width(44)
-        .height(44)
-        .justifyContent(FlexAlign.Center)
-        .alignItems(VerticalAlign.Center)
-        .onClick(() => {
-          this.openInBrowser();
-        })
-      }
-      .alignItems(VerticalAlign.Center)
-    }
-    .width('100%')
-    .height(TOP_BAR_HEIGHT)
-    .padding({ left: 8, right: 8 })
-    .backgroundColor($r('app.color.background'))
-    .alignItems(VerticalAlign.Center)
-  }
-
   build() {
     HdsNavDestination() {
       Column() {
-        this.TopBar()
+        Blank()
+          .height(ImmersiveHdsTitleBarHelper.getContentTopSpacerHeightVp())
+          .width('100%')
 
         if (this.progress > 0 && this.progress < 100 && this.errorMessage.length === 0) {
           Progress({ value: this.progress, total: 100 })
@@ -222,6 +162,12 @@ export struct WebViewPage {
               })
               .onProgressChange((event: OnProgressChangeEvent) => {
                 this.progress = event.newProgress;
+              })
+              .onTitleReceive((event: OnTitleReceiveEvent) => {
+                const pageTitle: string = event.title.trim();
+                if (pageTitle.length > 0) {
+                  this.currentTitle = pageTitle;
+                }
               })
               .onPageEnd(() => {
                 this.isLoading = false;
@@ -309,11 +255,30 @@ export struct WebViewPage {
       }
       .width('100%')
       .height('100%')
-      .padding({ top: WindowManager.getSystemAvoidAreaTopVp() })
       .backgroundColor($r('app.color.background'))
     }
-    .hideTitleBar(true)
-    .hideToolBar(true)
     .backgroundColor($r('app.color.background'))
+    .titleMode(HdsNavDestinationTitleMode.MINI)
+    .titleBar(ImmersiveHdsTitleBarHelper.buildImmersiveTitleBarWithTwoMenus(
+      this.getDisplayTitle(),
+      $r('sys.symbol.arrow_clockwise'),
+      '刷新',
+      () => {
+        this.reloadPage();
+      },
+      $r('sys.symbol.link'),
+      '在浏览器打开',
+      () => {
+        this.openInBrowser();
+      }
+    ))
+    .hideTitleBar(false)
+    .hideBackButton(false)
+    .hideToolBar(true)
+    .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
+    .systemBarStyle(
+      { statusBarContentColor: ImmersiveHdsTitleBarHelper.getStatusBarContentColor() },
+      { statusBarContentColor: ImmersiveHdsTitleBarHelper.getStatusBarContentColor() }
+    )
   }
 }

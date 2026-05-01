@@ -21,7 +21,7 @@ export function buildOpenSourceSections(): OpenSourceInfoSection[] {
       title: '项目说明',
       items: [
         {
-          title: 'HarmonyDO',
+          title: 'LDO社区',
           subtitle: 'Linux.do 的鸿蒙原生社区客户端',
           actionType: OpenSourceItemActionType.None,
           url: ''

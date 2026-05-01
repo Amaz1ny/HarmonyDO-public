@@ -1,9 +1,8 @@
 import { webview } from '@kit.ArkWeb';
-import { HdsNavDestination } from '@kit.UIDesignKit';
+import { HdsNavDestination, HdsNavDestinationTitleMode } from '@kit.UIDesignKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { AppConstants } from '../../common/constants/AppConstants';
 import { ArkWebHelper } from '../../common/utils/ArkWebHelper';
-import { WindowManager } from '../../common/utils/WindowManager';
 import { RouterManager } from '../../common/utils/RouterManager';
 import { ToastService } from '../../common/utils/ToastService';
 import { AuthService } from '../../services/auth/AuthService';
@@ -15,10 +14,10 @@ import { User, UserSummary } from '../../models/User';
 import { FeatureSettingsService } from '../../services/storage/FeatureSettingsService';
 import { LoginCredential, LoginCredentialStore } from '../../services/auth/LoginCredentialStore';
 import { LoginAutoFillUtils } from '../../common/utils/LoginAutoFillUtils';
+import { ImmersiveHdsTitleBarHelper } from '../components/ImmersiveHdsTitleBarHelper';
 
 const TAG: string = 'LoginPage';
 const LOGIN_URL: string = `${AppConstants.BASE_URL}/login`;
-const TOP_BAR_HEIGHT: number = 56;
 const LOGIN_STATE_POLL_MS: number = 900;
 const NATIVE_USER_RETRY_COUNT: number = 3;
 const NATIVE_USER_RETRY_INTERVAL_MS: number = 400;
@@ -670,54 +669,12 @@ export struct LoginPage {
     this.errorMessage = message.length > 0 ? message : '页面加载失败';
   }
 
-  @Builder
-  private TopBar() {
-    Row() {
-      Row() {
-        SymbolGlyph($r('sys.symbol.chevron_left'))
-          .fontSize(18)
-          .fontColor([$r('app.color.on_surface')])
-      }
-      .width(44)
-      .height(44)
-      .justifyContent(FlexAlign.Center)
-      .alignItems(VerticalAlign.Center)
-      .onClick(() => {
-        RouterManager.pop();
-      })
-
-      Text('登录 Linux.do')
-        .fontSize(17)
-        .fontWeight(FontWeight.Bold)
-        .fontColor($r('app.color.on_surface'))
-        .layoutWeight(1)
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-
-      Row() {
-        SymbolGlyph($r('sys.symbol.arrow_clockwise'))
-          .fontSize(18)
-          .fontColor([$r('app.color.on_surface')])
-      }
-      .width(44)
-      .height(44)
-      .justifyContent(FlexAlign.Center)
-      .alignItems(VerticalAlign.Center)
-      .onClick(() => {
-        this.reloadPage();
-      })
-    }
-    .width('100%')
-    .height(TOP_BAR_HEIGHT)
-    .padding({ left: 8, right: 8 })
-    .backgroundColor($r('app.color.background'))
-    .alignItems(VerticalAlign.Center)
-  }
-
   build() {
     HdsNavDestination() {
       Column() {
-        this.TopBar()
+        Blank()
+          .height(ImmersiveHdsTitleBarHelper.getContentTopSpacerHeightVp())
+          .width('100%')
 
         if (this.progress > 0 && this.progress < 100 && this.errorMessage.length === 0) {
           Progress({ value: this.progress, total: 100 })
@@ -829,11 +786,25 @@ export struct LoginPage {
       }
       .width('100%')
       .height('100%')
-      .padding({ top: WindowManager.getSystemAvoidAreaTopVp() })
       .backgroundColor($r('app.color.background'))
     }
-    .hideTitleBar(true)
-    .hideToolBar(true)
     .backgroundColor($r('app.color.background'))
+    .titleMode(HdsNavDestinationTitleMode.MINI)
+    .titleBar(ImmersiveHdsTitleBarHelper.buildImmersiveTitleBarWithMenu(
+      '登录 Linux.do',
+      $r('sys.symbol.arrow_clockwise'),
+      '刷新登录页',
+      () => {
+        this.reloadPage();
+      }
+    ))
+    .hideTitleBar(false)
+    .hideBackButton(false)
+    .hideToolBar(true)
+    .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
+    .systemBarStyle(
+      { statusBarContentColor: ImmersiveHdsTitleBarHelper.getStatusBarContentColor() },
+      { statusBarContentColor: ImmersiveHdsTitleBarHelper.getStatusBarContentColor() }
+    )
   }
 }

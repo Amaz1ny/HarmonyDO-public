@@ -1,7 +1,8 @@
-import { HdsNavDestination } from '@kit.UIDesignKit';
-import { RouterManager } from '../../common/utils/RouterManager';
+import { HdsNavDestination, HdsNavDestinationTitleMode } from '@kit.UIDesignKit';
+import { WindowManager } from '../../common/utils/WindowManager';
 import { ExternalLinkService } from '../../common/utils/ExternalLinkService';
 import { ToastService } from '../../common/utils/ToastService';
+import { ImmersiveHdsTitleBarHelper } from '../components/ImmersiveHdsTitleBarHelper';
 import {
   buildOpenSourceSections,
   OpenSourceInfoItem,
@@ -11,6 +12,8 @@ import {
 
 @ComponentV2
 export struct OpenSourceInfoPage {
+  private contentScroller: Scroller = new Scroller();
+
   private onItemClicked(item: OpenSourceInfoItem): void {
     if (item.actionType !== OpenSourceItemActionType.External || item.url.length === 0) {
       return;
@@ -18,36 +21,6 @@ export struct OpenSourceInfoPage {
     ExternalLinkService.openInBrowser(item.url).catch(() => {
       ToastService.show('无法打开浏览器');
     });
-  }
-
-  @Builder
-  private TopBar() {
-    Row() {
-      Row() {
-        SymbolGlyph($r('sys.symbol.chevron_left'))
-          .fontSize(18)
-          .fontColor([$r('app.color.on_surface')]);
-      }
-      .width(44)
-      .height(44)
-      .justifyContent(FlexAlign.Center)
-      .alignItems(VerticalAlign.Center)
-      .onClick(() => RouterManager.pop());
-
-      Text('开源信息')
-        .layoutWeight(1)
-        .textAlign(TextAlign.Center)
-        .fontSize(18)
-        .fontWeight(FontWeight.Medium)
-        .fontColor($r('app.color.on_surface'));
-
-      Blank().width(44).height(44);
-    }
-    .width('100%')
-    .height(56)
-    .padding({ left: 8, right: 8 })
-    .backgroundColor($r('app.color.background'))
-    .alignItems(VerticalAlign.Center);
   }
 
   @Builder
@@ -100,9 +73,12 @@ export struct OpenSourceInfoPage {
   build() {
     HdsNavDestination() {
       Column() {
-        this.TopBar();
-        Scroll() {
+        Scroll(this.contentScroller) {
           Column() {
+            Blank()
+              .height(ImmersiveHdsTitleBarHelper.getContentTopSpacerHeightVp())
+              .width('100%');
+
             ForEach(buildOpenSourceSections(), (section: OpenSourceInfoSection, sectionIndex: number) => {
               this.SectionTitle(section.title);
               Column() {
@@ -121,14 +97,28 @@ export struct OpenSourceInfoPage {
             }, (section: OpenSourceInfoSection) => section.title);
           }
           .width('100%')
-          .padding({ top: 12, bottom: 20 });
+          .padding({ top: 12, bottom: 20 + WindowManager.getSystemAvoidAreaBottomVp() });
         }
         .scrollBar(BarState.Off)
-        .edgeEffect(EdgeEffect.Spring);
+        .edgeEffect(EdgeEffect.Spring)
+        .layoutWeight(1)
+        .width('100%');
       }
       .width('100%')
       .height('100%')
       .backgroundColor($r('app.color.background'));
     }
+    .backgroundColor($r('app.color.background'))
+    .titleMode(HdsNavDestinationTitleMode.MINI)
+    .titleBar(ImmersiveHdsTitleBarHelper.buildImmersiveTitleBar('开源信息'))
+    .hideTitleBar(false)
+    .hideBackButton(false)
+    .hideToolBar(true)
+    .bindToScrollable([this.contentScroller])
+    .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
+    .systemBarStyle(
+      { statusBarContentColor: ImmersiveHdsTitleBarHelper.getStatusBarContentColor() },
+      { statusBarContentColor: ImmersiveHdsTitleBarHelper.getStatusBarContentColor() }
+    );
   }
 }

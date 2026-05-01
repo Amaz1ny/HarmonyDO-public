@@ -1,7 +1,7 @@
 import { webview } from '@kit.ArkWeb';
 import { http } from '@kit.NetworkKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
-import { HdsNavDestination } from '@kit.UIDesignKit';
+import { HdsNavDestination, HdsNavDestinationTitleMode } from '@kit.UIDesignKit';
 import { AppConstants } from '../../common/constants/AppConstants';
 import { ArkWebHelper } from '../../common/utils/ArkWebHelper';
 import { WindowManager } from '../../common/utils/WindowManager';
@@ -10,6 +10,7 @@ import { CookieStore } from '../../services/network/CookieStore';
 import { CfChallengeService, CfVerifyContext } from '../../services/network/CfChallengeService';
 import { CfClearanceRefreshService } from '../../services/network/CfClearanceRefreshService';
 import { LoadingSpinner } from '../components/LoadingSpinner';
+import { ImmersiveHdsTitleBarHelper } from '../components/ImmersiveHdsTitleBarHelper';
 
 const TAG: string = 'CfChallengePage';
 const VERIFY_URL: string = `${AppConstants.BASE_URL}/challenge`;
@@ -1126,7 +1127,7 @@ export struct CfChallengePage {
         this.onCancel();
       })
 
-      Text('安全验证')
+      Text($r('app.string.cf_challenge_title'))
         .fontSize(16)
         .fontWeight(FontWeight.Bold)
         .fontColor($r('app.color.on_surface'))
@@ -1136,7 +1137,7 @@ export struct CfChallengePage {
 
       // 重试
       if (this.errorMessage.length > 0) {
-        Text('重载')
+        Text($r('app.string.cf_challenge_reload'))
           .fontSize(14)
           .fontColor($r('app.color.primary'))
           .margin({ right: 12 })
@@ -1155,7 +1156,9 @@ export struct CfChallengePage {
   @Builder
   PageContent() {
       Column() {
-        this.TopBar()
+        if (this.overlayMode) {
+          this.TopBar()
+        }
 
         if (this.progress > 0 && this.progress < 100 && this.errorMessage.length === 0) {
           Progress({ value: this.progress, total: 100 })
@@ -1282,8 +1285,27 @@ export struct CfChallengePage {
       HdsNavDestination() {
         this.PageContent()
       }
-      .hideTitleBar(true)
+      .titleMode(HdsNavDestinationTitleMode.MINI)
+      .titleBar(ImmersiveHdsTitleBarHelper.buildImmersiveTitleBarWithMenu(
+        $r('app.string.cf_challenge_title'),
+        $r('sys.symbol.arrow_clockwise'),
+        $r('app.string.cf_challenge_reload_page'),
+        () => {
+          this.onRetry();
+        }
+      ))
+      .hideTitleBar(false)
+      .hideBackButton(false)
       .hideToolBar(true)
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
+      .systemBarStyle(
+        { statusBarContentColor: ImmersiveHdsTitleBarHelper.getStatusBarContentColor() },
+        { statusBarContentColor: ImmersiveHdsTitleBarHelper.getStatusBarContentColor() }
+      )
+      .onBackPressed(() => {
+        this.onCancel();
+        return true;
+      })
       .backgroundColor($r('app.color.background'))
     }
   }

@@ -125,6 +125,22 @@
       "value": "#66000000"
     },
     {
+      "name": "topic_detail_top_bar_tint",
+      "value": "#5C24262B"
+    },
+    {
+      "name": "topic_detail_top_bar_divider",
+      "value": "#18FFFFFF"
+    },
+    {
+      "name": "topic_detail_search_field_tint",
+      "value": "#472A2A2A"
+    },
+    {
+      "name": "topic_detail_search_field_stroke",
+      "value": "#1FFFFFFF"
+    },
+    {
       "name": "tab_glass_mask",
       "value": "#331E1E1E"
     },
@@ -134,7 +150,7 @@
     },
     {
       "name": "fab_glass_tint",
-      "value": "#2E2A2A2A"
+      "value": "#242A2A2A"
     },
     {
       "name": "tab_glass_stroke",
@@ -142,11 +158,87 @@
     },
     {
       "name": "fab_glass_stroke",
-      "value": "#12FFFFFF"
+      "value": "#18FFFFFF"
+    },
+    {
+      "name": "fab_menu_glass_tint",
+      "value": "#522A2A2A"
+    },
+    {
+      "name": "fab_menu_glass_stroke",
+      "value": "#22FFFFFF"
+    },
+    {
+      "name": "profile_hero_button_tint",
+      "value": "#1FFFFFFF"
+    },
+    {
+      "name": "profile_hero_button_stroke",
+      "value": "#28FFFFFF"
+    },
+    {
+      "name": "profile_hero_tab_surface",
+      "value": "#FF1E1E1E"
+    },
+    {
+      "name": "profile_hero_tab_divider",
+      "value": "#1FFFFFFF"
+    },
+    {
+      "name": "profile_top_bar_tint",
+      "value": "#5C1E1F23"
+    },
+    {
+      "name": "profile_top_bar_divider",
+      "value": "#1FFFFFFF"
+    },
+    {
+      "name": "profile_top_action_tint",
+      "value": "#472A2A2A"
+    },
+    {
+      "name": "profile_top_action_stroke",
+      "value": "#28FFFFFF"
+    },
+    {
+      "name": "topic_list_top_bar_tint",
+      "value": "#5224262B"
+    },
+    {
+      "name": "topic_list_top_bar_divider",
+      "value": "#1AFFFFFF"
+    },
+    {
+      "name": "topic_list_search_field_tint",
+      "value": "#3D2A2A2A"
+    },
+    {
+      "name": "topic_list_search_field_stroke",
+      "value": "#1FFFFFFF"
+    },
+    {
+      "name": "topic_list_action_tint",
+      "value": "#422A2A2A"
+    },
+    {
+      "name": "topic_list_action_stroke",
+      "value": "#26FFFFFF"
     },
     {
       "name": "tab_glass_shadow",
       "value": "#44000000"
+    },
+    {
+      "name": "tab_floating_surface_tint",
+      "value": "#102A2A2A"
+    },
+    {
+      "name": "tab_floating_outline",
+      "value": "#26FFFFFF"
+    },
+    {
+      "name": "tab_floating_shadow",
+      "value": "#66000000"
     },
     {
       "name": "tab_glass_divider",
@@ -187,6 +279,22 @@
     {
       "name": "image_preview_top_bar",
       "value": "#66000000"
+    },
+    {
+      "name": "image_preview_control_tint",
+      "value": "#52000000"
+    },
+    {
+      "name": "image_preview_control_stroke",
+      "value": "#33FFFFFF"
+    },
+    {
+      "name": "image_preview_control_shadow",
+      "value": "#80000000"
+    },
+    {
+      "name": "image_preview_control_icon",
+      "value": "#FFFFFFFF"
     },
     {
       "name": "skeleton_base",

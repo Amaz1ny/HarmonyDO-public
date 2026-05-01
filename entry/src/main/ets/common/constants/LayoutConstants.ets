@@ -15,6 +15,8 @@ export const FLOATING_TAB_BAR_WIDTH_SMALL_VP: number = 280;
 export const FLOATING_TAB_BAR_WIDTH_MEDIUM_VP: number = 320;
 export const FLOATING_TAB_BAR_WIDTH_LARGE_VP: number = 400;
 export const FLOATING_TAB_BAR_OPACITY: number = 0.72;
+export const FLOATING_TAB_BAR_SHADOW_RADIUS_VP: number = 24;
+export const FLOATING_TAB_BAR_SHADOW_OFFSET_Y_VP: number = 10;
 
 // 列表/页面底部额外留白：用于确保最后一项不被悬浮 TabBar 覆盖，并保留轻微呼吸感
 export const FLOATING_TAB_BAR_CONTENT_EXTRA_PADDING_VP: number = 12;

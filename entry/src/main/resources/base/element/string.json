@@ -2,19 +2,15 @@
   "string": [
     {
       "name": "module_desc",
-      "value": "HarmonyDO - Linux.do 鸿蒙原生应用"
+      "value": "LDO社区 - Linux.do 第三方鸿蒙客户端"
     },
     {
       "name": "EntryAbility_desc",
-      "value": "HarmonyDO 鸿蒙原生应用"
+      "value": "LDO社区 - Linux.do 第三方鸿蒙客户端"
     },
     {
       "name": "EntryAbility_label",
-      "value": "HarmonyDO"
-    },
-    {
-      "name": "app_name",
-      "value": "HarmonyDO"
+      "value": "LDO社区"
     },
     {
       "name": "tab_home",
@@ -27,6 +23,18 @@
     {
       "name": "tab_profile",
       "value": "我的"
+    },
+    {
+      "name": "cf_challenge_title",
+      "value": "安全验证"
+    },
+    {
+      "name": "cf_challenge_reload",
+      "value": "重载"
+    },
+    {
+      "name": "cf_challenge_reload_page",
+      "value": "重载验证页"
     },
     {
       "name": "all_categories",
@@ -434,7 +442,7 @@
     },
     {
       "name": "profile_about_app",
-      "value": "关于 HarmonyDO"
+      "value": "关于 LDO社区"
     },
     {
       "name": "profile_workspace_topics_hint",

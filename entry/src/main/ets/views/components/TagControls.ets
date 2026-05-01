@@ -66,6 +66,7 @@ export struct TagSelectionSheet {
   @Param categoryId: number | null = null;
   @Param maxTags: number = 5;
   @Param showHeaderBar: boolean = false;
+  @Param showDragHandle: boolean = true;
 
   @Event onToggleTag: (tagName: string) => void = () => {};
   @Event onDone: () => void = () => {};
@@ -162,17 +163,19 @@ export struct TagSelectionSheet {
 
   build() {
     Column() {
-      // 拖动柄（自绘，避免依赖 Sheet 自带 close/dragbar）
-      Column() {
-        Rect()
-          .width(32)
-          .height(4)
-          .radius(2)
-          .fill($r('app.color.divider_light'))
+      if (this.showDragHandle) {
+        // 拖动柄（自绘，避免依赖 Sheet 自带 close/dragbar）
+        Column() {
+          Rect()
+            .width(32)
+            .height(4)
+            .radius(2)
+            .fill($r('app.color.divider_light'))
+        }
+        .width('100%')
+        .padding({ top: 12 })
+        .alignItems(HorizontalAlign.Center)
       }
-      .width('100%')
-      .padding({ top: 12 })
-      .alignItems(HorizontalAlign.Center)
 
       if (this.showHeaderBar) {
         Row() {

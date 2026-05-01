@@ -21,6 +21,8 @@ import { TopicListPreferences } from '../../services/storage/TopicListPreference
 import { HoldingHandService, HoldingHandState } from '../../services/device/HoldingHandService';
 import { CreateTopicComposerSheet } from '../components/CreateTopicComposerSheet';
 import { resolveTopicListFabRefreshModeByScroll } from '../../common/utils/TopicListFabModeUtils';
+import { TopicListChromeHelper } from '../components/TopicListChromeHelper';
+import { FloatingActionChromeHelper } from '../components/FloatingActionChromeHelper';
 import {
   FLOATING_TAB_BAR_HEIGHT_VP,
   FLOATING_TAB_BAR_MARGIN_BOTTOM_VP,
@@ -29,10 +31,10 @@ import {
 } from '../../common/constants/LayoutConstants';
 
 const TAG: string = 'TopicListPage';
-const SEARCH_BAR_HEIGHT: number = 56;
-const TAB_ROW_HEIGHT: number = 36;
-const SORT_BAR_HEIGHT: number = 44;
-const COLLAPSIBLE_HEIGHT: number = SEARCH_BAR_HEIGHT + SORT_BAR_HEIGHT;
+const SEARCH_BAR_HEIGHT: number = TopicListChromeHelper.getSearchBarHeightVp();
+const TAB_ROW_HEIGHT: number = TopicListChromeHelper.getTabRowHeightVp();
+const SORT_BAR_HEIGHT: number = TopicListChromeHelper.getSortBarHeightVp();
+const COLLAPSIBLE_HEIGHT: number = TopicListChromeHelper.getCollapsibleHeightVp();
 const BAR_VISIBILITY_EPS: number = 0.01;
 const FAB_BOTTOM_MARGIN_VP: number = 16;
 const PULL_REFRESH_REARM_DELAY_MS: number = 160;
@@ -621,7 +623,9 @@ export struct TopicListPage {
   }
 
   private getHomeFabTranslateY(visibility: number): number {
-    return -(56 + FAB_BOTTOM_MARGIN_VP + this.getFloatingTabBarReservedBottomForVisibilityVp(visibility));
+    return FloatingActionChromeHelper.getBottomTranslateYVp(
+      FAB_BOTTOM_MARGIN_VP + this.getFloatingTabBarReservedBottomForVisibilityVp(visibility)
+    );
   }
 
   private isHomeFabLeftAligned(): boolean {
@@ -633,7 +637,7 @@ export struct TopicListPage {
   }
 
   private getHomeFabTranslateX(): number {
-    return this.isHomeFabLeftAligned() ? 0 : -72;
+    return this.isHomeFabLeftAligned() ? 0 : FloatingActionChromeHelper.getRightTranslateXVp();
   }
 
   private isListScrollerAtTop(): boolean {
@@ -1312,10 +1316,28 @@ export struct TopicListPage {
             .fontColor($r('app.color.on_surface'))
         }
         .padding({ left: 14, right: 14, top: 11, bottom: 11 })
-        .backgroundColor($r('app.color.surface'))
-        .borderRadius(16)
-        .border({ width: 0.5, color: $r('app.color.fab_glass_stroke') })
-        .shadow({ radius: 18, color: $r('app.color.tab_glass_shadow'), offsetX: 0, offsetY: 10 })
+        .backgroundColor(Color.Transparent)
+        .backgroundEffect(
+          {
+            radius: FloatingActionChromeHelper.getMenuBlurRadiusVp(),
+            saturation: FloatingActionChromeHelper.getMenuSaturation(),
+            brightness: FloatingActionChromeHelper.getMenuBrightness(),
+            color: $r('app.color.fab_menu_glass_tint'),
+            adaptiveColor: AdaptiveColor.DEFAULT,
+            policy: BlurStyleActivePolicy.ALWAYS_ACTIVE,
+            inactiveColor: $r('app.color.fab_menu_glass_tint')
+          },
+          { disableSystemAdaptation: true }
+        )
+        .borderRadius(FloatingActionChromeHelper.getMenuRadiusVp())
+        .border({ width: 0.5, color: $r('app.color.fab_menu_glass_stroke') })
+        .clip(true)
+        .shadow({
+          radius: FloatingActionChromeHelper.getMenuShadowRadiusVp(),
+          color: $r('app.color.tab_glass_shadow'),
+          offsetX: 0,
+          offsetY: FloatingActionChromeHelper.getMenuShadowOffsetYVp()
+        })
         .onClick(() => {
           this.openDraftsPage();
         })
@@ -1334,10 +1356,28 @@ export struct TopicListPage {
             .fontColor($r('app.color.on_surface'))
         }
         .padding({ left: 14, right: 14, top: 11, bottom: 11 })
-        .backgroundColor($r('app.color.surface'))
-        .borderRadius(16)
-        .border({ width: 0.5, color: $r('app.color.fab_glass_stroke') })
-        .shadow({ radius: 18, color: $r('app.color.tab_glass_shadow'), offsetX: 0, offsetY: 10 })
+        .backgroundColor(Color.Transparent)
+        .backgroundEffect(
+          {
+            radius: FloatingActionChromeHelper.getMenuBlurRadiusVp(),
+            saturation: FloatingActionChromeHelper.getMenuSaturation(),
+            brightness: FloatingActionChromeHelper.getMenuBrightness(),
+            color: $r('app.color.fab_menu_glass_tint'),
+            adaptiveColor: AdaptiveColor.DEFAULT,
+            policy: BlurStyleActivePolicy.ALWAYS_ACTIVE,
+            inactiveColor: $r('app.color.fab_menu_glass_tint')
+          },
+          { disableSystemAdaptation: true }
+        )
+        .borderRadius(FloatingActionChromeHelper.getMenuRadiusVp())
+        .border({ width: 0.5, color: $r('app.color.fab_menu_glass_stroke') })
+        .clip(true)
+        .shadow({
+          radius: FloatingActionChromeHelper.getMenuShadowRadiusVp(),
+          color: $r('app.color.tab_glass_shadow'),
+          offsetX: 0,
+          offsetY: FloatingActionChromeHelper.getMenuShadowOffsetYVp()
+        })
         .onClick(() => {
           this.openCreateTopicSheet();
         })
@@ -1376,15 +1416,15 @@ export struct TopicListPage {
         .fontSize(22)
         .fontColor([$r('app.color.primary')])
     }
-    .width(56)
-    .height(56)
-    .borderRadius(28)
+    .width(FloatingActionChromeHelper.getButtonSizeVp())
+    .height(FloatingActionChromeHelper.getButtonSizeVp())
+    .borderRadius(FloatingActionChromeHelper.getHomeRadiusVp())
     .backgroundColor(Color.Transparent)
     .backgroundEffect(
       {
-        radius: 64,
-        saturation: 2.2,
-        brightness: 1.08,
+        radius: FloatingActionChromeHelper.getBlurRadiusVp(),
+        saturation: FloatingActionChromeHelper.getSaturation(),
+        brightness: FloatingActionChromeHelper.getBrightness(),
         color: $r('app.color.fab_glass_tint'),
         adaptiveColor: AdaptiveColor.DEFAULT,
         policy: BlurStyleActivePolicy.ALWAYS_ACTIVE,
@@ -1394,7 +1434,12 @@ export struct TopicListPage {
     )
     .border({ width: 0.5, color: $r('app.color.fab_glass_stroke') })
     .clip(true)
-    .shadow({ radius: 18, color: $r('app.color.tab_glass_shadow'), offsetX: 0, offsetY: 10 })
+    .shadow({
+      radius: FloatingActionChromeHelper.getShadowRadiusVp(),
+      color: $r('app.color.tab_glass_shadow'),
+      offsetX: 0,
+      offsetY: FloatingActionChromeHelper.getShadowOffsetYVp()
+    })
     .position({ x: this.getHomeFabPositionX(), y: '100%' })
     .translate({ x: this.getHomeFabTranslateX(), y: this.getHomeFabTranslateY(visibility) })
     .animation({ duration: 220, curve: Curve.EaseOut })
@@ -1465,8 +1510,22 @@ export struct TopicListPage {
     .padding({ left: 8, right: 8, top: 7, bottom: 7 })
     .alignItems(VerticalAlign.Center)
     .margin({ right: 4 })
-    .backgroundColor($r('app.color.search_bar_background'))
+    .backgroundColor(Color.Transparent)
+    .backgroundEffect(
+      {
+        radius: TopicListChromeHelper.getControlBlurRadiusVp(),
+        saturation: 1.45,
+        brightness: 1.03,
+        color: $r('app.color.topic_list_action_tint'),
+        adaptiveColor: AdaptiveColor.DEFAULT,
+        policy: BlurStyleActivePolicy.ALWAYS_ACTIVE,
+        inactiveColor: $r('app.color.topic_list_action_tint')
+      },
+      { disableSystemAdaptation: true }
+    )
+    .border({ width: 0.5, color: $r('app.color.topic_list_action_stroke') })
     .borderRadius(12)
+    .clip(true)
     .opacity(this.clamp(0.65 + 0.35 * Math.sqrt(this.clamp(progress, 0, 1)), 0, 1))
     .bindMenu(this.CompactFilterMenuBuilder())
   }
@@ -1722,6 +1781,7 @@ export struct TopicListPage {
       }
       .width('100%')
       .height('100%')
+      .zIndex(30)
     }
   }
 
@@ -1877,18 +1937,6 @@ export struct TopicListPage {
   @Builder
   CategorySheetBuilder() {
     Column() {
-      // 拖动柄
-      Column() {
-        Rect()
-          .width(32)
-          .height(4)
-          .radius(2)
-          .fill($r('app.color.divider_light'))
-      }
-      .width('100%')
-      .padding({ top: 12 })
-      .alignItems(HorizontalAlign.Center)
-
       // 标题栏
       Row() {
         if (this.isEditingCategory) {
@@ -2235,6 +2283,7 @@ export struct TopicListPage {
       selectedTags: this.draftSelectedTags,
       categoryId: this.getCurrentQueryCategoryId(),
       maxTags: 5,
+      showDragHandle: false,
       onToggleTag: (t: string) => {
         this.toggleDraftTag(t);
       },
@@ -2273,199 +2322,298 @@ export struct TopicListPage {
     })
   }
 
-  build() {
-    Stack() {
-      Column() {
-        // ─── 1. 搜索栏 ───
-        if (this.getSearchProgress() < 1) {
-          Column() {
-            Row() {
-              Row() {
-                SymbolGlyph($r('sys.symbol.magnifyingglass'))
-                  .fontSize(18)
-                  .fontColor([$r('app.color.on_surface_tertiary')])
-                  .margin({ right: 8 })
-                Text($r('app.string.search_hint'))
-                  .fontSize(15)
-                  .fontColor($r('app.color.on_surface_tertiary'))
-                  .layoutWeight(1)
-              }
-              .layoutWeight(1)
-              .height(40)
-              .padding({ left: 16, right: 16 })
-              .backgroundColor($r('app.color.search_background'))
-              .borderRadius(20)
-              .alignItems(VerticalAlign.Center)
-              .onClick(() => {
-                RouterManager.pushPath(RouteConstants.PAGE_SEARCH);
-              })
+  @Builder
+  private HeaderNotificationButton() {
+    Stack({ alignContent: Alignment.TopEnd }) {
+      Row() {
+        SymbolGlyph($r('sys.symbol.bell'))
+          .fontSize(18)
+          .fontColor([$r('app.color.on_surface')])
+      }
+      .width(TopicListChromeHelper.getActionSizeVp())
+      .height(TopicListChromeHelper.getActionSizeVp())
+      .borderRadius(TopicListChromeHelper.getActionSizeVp() / 2)
+      .backgroundColor(Color.Transparent)
+      .backgroundEffect(
+        {
+          radius: TopicListChromeHelper.getControlBlurRadiusVp(),
+          saturation: 1.55,
+          brightness: 1.04,
+          color: $r('app.color.topic_list_action_tint'),
+          adaptiveColor: AdaptiveColor.DEFAULT,
+          policy: BlurStyleActivePolicy.ALWAYS_ACTIVE,
+          inactiveColor: $r('app.color.topic_list_action_tint')
+        },
+        { disableSystemAdaptation: true }
+      )
+      .border({ width: 0.5, color: $r('app.color.topic_list_action_stroke') })
+      .justifyContent(FlexAlign.Center)
+      .alignItems(VerticalAlign.Center)
+      .clip(true)
+      .onClick(() => {
+        this.openNotifications();
+      })
 
-              if (this.isLoggedIn) {
-                Stack({ alignContent: Alignment.TopEnd }) {
-                  Row() {
-                    SymbolGlyph($r('sys.symbol.bell'))
-                      .fontSize(18)
-                      .fontColor([$r('app.color.on_surface')])
-                  }
-                  .width(40)
-                  .height(40)
-                  .borderRadius(20)
-                  .backgroundColor($r('app.color.search_background'))
-                  .justifyContent(FlexAlign.Center)
-                  .alignItems(VerticalAlign.Center)
-                  .onClick(() => {
-                    this.openNotifications();
-                  })
-
-                  if (this.getUnreadNotificationCount() > 0) {
-                    Row() {
-                      Text(this.getUnreadNotificationCount() > 99 ? '99+' : this.getUnreadNotificationCount().toString())
-                        .fontSize(9)
-                        .fontWeight(FontWeight.Bold)
-                        .fontColor(Color.White)
-                    }
-                    .padding({ left: 5, right: 5, top: 1, bottom: 1 })
-                    .backgroundColor($r('app.color.error'))
-                    .borderRadius(8)
-                    .margin({ top: 0, right: 0 })
-                  }
-                }
-                .margin({ left: 8 })
-              }
-            }
-            .width('100%')
-            .height(40)
-            .alignItems(VerticalAlign.Center)
-          }
-          .width('100%')
-          .height(SEARCH_BAR_HEIGHT * (1 - this.getSearchProgress()))
-          .opacity(1 - this.getSearchProgress())
-          .clip(true)
-          .padding({ left: 16, right: 16, top: 8, bottom: 8 })
-        }
-
-        // ─── 2. 分类 Tab 行 ───
+      if (this.getUnreadNotificationCount() > 0) {
         Row() {
-          // 左侧分类横向滚动
-          Scroll() {
-            Row() {
-              this.TabItem('全部', 0)
-              ForEach(this.getPinnedCategories(), (cat: Category, index: number) => {
-                this.TabItem(cat.name, index + 1)
-              })
-            }
-            .height('100%')
-            .alignItems(VerticalAlign.Bottom) // "全部"字样下沉
-          }
-          .scrollable(ScrollDirection.Horizontal)
-          .scrollBar(BarState.Off)
-          .layoutWeight(1)
-          .height(TAB_ROW_HEIGHT)
-          .align(Alignment.BottomStart) // 左对齐
+          Text(this.getUnreadNotificationCount() > 99 ? '99+' : this.getUnreadNotificationCount().toString())
+            .fontSize(9)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(Color.White)
+        }
+        .padding({ left: 5, right: 5, top: 1, bottom: 1 })
+        .backgroundColor($r('app.color.error'))
+        .borderRadius(8)
+        .margin({ top: 0, right: 0 })
+      }
+    }
+    .width(TopicListChromeHelper.getActionSizeVp())
+    .height(TopicListChromeHelper.getActionSizeVp())
+    .margin({ left: 8 })
+  }
 
-          // 排序/筛选栏折叠后，在 Tab 行右侧渐显一个紧凑筛选入口
-          if (this.getSortProgress() > 0) {
-            this.CompactFilterEntry(this.getSortProgress())
-          }
-
-          // 右侧分类管理按钮
+  @Builder
+  private HeaderSearchRow() {
+    if (this.getSearchProgress() < 1) {
+      Column() {
+        Row() {
           Row() {
-            SymbolGlyph($r('sys.symbol.line_3_horizontal'))
+            SymbolGlyph($r('sys.symbol.magnifyingglass'))
               .fontSize(18)
-              .fontColor([$r('app.color.on_surface_secondary')])
+              .fontColor([$r('app.color.on_surface_tertiary')])
+              .margin({ right: 8 })
+            Text($r('app.string.search_hint'))
+              .fontSize(15)
+              .fontColor($r('app.color.on_surface_tertiary'))
+              .layoutWeight(1)
           }
-            .padding({ left: 8, right: 8 })
-            .height(TAB_ROW_HEIGHT)
-            .justifyContent(FlexAlign.Center)
-            .alignItems(VerticalAlign.Center)
-            .onClick(() => {
-              this.openCategorySheet();
-            })
+          .layoutWeight(1)
+          .height(TopicListChromeHelper.getSearchFieldHeightVp())
+          .padding({ left: 16, right: 16 })
+          .backgroundColor(Color.Transparent)
+          .backgroundEffect(
+            {
+              radius: TopicListChromeHelper.getControlBlurRadiusVp(),
+              saturation: 1.45,
+              brightness: 1.03,
+              color: $r('app.color.topic_list_search_field_tint'),
+              adaptiveColor: AdaptiveColor.DEFAULT,
+              policy: BlurStyleActivePolicy.ALWAYS_ACTIVE,
+              inactiveColor: $r('app.color.topic_list_search_field_tint')
+            },
+            { disableSystemAdaptation: true }
+          )
+          .border({ width: 0.5, color: $r('app.color.topic_list_search_field_stroke') })
+          .borderRadius(TopicListChromeHelper.getSearchFieldRadiusVp())
+          .alignItems(VerticalAlign.Center)
+          .clip(true)
+          .onClick(() => {
+            RouterManager.pushPath(RouteConstants.PAGE_SEARCH);
+          })
+
+          if (this.isLoggedIn) {
+            this.HeaderNotificationButton()
+          }
         }
         .width('100%')
-        .height(TAB_ROW_HEIGHT)
+        .height(TopicListChromeHelper.getSearchFieldHeightVp())
+        .alignItems(VerticalAlign.Center)
+      }
+      .width('100%')
+      .height(SEARCH_BAR_HEIGHT * (1 - this.getSearchProgress()))
+      .opacity(1 - this.getSearchProgress())
+      .clip(true)
+      .padding({ left: 16, right: 16, top: 8, bottom: 8 })
+    }
+  }
+
+  @Builder
+  private HeaderTabRow() {
+    Row() {
+      Scroll() {
+        Row() {
+          this.TabItem('全部', 0)
+          ForEach(this.getPinnedCategories(), (cat: Category, index: number) => {
+            this.TabItem(cat.name, index + 1)
+          })
+        }
+        .height('100%')
         .alignItems(VerticalAlign.Bottom)
+      }
+      .scrollable(ScrollDirection.Horizontal)
+      .scrollBar(BarState.Off)
+      .layoutWeight(1)
+      .height(TAB_ROW_HEIGHT)
+      .align(Alignment.BottomStart)
 
-        Divider().color($r('app.color.divider_light')).strokeWidth(1).margin({ left: 16, right: 16 })
+      if (this.getSortProgress() > 0) {
+        this.CompactFilterEntry(this.getSortProgress())
+      }
 
-        // ─── 3. 排序筛选栏 ───
-        if (this.getSortProgress() < 1) {
-          Row() {
-            PillMenuButton({
-              value: this.currentFilter,
-              valueLabel: this.getFilterLabel(this.currentFilter),
-              options: this.getFilterOptions(),
-              menuWidth: 160,
-              rightMargin: 8,
-              optionLabelBuilder: (opt: string): string => this.getFilterLabel(opt),
-              onValueChange: (v: string) => {
-                this.updateFilter(v);
-              }
-            })
+      Row() {
+        SymbolGlyph($r('sys.symbol.line_3_horizontal'))
+          .fontSize(17)
+          .fontColor([$r('app.color.on_surface_secondary')])
+      }
+      .width(TopicListChromeHelper.getActionVisualSizeVp())
+      .height(TopicListChromeHelper.getActionVisualSizeVp())
+      .borderRadius(TopicListChromeHelper.getActionRadiusVp())
+      .backgroundColor(Color.Transparent)
+      .backgroundEffect(
+        {
+          radius: TopicListChromeHelper.getControlBlurRadiusVp(),
+          saturation: 1.45,
+          brightness: 1.03,
+          color: $r('app.color.topic_list_action_tint'),
+          adaptiveColor: AdaptiveColor.DEFAULT,
+          policy: BlurStyleActivePolicy.ALWAYS_ACTIVE,
+          inactiveColor: $r('app.color.topic_list_action_tint')
+        },
+        { disableSystemAdaptation: true }
+      )
+      .border({ width: 0.5, color: $r('app.color.topic_list_action_stroke') })
+      .justifyContent(FlexAlign.Center)
+      .alignItems(VerticalAlign.Center)
+      .clip(true)
+      .margin({ left: 4, right: 10, bottom: 1 })
+      .onClick(() => {
+        this.openCategorySheet();
+      })
+    }
+    .width('100%')
+    .height(TAB_ROW_HEIGHT)
+    .alignItems(VerticalAlign.Bottom)
+  }
 
-            PillMenuButton({
-              value: this.currentOrder,
-              valueLabel: this.getOrderLabel(this.currentOrder),
-              options: SORT_ORDER_OPTIONS,
-              menuWidth: 190,
-              rightMargin: 8,
-              optionLabelBuilder: (opt: string): string => this.getOrderLabel(opt),
-              onValueChange: (v: string) => {
-                this.updateOrder(v);
-              }
-            })
+  @Builder
+  private HeaderSortRow() {
+    if (this.getSortProgress() < 1) {
+      Row() {
+        PillMenuButton({
+          value: this.currentFilter,
+          valueLabel: this.getFilterLabel(this.currentFilter),
+          options: this.getFilterOptions(),
+          menuWidth: 160,
+          rightMargin: 8,
+          optionLabelBuilder: (opt: string): string => this.getFilterLabel(opt),
+          onValueChange: (v: string) => {
+            this.updateFilter(v);
+          }
+        })
 
-            // 标签：默认只显示“+🏷”按钮；选择后显示 chips（可横滑）
-            if (this.selectedTags.length === 0) {
+        PillMenuButton({
+          value: this.currentOrder,
+          valueLabel: this.getOrderLabel(this.currentOrder),
+          options: SORT_ORDER_OPTIONS,
+          menuWidth: 190,
+          rightMargin: 8,
+          optionLabelBuilder: (opt: string): string => this.getOrderLabel(opt),
+          onValueChange: (v: string) => {
+            this.updateOrder(v);
+          }
+        })
+
+        if (this.selectedTags.length === 0) {
+          PillIconButton({
+            rightSymbol: $r('sys.symbol.label'),
+            onAction: () => {
+              this.openTagSheet();
+            }
+          })
+        } else {
+          Scroll() {
+            Row() {
+              ForEach(this.selectedTags, (t: string) => {
+                TagChip({
+                  tagName: t,
+                  onRemove: () => {
+                    this.removeTag(t);
+                  }
+                })
+              })
               PillIconButton({
                 rightSymbol: $r('sys.symbol.label'),
                 onAction: () => {
                   this.openTagSheet();
                 }
               })
-            } else {
-              Scroll() {
-                Row() {
-                  ForEach(this.selectedTags, (t: string) => {
-                    TagChip({
-                      tagName: t,
-                      onRemove: () => {
-                        this.removeTag(t);
-                      }
-                    })
-                  })
-                  PillIconButton({
-                    rightSymbol: $r('sys.symbol.label'),
-                    onAction: () => {
-                      this.openTagSheet();
-                    }
-                  })
-                }
-                .alignItems(VerticalAlign.Center)
-                .justifyContent(FlexAlign.Start)
-                // 关键：让内容容器至少占满可用宽度，避免 Scroll 子节点在剩余空间内被“居中”导致中间留空
-                // 同时允许内容在超出时自然扩展，以支持横向滚动
-                .constraintSize({ minWidth: '100%' })
-              }
-              .scrollable(ScrollDirection.Horizontal)
-              .scrollBar(BarState.Off)
-              .layoutWeight(1)
             }
+            .alignItems(VerticalAlign.Center)
+            .justifyContent(FlexAlign.Start)
+            .constraintSize({ minWidth: '100%' })
+          }
+          .scrollable(ScrollDirection.Horizontal)
+          .scrollBar(BarState.Off)
+          .layoutWeight(1)
+        }
+      }
+      .width('100%')
+      .height(SORT_BAR_HEIGHT * (1 - this.getSortProgress()))
+      .opacity(1 - this.getSortProgress())
+      .clip(true)
+      .padding({ left: 12, right: 12, top: 6, bottom: 6 })
+    }
+  }
+
+  @Builder
+  private TopicListTopHeader() {
+    Column() {
+      Blank()
+        .width('100%')
+        .height(TopicListChromeHelper.getTopSafeHeightVp())
+
+      this.HeaderSearchRow()
+      this.HeaderTabRow()
+
+      Divider()
+        .color($r('app.color.topic_list_top_bar_divider'))
+        .strokeWidth(1)
+        .margin({ left: 16, right: 16 })
+
+      this.HeaderSortRow()
+    }
+    .width('100%')
+    .height(TopicListChromeHelper.getHeaderVisibleHeightVp(this.headerOffset))
+    .backgroundColor(Color.Transparent)
+    .backgroundEffect(
+      {
+        radius: TopicListChromeHelper.getHeaderBlurRadiusVp(),
+        saturation: 1.42,
+        brightness: 1.03,
+        color: $r('app.color.topic_list_top_bar_tint'),
+        adaptiveColor: AdaptiveColor.DEFAULT,
+        policy: BlurStyleActivePolicy.ALWAYS_ACTIVE,
+        inactiveColor: $r('app.color.topic_list_top_bar_tint')
+      },
+      { disableSystemAdaptation: true }
+    )
+    .shadow({ radius: 8, color: TopicListChromeHelper.getHeaderShadowColor(), offsetX: 0, offsetY: 3 })
+    .clip(true)
+    .zIndex(10)
+  }
+
+  build() {
+    Stack({ alignContent: Alignment.TopStart }) {
+      Column() {
+        // ─── 话题列表：顶部 Header 改为 Stack overlay，这里用动态 spacer 避让可见 Header ───
+        if (this.isLoading) {
+          Column() {
+            Blank()
+              .width('100%')
+              .height(TopicListChromeHelper.getContentTopSpacerHeightVp(this.headerOffset))
+
+            TopicListSkeleton({ itemCount: 8 })
+              .width('100%')
+              .layoutWeight(1)
           }
           .width('100%')
-          .height(SORT_BAR_HEIGHT * (1 - this.getSortProgress()))
-          .opacity(1 - this.getSortProgress())
-          .clip(true)
-          .padding({ left: 12, right: 12, top: 6, bottom: 6 })
-        }
-
-        // ─── 4. 话题列表 ───
-        if (this.isLoading) {
-          TopicListSkeleton({ itemCount: 8 })
-            .width('100%')
-            .layoutWeight(1)
+          .layoutWeight(1)
         } else if (this.errorMessage.length > 0) {
           Column() {
+            Blank()
+              .width('100%')
+              .height(TopicListChromeHelper.getContentTopSpacerHeightVp(this.headerOffset))
+
             ErrorView({
               title: '加载失败',
               message: this.errorMessage,
@@ -2475,6 +2623,7 @@ export struct TopicListPage {
                 this.loadTopics(true);
               }
             })
+            .layoutWeight(1)
           }
           .width('100%')
           .layoutWeight(1)
@@ -2482,6 +2631,13 @@ export struct TopicListPage {
         } else {
           Refresh({ refreshing: this.isRefreshing }) {
             List({ scroller: this.listScroller }) {
+              ListItem() {
+                Row() {
+                }
+                  .width('100%')
+                  .height(TopicListChromeHelper.getContentTopSpacerHeightVp(this.headerOffset))
+              }
+
               if (this.incomingTopicCount > 0 && this.currentFilter === '最新') {
                 ListItem() {
                   this.IncomingTopicBanner()
@@ -2645,10 +2801,10 @@ export struct TopicListPage {
           .layoutWeight(1)
         }
       }
-      // 全局沉浸式：为顶部状态栏安全区预留 padding，避免内容被挖孔/状态栏遮挡
-      .padding({ top: WindowManager.getSystemAvoidAreaTopVp() })
       .width('100%')
       .height('100%')
+
+      this.TopicListTopHeader()
 
       this.HomeFabBackdrop()
 
@@ -2665,9 +2821,9 @@ export struct TopicListPage {
       .width(0)
       .height(0)
       .bindSheet($$this.isCreateTopicSheetVisible, this.CreateTopicSheetBuilder, {
-        height: SheetSize.LARGE,
-        dragBar: false,
+        detents: [SheetSize.MEDIUM, SheetSize.LARGE],
         showClose: false,
+        enableFloatingDragBar: true,
         backgroundColor: $r('app.color.surface')
       })
 
@@ -2676,9 +2832,9 @@ export struct TopicListPage {
       .width(0)
       .height(0)
       .bindSheet($$this.isNotificationQuickPanelVisible, this.NotificationQuickPanelBuilder, {
-        height: SheetSize.LARGE,
-        dragBar: false,
+        detents: [SheetSize.MEDIUM, SheetSize.LARGE],
         showClose: false,
+        enableFloatingDragBar: true,
         backgroundColor: $r('app.color.surface')
       })
     }
@@ -2686,9 +2842,9 @@ export struct TopicListPage {
     .height('100%')
     .backgroundColor($r('app.color.background'))
     .bindSheet($$this.isSheetVisible, this.BottomSheetBuilder, {
-      height: SheetSize.LARGE,
-      dragBar: false,
+      detents: [SheetSize.MEDIUM, SheetSize.LARGE],
       showClose: false,
+      enableFloatingDragBar: true,
       backgroundColor: $r('app.color.surface')
     })
   }

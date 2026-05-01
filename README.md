@@ -1,10 +1,10 @@
-# HarmonyDO
+# LDO社区
 
 > 一个真诚、友善、团结、专业的 [Linux.do](https://linux.do/) 第三方客户端
 
 ## 项目简介
 
-HarmonyDO 是为 [Linux.do](https://linux.do/) 社区打造的现代化移动客户端，基于原生鸿蒙开发，致力于为用户提供流畅、优雅的论坛浏览体验。
+LDO社区是为 [Linux.do](https://linux.do/) 社区打造的第三方鸿蒙客户端，基于原生鸿蒙开发，致力于为用户提供流畅、优雅的论坛浏览体验。
 
 项目在产品思路与部分交互设计上参考了 [FluxDO](https://github.com/Lingyan000/fluxdo)，并结合 HarmonyOS 的原生能力持续打磨使用体验。
 
@@ -31,7 +31,7 @@ HarmonyDO 是为 [Linux.do](https://linux.do/) 社区打造的现代化移动客
 ### 环境要求
 
 - DevEco Studio
-- HarmonyOS SDK `6.0.2(API 22)`
+- HarmonyOS SDK `6.1.0(API 23)`
 - HarmonyOS 真机或模拟器
 - 可用的本地调试签名
 
@@ -44,7 +44,7 @@ HarmonyDO 是为 [Linux.do](https://linux.do/) 社区打造的现代化移动客
    ```
 
 2. 使用 DevEco Studio 打开项目根目录
-3. 确认本地已安装 HarmonyOS `6.0.2(API 22)` SDK
+3. 确认本地已安装 HarmonyOS `6.1.0(API 23)` SDK
 4. `build-profile.json5` 中不包含真实签名密钥，请先在 DevEco Studio 中配置你自己的本地调试签名
 5. 连接鸿蒙真机或启动模拟器
 6. 点击运行，编译并安装到设备
@@ -221,9 +221,9 @@ HarmonyDO/
 
 [Linux.do](https://linux.do/) 是一个真诚、友善、团结、专业的技术社区，汇聚了众多热爱技术、乐于分享的开发者。
 
-HarmonyDO 希望为 Linux.do 社区提供更贴近鸿蒙生态的原生客户端体验。
+LDO社区希望为 Linux.do 社区提供更贴近鸿蒙生态的原生客户端体验。
 
-[FluxDO](https://github.com/Lingyan000/fluxdo) 作为优秀的第三方客户端项目，致力于为社区成员提供更好的移动和桌面端体验；HarmonyDO 在此基础上聚焦鸿蒙平台，继续延伸这条路线。
+[FluxDO](https://github.com/Lingyan000/fluxdo) 作为优秀的第三方客户端项目，致力于为社区成员提供更好的移动和桌面端体验；LDO社区在此基础上聚焦鸿蒙平台，继续延伸这条路线。
 
 ## 免责声明
 
@@ -238,4 +238,4 @@ HarmonyDO 希望为 Linux.do 社区提供更贴近鸿蒙生态的原生客户端
 - 感谢 Linux.do 社区成员的讨论、反馈、建议与支持
 - [Linux.do](https://linux.do/)
 - [FluxDO](https://github.com/Lingyan000/fluxdo)
-- [HarmonyDO](https://github.com/Amaz1ny/HarmonyDo)
+- [LDO社区 / HarmonyDO-public](https://github.com/Amaz1ny/HarmonyDO-public)

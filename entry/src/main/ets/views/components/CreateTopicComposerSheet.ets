@@ -837,20 +837,12 @@ export struct CreateTopicComposerSheet {
   @Builder
   private CategorySheetBuilder() {
     Column() {
-      Column() {
-      }
-      .width(36)
-      .height(4)
-      .borderRadius(2)
-      .backgroundColor($r('app.color.divider_light'))
-      .margin({ top: 12, bottom: 12 })
-
       Text('选择分类')
         .fontSize(18)
         .fontWeight(FontWeight.Bold)
         .fontColor($r('app.color.on_surface'))
         .width('100%')
-        .padding({ left: 20, right: 20, bottom: 12 })
+        .padding({ left: 20, right: 20, top: 14, bottom: 12 })
 
       Scroll() {
         Column() {
@@ -906,6 +898,7 @@ export struct CreateTopicComposerSheet {
       selectedTags: this.draftSelectedTags,
       categoryId: this.selectedCategoryId > 0 ? this.selectedCategoryId : null,
       maxTags: 5,
+      showDragHandle: false,
       onToggleTag: (tagName: string) => {
         this.toggleDraftTag(tagName);
       },
@@ -1222,9 +1215,9 @@ export struct CreateTopicComposerSheet {
       .width(0)
       .height(0)
       .bindSheet($$this.isCategorySheetVisible, this.CategorySheetBuilder, {
-        height: SheetSize.LARGE,
-        dragBar: false,
+        detents: [SheetSize.MEDIUM, SheetSize.LARGE],
         showClose: false,
+        enableFloatingDragBar: true,
         backgroundColor: $r('app.color.surface')
       })
 
@@ -1233,9 +1226,9 @@ export struct CreateTopicComposerSheet {
       .width(0)
       .height(0)
       .bindSheet($$this.isTagSheetVisible, this.TagSheetBuilder, {
-        height: SheetSize.LARGE,
-        dragBar: false,
+        detents: [SheetSize.MEDIUM, SheetSize.LARGE],
         showClose: false,
+        enableFloatingDragBar: true,
         backgroundColor: $r('app.color.surface')
       })
 

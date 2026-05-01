@@ -16,6 +16,7 @@ import { UserStatusEmoji } from '../components/UserStatusEmoji';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { ErrorView } from '../components/ErrorView';
 import { NotificationQuickPanel } from '../components/NotificationQuickPanel';
+import { ProfilePageChromeHelper } from '../components/ProfilePageChromeHelper';
 import {
   FLOATING_TAB_BAR_HEIGHT_VP,
   FLOATING_TAB_BAR_MARGIN_BOTTOM_VP,
@@ -696,209 +697,258 @@ export struct ProfilePage {
   }
 
   build() {
-    Column() {
-      this.TopBar()
-
-      if (this.isLoading && this.currentUser === null && this.errorMessage.length === 0) {
-        Column() {
-          LoadingSpinner({ message: '' })
-        }
-        .width('100%')
-        .layoutWeight(1)
-        .justifyContent(FlexAlign.Center)
-        .alignItems(HorizontalAlign.Center)
-      } else if (this.errorMessage.length > 0 && this.currentUser === null) {
-        Column() {
-          ErrorView({
-            title: '加载失败',
-            message: this.errorMessage,
-            onRetry: () => {
-              this.refreshPage(true).catch((err: Object) => {
-                hilog.error(0x0000, TAG, 'Retry refresh failed: %{public}s', JSON.stringify(err));
-              });
-            }
-          })
-        }
-        .width('100%')
-        .layoutWeight(1)
-        .justifyContent(FlexAlign.Center)
-      } else {
-        Refresh({ refreshing: this.isRefreshing }) {
-          Scroll(this.scroller) {
-            Column() {
-              this.HeaderSection()
-              Blank().height(24)
-
-              if (this.isLoggedIn && this.summary !== null) {
-                this.StatsCard()
-                Blank().height(24)
-              } else if (this.isLoggedIn && this.currentUser !== null && (this.isSummaryLoading || this.isRefreshing)) {
-                this.SummaryLoadingCard()
-                Blank().height(24)
-              } else if (this.isLoggedIn && this.currentUser !== null) {
-                this.SummaryPlaceholderCard()
-                Blank().height(24)
+    Stack({ alignContent: Alignment.TopStart }) {
+      Column() {
+        if (this.isLoading && this.currentUser === null && this.errorMessage.length === 0) {
+          Column() {
+            LoadingSpinner({ message: '' })
+          }
+          .width('100%')
+          .layoutWeight(1)
+          .justifyContent(FlexAlign.Center)
+          .alignItems(HorizontalAlign.Center)
+        } else if (this.errorMessage.length > 0 && this.currentUser === null) {
+          Column() {
+            ErrorView({
+              title: '加载失败',
+              message: this.errorMessage,
+              onRetry: () => {
+                this.refreshPage(true).catch((err: Object) => {
+                  hilog.error(0x0000, TAG, 'Retry refresh failed: %{public}s', JSON.stringify(err));
+                });
               }
-
-              if (this.isLoggedIn && this.currentUser !== null) {
-                this.LoggedInQuickAccessCard()
-                Blank().height(20)
-                this.SectionHeader($r('app.string.profile_section_growth'), $r('app.string.profile_section_growth_subtitle'))
-                Blank().height(12)
-                this.LoggedInOptionsCard()
-                Blank().height(20)
-              }
-
-              this.SectionHeader($r('app.string.profile_section_services'), $r('app.string.profile_section_services_subtitle'))
-              Blank().height(12)
-              this.AboutCard()
-              Blank().height(32)
-              this.AuthButton()
-              Blank().height(48)
-            }
-            .width('100%')
-            .padding({
-              left: 16,
-              right: 16,
-              top: 12,
-              bottom: this.getFloatingTabBarReservedBottomVp()
             })
           }
           .width('100%')
           .layoutWeight(1)
-          .scrollBar(BarState.Off)
-          .onScrollFrameBegin((offset: number, _state: ScrollState) => {
-            const next: number = Math.max(0, this.scrollOffset + offset);
-            this.scrollOffset = next;
-            const shouldShow: boolean = this.isLoggedIn && next > 80;
-            if (shouldShow !== this.showTitle) {
-              this.showTitle = shouldShow;
+          .justifyContent(FlexAlign.Center)
+        } else {
+          Refresh({ refreshing: this.isRefreshing }) {
+            Scroll(this.scroller) {
+              Column() {
+                Blank()
+                  .width('100%')
+                  .height(ProfilePageChromeHelper.getContentTopSpacerHeightVp())
+
+                this.HeaderSection()
+                Blank().height(24)
+
+                if (this.isLoggedIn && this.summary !== null) {
+                  this.StatsCard()
+                  Blank().height(24)
+                } else if (this.isLoggedIn && this.currentUser !== null && (this.isSummaryLoading || this.isRefreshing)) {
+                  this.SummaryLoadingCard()
+                  Blank().height(24)
+                } else if (this.isLoggedIn && this.currentUser !== null) {
+                  this.SummaryPlaceholderCard()
+                  Blank().height(24)
+                }
+
+                if (this.isLoggedIn && this.currentUser !== null) {
+                  this.LoggedInQuickAccessCard()
+                  Blank().height(20)
+                  this.SectionHeader($r('app.string.profile_section_growth'), $r('app.string.profile_section_growth_subtitle'))
+                  Blank().height(12)
+                  this.LoggedInOptionsCard()
+                  Blank().height(20)
+                }
+
+                this.SectionHeader($r('app.string.profile_section_services'), $r('app.string.profile_section_services_subtitle'))
+                Blank().height(12)
+                this.AboutCard()
+                Blank().height(32)
+                this.AuthButton()
+                Blank().height(48)
+              }
+              .width('100%')
+              .padding({
+                left: 16,
+                right: 16,
+                top: 0,
+                bottom: this.getFloatingTabBarReservedBottomVp()
+              })
             }
-            return { offsetRemain: offset };
+            .width('100%')
+            .layoutWeight(1)
+            .scrollBar(BarState.Off)
+            .onScrollFrameBegin((offset: number, _state: ScrollState) => {
+              const next: number = Math.max(0, this.scrollOffset + offset);
+              this.scrollOffset = next;
+              const shouldShow: boolean = this.isLoggedIn && next > 80;
+              if (shouldShow !== this.showTitle) {
+                this.showTitle = shouldShow;
+              }
+              return { offsetRemain: offset };
+            })
+          }
+          .onRefreshing(() => {
+            this.pullToRefresh().catch((err: Object) => {
+              hilog.error(0x0000, TAG, 'Pull to refresh profile failed: %{public}s', JSON.stringify(err));
+            });
           })
+          .layoutWeight(1)
+          .width('100%')
         }
-        .onRefreshing(() => {
-          this.pullToRefresh().catch((err: Object) => {
-            hilog.error(0x0000, TAG, 'Pull to refresh profile failed: %{public}s', JSON.stringify(err));
-          });
-        })
-        .layoutWeight(1)
-        .width('100%')
       }
+      .width('100%')
+      .height('100%')
+      .backgroundColor($r('app.color.background'))
+
+      this.TopBar()
     }
     .width('100%')
     .height('100%')
-    .padding({ top: WindowManager.getSystemAvoidAreaTopVp() })
     .backgroundColor($r('app.color.background'))
     .bindSheet($$this.isNotificationQuickPanelVisible, this.NotificationQuickPanelBuilder, {
-      height: SheetSize.LARGE,
-      dragBar: false,
+      detents: [SheetSize.MEDIUM, SheetSize.LARGE],
       showClose: false,
+      enableFloatingDragBar: true,
       backgroundColor: $r('app.color.surface')
     })
   }
 
   @Builder
   private TopBar() {
-    Row() {
-      if (this.showTitle && this.currentUser !== null) {
-        Row() {
-          AvatarWithFlair({
-            avatarUrl: this.getAvatarUrl(56),
-            avatarSize: 28,
-            fallbackText: this.getDisplayName(),
-            flairUrl: (this.currentUser as User).flairUrl,
-            flairName: (this.currentUser as User).flairName,
-            flairBgColor: (this.currentUser as User).flairBgColor,
-            flairColor: (this.currentUser as User).flairColor,
-            flairSize: 12
-          })
+    Column() {
+      Blank()
+        .width('100%')
+        .height(ProfilePageChromeHelper.getTopSafeHeightVp())
 
-          Text(this.getDisplayName())
-            .fontSize(16)
-            .fontWeight(FontWeight.Bold)
-            .fontColor($r('app.color.on_surface'))
-            .margin({ left: 8 })
-            .layoutWeight(1)
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-        }
-        .layoutWeight(1)
-        .onClick(() => {
-          this.scrollToTop();
-        })
-      } else {
-        Blank().layoutWeight(1)
-      }
-
-      if (this.isLoggedIn) {
-        Row() {
+      Row() {
+        if (this.showTitle && this.currentUser !== null) {
           Row() {
-            if (this.isRefreshing) {
-              LoadingProgress().width(18).height(18)
-            } else if (this.errorMessage.length > 0) {
-              SymbolGlyph($r('sys.symbol.exclamationmark_triangle'))
-                .fontSize(16)
-                .fontColor([$r('app.color.on_surface_tertiary')])
-            } else {
-              Blank().width(18).height(18)
-            }
-          }
-          .width(24)
-          .height(24)
-          .justifyContent(FlexAlign.Center)
-          .alignItems(VerticalAlign.Center)
-
-          Row() {
-            this.PillActionButton($r('sys.symbol.gearshape'), () => {
-              this.openProfileEdit();
+            AvatarWithFlair({
+              avatarUrl: this.getAvatarUrl(56),
+              avatarSize: 28,
+              fallbackText: this.getDisplayName(),
+              flairUrl: (this.currentUser as User).flairUrl,
+              flairName: (this.currentUser as User).flairName,
+              flairBgColor: (this.currentUser as User).flairBgColor,
+              flairColor: (this.currentUser as User).flairColor,
+              flairSize: 12
             })
 
-            Stack({ alignContent: Alignment.TopEnd }) {
-              Row() {
-                SymbolGlyph($r('sys.symbol.bell'))
-                  .fontSize(18)
-                  .fontColor([$r('app.color.on_surface')])
+            Text(this.getDisplayName())
+              .fontSize(16)
+              .fontWeight(FontWeight.Bold)
+              .fontColor($r('app.color.on_surface'))
+              .margin({ left: 8 })
+              .layoutWeight(1)
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+          }
+          .layoutWeight(1)
+          .onClick(() => {
+            this.scrollToTop();
+          })
+        } else {
+          Blank().layoutWeight(1)
+        }
+
+        if (this.isLoggedIn) {
+          Row() {
+            Row() {
+              if (this.isRefreshing) {
+                LoadingProgress().width(18).height(18)
+              } else if (this.errorMessage.length > 0) {
+                SymbolGlyph($r('sys.symbol.exclamationmark_triangle'))
+                  .fontSize(16)
+                  .fontColor([$r('app.color.on_surface_tertiary')])
+              } else {
+                Blank().width(18).height(18)
+              }
+            }
+            .width(24)
+            .height(24)
+            .justifyContent(FlexAlign.Center)
+            .alignItems(VerticalAlign.Center)
+
+            Row() {
+              this.PillActionButton($r('sys.symbol.gearshape'), () => {
+                this.openProfileEdit();
+              })
+
+              Stack({ alignContent: Alignment.TopEnd }) {
+                Row() {
+                  SymbolGlyph($r('sys.symbol.bell'))
+                    .fontSize(18)
+                    .fontColor([$r('app.color.on_surface')])
+                }
+                .width(34)
+                .height(34)
+                .justifyContent(FlexAlign.Center)
+                .alignItems(VerticalAlign.Center)
+                .onClick(() => {
+                  this.openNotifications();
+                })
+
+                if (this.getUnreadCount() > 0) {
+                  Row() {
+                    Text(this.getUnreadCount() > 99 ? '99+' : this.getUnreadCount().toString())
+                      .fontSize(9)
+                      .fontWeight(FontWeight.Bold)
+                      .fontColor(Color.White)
+                  }
+                  .padding({ left: 5, right: 5, top: 1, bottom: 1 })
+                  .backgroundColor($r('app.color.error'))
+                  .borderRadius(8)
+                  .margin({ top: 1, right: 0 })
+                }
               }
               .width(34)
               .height(34)
-              .justifyContent(FlexAlign.Center)
-              .alignItems(VerticalAlign.Center)
-              .onClick(() => {
-                this.openNotifications();
-              })
-
-              if (this.getUnreadCount() > 0) {
-                Row() {
-                  Text(this.getUnreadCount() > 99 ? '99+' : this.getUnreadCount().toString())
-                    .fontSize(9)
-                    .fontWeight(FontWeight.Bold)
-                    .fontColor(Color.White)
-                }
-                .padding({ left: 5, right: 5, top: 1, bottom: 1 })
-                .backgroundColor($r('app.color.error'))
-                .borderRadius(8)
-                .margin({ top: 1, right: 0 })
-              }
             }
-            .width(34)
-            .height(34)
+            .padding({ left: 4, right: 4, top: 4, bottom: 4 })
+            .height(ProfilePageChromeHelper.getActionHeightVp())
+            .backgroundColor(Color.Transparent)
+            .backgroundEffect(
+              {
+                radius: ProfilePageChromeHelper.getActionBlurRadiusVp(),
+                saturation: 1.55,
+                brightness: 1.04,
+                color: $r('app.color.profile_top_action_tint'),
+                adaptiveColor: AdaptiveColor.DEFAULT,
+                policy: BlurStyleActivePolicy.ALWAYS_ACTIVE,
+                inactiveColor: $r('app.color.profile_top_action_tint')
+              },
+              { disableSystemAdaptation: true }
+            )
+            .border({ width: 0.5, color: $r('app.color.profile_top_action_stroke') })
+            .borderRadius(ProfilePageChromeHelper.getActionRadiusVp())
+            .shadow({ radius: 8, color: ProfilePageChromeHelper.getActionShadowColor(), offsetX: 0, offsetY: 3 })
+            .clip(true)
+            .margin({ left: 8 })
           }
-          .padding({ left: 4, right: 4, top: 4, bottom: 4 })
-          .backgroundColor($r('app.color.card_background'))
-          .borderRadius(22)
-          .shadow({ radius: 10, color: $r('app.color.shadow_light'), offsetX: 0, offsetY: 4 })
-          .margin({ left: 8 })
+          .alignItems(VerticalAlign.Center)
         }
-        .alignItems(VerticalAlign.Center)
       }
+      .width('100%')
+      .height(ProfilePageChromeHelper.getTopBarBaseHeightVp())
+      .padding({
+        left: ProfilePageChromeHelper.getTopBarHorizontalPaddingVp(),
+        right: ProfilePageChromeHelper.getTopBarHorizontalPaddingVp(),
+        top: 6,
+        bottom: 6
+      })
+      .alignItems(VerticalAlign.Center)
     }
     .width('100%')
-    .height(56)
-    .padding({ left: 12, right: 12, top: 6, bottom: 6 })
-    .backgroundColor($r('app.color.background'))
-    .alignItems(VerticalAlign.Center)
-    .shadow({ radius: this.scrollOffset > 0 ? 8 : 0, color: $r('app.color.shadow_light'), offsetX: 0, offsetY: 2 })
+    .height(ProfilePageChromeHelper.getTopBarTotalHeightVp())
+    .backgroundColor(Color.Transparent)
+    .backgroundEffect(
+      {
+        radius: ProfilePageChromeHelper.getTopBarBlurRadiusVp(),
+        saturation: 1.45,
+        brightness: 1.03,
+        color: $r('app.color.profile_top_bar_tint'),
+        adaptiveColor: AdaptiveColor.DEFAULT,
+        policy: BlurStyleActivePolicy.ALWAYS_ACTIVE,
+        inactiveColor: $r('app.color.profile_top_bar_tint')
+      },
+      { disableSystemAdaptation: true }
+    )
+    .border({ width: { bottom: this.scrollOffset > 0 ? 0.5 : 0 }, color: $r('app.color.profile_top_bar_divider') })
+    .zIndex(10)
   }
 
   @Builder
@@ -917,7 +967,6 @@ export struct ProfilePage {
       onClick();
     })
   }
-
   @Builder
   private HeaderSection() {
     Column() {

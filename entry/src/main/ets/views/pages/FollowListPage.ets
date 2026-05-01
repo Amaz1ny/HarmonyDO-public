@@ -1,4 +1,4 @@
-import { HdsNavDestination } from '@kit.UIDesignKit';
+import { HdsNavDestination, HdsNavDestinationTitleMode } from '@kit.UIDesignKit';
 import { FollowUser } from '../../models/User';
 import { ApiClient } from '../../services/network/ApiClient';
 import { LoadingSpinner } from '../components/LoadingSpinner';
@@ -6,8 +6,7 @@ import { ErrorView } from '../components/ErrorView';
 import { SmartAvatar } from '../components/SmartAvatar';
 import { RouterManager } from '../../common/utils/RouterManager';
 import { WindowManager } from '../../common/utils/WindowManager';
-
-const TOP_BAR_HEIGHT: number = 56;
+import { ImmersiveHdsTitleBarHelper } from '../components/ImmersiveHdsTitleBarHelper';
 
 @ComponentV2
 export struct FollowListPage {
@@ -17,6 +16,8 @@ export struct FollowListPage {
   @Local users: FollowUser[] = [];
   @Local isLoading: boolean = true;
   @Local errorMessage: string = '';
+
+  private contentScroller: Scroller = new Scroller();
 
   aboutToAppear(): void {
     this.loadUsers();
@@ -50,11 +51,13 @@ export struct FollowListPage {
     return this.isFollowing ? '关注' : '粉丝';
   }
 
+  private getNavigationTitle(): string {
+    return `${this.username} 的${this.getTitle()}`;
+  }
+
   build() {
     HdsNavDestination() {
       Column() {
-        this.TopBar()
-
         Refresh({ refreshing: false }) {
           if (this.isLoading && this.users.length === 0) {
             Column() {
@@ -80,9 +83,13 @@ export struct FollowListPage {
             .justifyContent(FlexAlign.Center)
             .alignItems(HorizontalAlign.Center)
           } else {
-            List() {
-              if (!this.isLoading && this.users.length === 0) {
-                ListItem() {
+            Scroll(this.contentScroller) {
+              Column() {
+                Blank()
+                  .height(ImmersiveHdsTitleBarHelper.getContentTopSpacerHeightVp())
+                  .width('100%')
+
+                if (!this.isLoading && this.users.length === 0) {
                   Column() {
                     SymbolGlyph($r('sys.symbol.person'))
                       .fontSize(30)
@@ -95,20 +102,21 @@ export struct FollowListPage {
                   .width('100%')
                   .padding({ top: 80, bottom: 80 })
                   .alignItems(HorizontalAlign.Center)
-                }
-              } else {
-                ForEach(this.users, (user: FollowUser) => {
-                  ListItem() {
+                } else {
+                  ForEach(this.users, (user: FollowUser) => {
                     this.UserRow(user)
-                  }
-                }, (user: FollowUser) => `${user.id}_${user.username}`)
+                  }, (user: FollowUser) => `${user.id}_${user.username}`)
+                }
               }
+              .width('100%')
+              .padding({ left: 16, right: 16, top: 12, bottom: 12 + WindowManager.getSystemAvoidAreaBottomVp() })
+              .alignItems(HorizontalAlign.Center)
             }
             .width('100%')
             .height('100%')
-            .padding({ left: 16, right: 16, top: 12, bottom: 12 + WindowManager.getSystemAvoidAreaBottomVp() })
             .backgroundColor($r('app.color.background'))
             .scrollBar(BarState.Off)
+            .edgeEffect(EdgeEffect.Spring)
           }
         }
         .onRefreshing(() => {
@@ -119,44 +127,19 @@ export struct FollowListPage {
       .width('100%')
       .height('100%')
       .backgroundColor($r('app.color.background'))
-      .padding({ top: WindowManager.getSystemAvoidAreaTopVp() })
     }
     .backgroundColor($r('app.color.background'))
-    .hideTitleBar(true)
+    .titleMode(HdsNavDestinationTitleMode.MINI)
+    .titleBar(ImmersiveHdsTitleBarHelper.buildImmersiveTitleBar(this.getNavigationTitle()))
+    .hideTitleBar(false)
+    .hideBackButton(false)
     .hideToolBar(true)
-  }
-
-  @Builder
-  TopBar() {
-    Row() {
-      Row() {
-        SymbolGlyph($r('sys.symbol.chevron_left'))
-          .fontSize(18)
-          .fontColor([$r('app.color.on_surface')])
-      }
-      .width(44)
-      .height(44)
-      .justifyContent(FlexAlign.Center)
-      .alignItems(VerticalAlign.Center)
-      .onClick(() => {
-        RouterManager.pop();
-      })
-
-      Text(`${this.username} 的${this.getTitle()}`)
-        .fontSize(17)
-        .fontWeight(FontWeight.Bold)
-        .fontColor($r('app.color.on_surface'))
-        .layoutWeight(1)
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-
-      Blank().width(44)
-    }
-    .width('100%')
-    .height(TOP_BAR_HEIGHT)
-    .padding({ left: 8, right: 8 })
-    .backgroundColor($r('app.color.background'))
-    .alignItems(VerticalAlign.Center)
+    .bindToScrollable([this.contentScroller])
+    .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
+    .systemBarStyle(
+      { statusBarContentColor: ImmersiveHdsTitleBarHelper.getStatusBarContentColor() },
+      { statusBarContentColor: ImmersiveHdsTitleBarHelper.getStatusBarContentColor() }
+    )
   }
 
   @Builder

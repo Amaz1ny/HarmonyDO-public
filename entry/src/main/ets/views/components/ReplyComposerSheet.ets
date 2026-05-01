@@ -28,6 +28,7 @@ export struct ReplyComposerSheet {
   @Param requestKey: string = '';
   @Param draftKey: string = '';
   @Param editingPost: Post | null = null;
+  @Param showDragHandle: boolean = true;
   @Event onSubmitted: (post: Post) => void = (_: Post) => {
   };
   @Event onDismiss: (submitted: boolean) => void = (_: boolean) => {
@@ -722,13 +723,15 @@ export struct ReplyComposerSheet {
   build() {
     Stack({ alignContent: Alignment.Bottom }) {
       Column() {
-        Column() {
+        if (this.showDragHandle) {
+          Column() {
+          }
+          .width(36)
+          .height(4)
+          .borderRadius(2)
+          .backgroundColor($r('app.color.divider_light'))
+          .margin({ top: 12, bottom: 12 })
         }
-        .width(36)
-        .height(4)
-        .borderRadius(2)
-        .backgroundColor($r('app.color.divider_light'))
-        .margin({ top: 12, bottom: 12 })
 
         Row() {
           Text(this.getHeaderTitle())
@@ -770,7 +773,7 @@ export struct ReplyComposerSheet {
         }
         .width('100%')
         .alignItems(VerticalAlign.Center)
-        .padding({ left: 16, right: 16, bottom: 4 })
+        .padding({ left: 16, right: 16, top: this.showDragHandle ? 0 : 8, bottom: 4 })
 
         this.ReplyTargetInfo()
 

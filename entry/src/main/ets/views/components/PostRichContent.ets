@@ -2730,7 +2730,8 @@ export struct PostRichContent {
   };
   @Event onOpenImagePreview: (urls: string[], initialIndex: number) => void = () => {
   };
-  @Event onLongPressImage: (imageUrl: string, previewUrl: string) => void = () => {
+  @Event onLongPressImage: (imageUrl: string, previewUrl: string, previewUrls: string[], initialIndex: number) => void =
+    (_imageUrl: string, _previewUrl: string, _previewUrls: string[], _initialIndex: number) => {
   };
   @Event onQuoteSelection: (selectedText: string, sourceHtml: string) => void = (_: string, _sourceHtml: string) => {
   };
@@ -2979,9 +2980,90 @@ export struct PostRichContent {
     }
   }
 
-  private emitImageLongPress(imageUrl: string, previewUrl: string): void {
+  private normalizePreviewIndex(urls: string[], initialIndex: number): number {
+    if (urls.length === 0) {
+      return -1;
+    }
+    let index: number = initialIndex;
+    if (index < 0) {
+      index = 0;
+    }
+    if (index >= urls.length) {
+      index = urls.length - 1;
+    }
+    return index;
+  }
+
+  private getSafePreviewUrl(urls: string[], index: number): string {
+    if (index < 0 || index >= urls.length) {
+      return '';
+    }
+    const raw: string = urls[index] !== undefined && urls[index] !== null ? urls[index] : '';
+    if (raw.length === 0) {
+      return '';
+    }
+    return UrlUtils.resolveUrl(raw);
+  }
+
+  private findPreviewUrlIndex(urls: string[], targetUrl: string): number {
+    if (targetUrl.length === 0) {
+      return -1;
+    }
+    const resolvedTarget: string = UrlUtils.resolveUrl(targetUrl);
+    for (let i = 0; i < urls.length; i++) {
+      const candidate: string = this.getSafePreviewUrl(urls, i);
+      if (candidate.length > 0 && (candidate === targetUrl || candidate === resolvedTarget)) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  private openNestedImagePreview(urls: string[], initialIndex: number): void {
+    const nestedIndex: number = this.normalizePreviewIndex(urls, initialIndex);
+    const nestedUrl: string = this.getSafePreviewUrl(urls, nestedIndex);
+    const floorPreviewUrls: string[] = this.getPreviewUrls();
+    const floorIndex: number = this.findPreviewUrlIndex(floorPreviewUrls, nestedUrl);
+    if (floorIndex >= 0) {
+      this.onOpenImagePreview(floorPreviewUrls, floorIndex);
+      return;
+    }
+    if (nestedIndex >= 0) {
+      this.onOpenImagePreview(urls, nestedIndex);
+    }
+  }
+
+  private emitImageLongPress(imageUrl: string, previewUrl: string, previewUrls: string[], initialIndex: number): void {
     this.suppressImageClickUntil = Date.now() + 900;
-    this.onLongPressImage(imageUrl, previewUrl);
+    let urls: string[] = previewUrls;
+    if (urls.length === 0) {
+      urls = this.getPreviewUrls();
+    }
+    let index: number = this.normalizePreviewIndex(urls, initialIndex);
+    if (index < 0 || this.getSafePreviewUrl(urls, index) !== previewUrl) {
+      const foundIndex: number = this.findPreviewUrlIndex(urls, previewUrl);
+      if (foundIndex >= 0) {
+        index = foundIndex;
+      }
+    }
+    this.onLongPressImage(imageUrl, previewUrl, urls, index);
+  }
+
+  private emitNestedImageLongPress(
+    imageUrl: string,
+    previewUrl: string,
+    previewUrls: string[],
+    initialIndex: number
+  ): void {
+    const nestedIndex: number = this.normalizePreviewIndex(previewUrls, initialIndex);
+    const nestedUrl: string = previewUrl.length > 0 ? previewUrl : this.getSafePreviewUrl(previewUrls, nestedIndex);
+    const floorPreviewUrls: string[] = this.getPreviewUrls();
+    const floorIndex: number = this.findPreviewUrlIndex(floorPreviewUrls, nestedUrl);
+    if (floorIndex >= 0) {
+      this.emitImageLongPress(imageUrl, nestedUrl, floorPreviewUrls, floorIndex);
+      return;
+    }
+    this.emitImageLongPress(imageUrl, nestedUrl, previewUrls, nestedIndex);
   }
 
   private buildInlinePlainText(html: string): string {
@@ -3385,7 +3467,7 @@ export struct PostRichContent {
               this.onOpenLink(url);
             },
             onOpenImagePreview: (urls: string[], initialIndex: number) => {
-              this.onOpenImagePreview(urls, initialIndex);
+              this.openNestedImagePreview(urls, initialIndex);
             },
             onQuoteSelection: (selectedText: string, sourceHtml: string) => {
               this.onQuoteSelection(selectedText, this.buildQuoteSelectionSourceHtml(sourceHtml));
@@ -3393,8 +3475,8 @@ export struct PostRichContent {
             onCopyQuoteSelection: (selectedText: string, sourceHtml: string) => {
               this.onCopyQuoteSelection(selectedText, this.buildQuoteSelectionSourceHtml(sourceHtml));
             },
-            onLongPressImage: (imageUrl: string, previewUrl: string) => {
-              this.onLongPressImage(imageUrl, previewUrl);
+            onLongPressImage: (imageUrl: string, previewUrl: string, previewUrls: string[], initialIndex: number) => {
+              this.emitNestedImageLongPress(imageUrl, previewUrl, previewUrls, initialIndex);
             },
             onPostUpdated: (post: Post) => {
               this.onPostUpdated(post);
@@ -3415,7 +3497,7 @@ export struct PostRichContent {
               this.onOpenLink(url);
             },
             onOpenImagePreview: (urls: string[], initialIndex: number) => {
-              this.onOpenImagePreview(urls, initialIndex);
+              this.openNestedImagePreview(urls, initialIndex);
             },
             onQuoteSelection: (selectedText: string, sourceHtml: string) => {
               this.onQuoteSelection(selectedText, this.buildQuoteSelectionSourceHtml(sourceHtml));
@@ -3423,8 +3505,8 @@ export struct PostRichContent {
             onCopyQuoteSelection: (selectedText: string, sourceHtml: string) => {
               this.onCopyQuoteSelection(selectedText, this.buildQuoteSelectionSourceHtml(sourceHtml));
             },
-            onLongPressImage: (imageUrl: string, previewUrl: string) => {
-              this.onLongPressImage(imageUrl, previewUrl);
+            onLongPressImage: (imageUrl: string, previewUrl: string, previewUrls: string[], initialIndex: number) => {
+              this.emitNestedImageLongPress(imageUrl, previewUrl, previewUrls, initialIndex);
             },
             onPostUpdated: (post: Post) => {
               this.onPostUpdated(post);
@@ -3481,7 +3563,7 @@ export struct PostRichContent {
           this.onOpenLink(url);
         },
         onOpenImagePreview: (urls: string[], initialIndex: number) => {
-          this.onOpenImagePreview(urls, initialIndex);
+          this.openNestedImagePreview(urls, initialIndex);
         },
         onQuoteSelection: (selectedText: string, sourceHtml: string) => {
           this.onQuoteSelection(selectedText, sourceHtml);
@@ -3489,8 +3571,8 @@ export struct PostRichContent {
         onCopyQuoteSelection: (selectedText: string, sourceHtml: string) => {
           this.onCopyQuoteSelection(selectedText, sourceHtml);
         },
-        onLongPressImage: (imageUrl: string, previewUrl: string) => {
-          this.onLongPressImage(imageUrl, previewUrl);
+        onLongPressImage: (imageUrl: string, previewUrl: string, previewUrls: string[], initialIndex: number) => {
+          this.emitNestedImageLongPress(imageUrl, previewUrl, previewUrls, initialIndex);
         },
         onPostUpdated: (post: Post) => {
           this.onPostUpdated(post);
@@ -3745,7 +3827,7 @@ export struct PostRichContent {
         code: text,
         marginTop: marginTop,
         onOpenImagePreview: (urls: string[], initialIndex: number) => {
-          this.onOpenImagePreview(urls, initialIndex);
+          this.openNestedImagePreview(urls, initialIndex);
         }
       })
     } else {
@@ -3895,7 +3977,7 @@ export struct PostRichContent {
             const thumbUrl: string = this.getImageThumbUrl(imageIndex);
             const previewUrls: string[] = this.getPreviewUrls();
             const previewUrl: string = imageIndex >= 0 && imageIndex < previewUrls.length ? previewUrls[imageIndex] : thumbUrl;
-            this.emitImageLongPress(thumbUrl, previewUrl);
+            this.emitImageLongPress(thumbUrl, previewUrl, previewUrls, imageIndex);
           })
       )
     } else {
@@ -3935,7 +4017,7 @@ export struct PostRichContent {
                       const imgIdx: number = this.getGridImageIndex(indices, r, c, columns);
                       if (imgIdx >= 0 && imgIdx < thumbUrls.length) {
                         const pUrl: string = imgIdx < previewUrls.length ? previewUrls[imgIdx] : thumbUrls[imgIdx];
-                        this.emitImageLongPress(thumbUrls[imgIdx], pUrl);
+                        this.emitImageLongPress(thumbUrls[imgIdx], pUrl, previewUrls, imgIdx);
                       }
                     })
                 )
@@ -4077,7 +4159,7 @@ export struct PostRichContent {
                 this.onOpenLink(url);
               },
               onOpenImagePreview: (urls: string[], initialIndex: number) => {
-                this.onOpenImagePreview(urls, initialIndex);
+                this.openNestedImagePreview(urls, initialIndex);
               },
                   onQuoteSelection: (selectedText: string, sourceHtml: string) => {
                     this.onQuoteSelection(
@@ -4091,8 +4173,8 @@ export struct PostRichContent {
                       this.buildListItemSelectionSourceHtml(ordered, index, sourceHtml)
                     );
                   },
-              onLongPressImage: (imageUrl: string, previewUrl: string) => {
-                this.onLongPressImage(imageUrl, previewUrl);
+              onLongPressImage: (imageUrl: string, previewUrl: string, previewUrls: string[], initialIndex: number) => {
+                this.emitNestedImageLongPress(imageUrl, previewUrl, previewUrls, initialIndex);
               },
               onPostUpdated: (post: Post) => {
                 this.onPostUpdated(post);
@@ -4258,7 +4340,7 @@ export struct PostRichContent {
             this.onOpenLink(url);
           },
           onOpenImagePreview: (urls: string[], initialIndex: number) => {
-            this.onOpenImagePreview(urls, initialIndex);
+            this.openNestedImagePreview(urls, initialIndex);
           },
           onQuoteSelection: (selectedText: string, sourceHtml: string) => {
             this.onQuoteSelection(selectedText, this.buildSpoilerSelectionSourceHtml(sourceHtml));
@@ -4266,8 +4348,8 @@ export struct PostRichContent {
           onCopyQuoteSelection: (selectedText: string, sourceHtml: string) => {
             this.onCopyQuoteSelection(selectedText, this.buildSpoilerSelectionSourceHtml(sourceHtml));
           },
-          onLongPressImage: (imageUrl: string, previewUrl: string) => {
-            this.onLongPressImage(imageUrl, previewUrl);
+          onLongPressImage: (imageUrl: string, previewUrl: string, previewUrls: string[], initialIndex: number) => {
+            this.emitNestedImageLongPress(imageUrl, previewUrl, previewUrls, initialIndex);
           },
           onPostUpdated: (post: Post) => {
             this.onPostUpdated(post);
@@ -4300,7 +4382,7 @@ export struct PostRichContent {
                     this.onOpenLink(url);
                   },
                   onOpenImagePreview: (urls: string[], initialIndex: number) => {
-                    this.onOpenImagePreview(urls, initialIndex);
+                    this.openNestedImagePreview(urls, initialIndex);
                   },
                 onQuoteSelection: (selectedText: string, sourceHtml: string) => {
                   this.onQuoteSelection(
@@ -4314,8 +4396,8 @@ export struct PostRichContent {
                     this.buildTableCellSelectionSourceHtml(sourceHtml, cell.header)
                   );
                 },
-                  onLongPressImage: (imageUrl: string, previewUrl: string) => {
-                    this.onLongPressImage(imageUrl, previewUrl);
+                  onLongPressImage: (imageUrl: string, previewUrl: string, previewUrls: string[], initialIndex: number) => {
+                    this.emitNestedImageLongPress(imageUrl, previewUrl, previewUrls, initialIndex);
                   },
                   onPostUpdated: (post: Post) => {
                     this.onPostUpdated(post);
@@ -4376,7 +4458,7 @@ export struct PostRichContent {
             this.onOpenLink(url);
           },
           onOpenImagePreview: (urls: string[], initialIndex: number) => {
-            this.onOpenImagePreview(urls, initialIndex);
+            this.openNestedImagePreview(urls, initialIndex);
           },
           onQuoteSelection: (selectedText: string, sourceHtml: string) => {
             this.onQuoteSelection(selectedText, sourceHtml);
@@ -4384,8 +4466,8 @@ export struct PostRichContent {
           onCopyQuoteSelection: (selectedText: string, sourceHtml: string) => {
             this.onCopyQuoteSelection(selectedText, sourceHtml);
           },
-          onLongPressImage: (imageUrl: string, previewUrl: string) => {
-            this.onLongPressImage(imageUrl, previewUrl);
+          onLongPressImage: (imageUrl: string, previewUrl: string, previewUrls: string[], initialIndex: number) => {
+            this.emitNestedImageLongPress(imageUrl, previewUrl, previewUrls, initialIndex);
           },
           onPostUpdated: (post: Post) => {
             this.onPostUpdated(post);
@@ -4474,7 +4556,7 @@ export struct PostRichContent {
               this.onOpenLink(url);
             },
             onOpenImagePreview: (urls: string[], initialIndex: number) => {
-              this.onOpenImagePreview(urls, initialIndex);
+              this.openNestedImagePreview(urls, initialIndex);
             },
             onQuoteSelection: (selectedText: string, sourceHtml: string) => {
               this.onQuoteSelection(selectedText, sourceHtml);
@@ -4482,8 +4564,8 @@ export struct PostRichContent {
             onCopyQuoteSelection: (selectedText: string, sourceHtml: string) => {
               this.onCopyQuoteSelection(selectedText, sourceHtml);
             },
-            onLongPressImage: (imageUrl: string, previewUrl: string) => {
-              this.onLongPressImage(imageUrl, previewUrl);
+            onLongPressImage: (imageUrl: string, previewUrl: string, previewUrls: string[], initialIndex: number) => {
+              this.emitNestedImageLongPress(imageUrl, previewUrl, previewUrls, initialIndex);
             },
             onPostUpdated: (post: Post) => {
               this.onPostUpdated(post);
@@ -4505,7 +4587,7 @@ export struct PostRichContent {
               this.onOpenLink(url);
             },
             onOpenImagePreview: (urls: string[], initialIndex: number) => {
-              this.onOpenImagePreview(urls, initialIndex);
+              this.openNestedImagePreview(urls, initialIndex);
             },
             onQuoteSelection: (selectedText: string, sourceHtml: string) => {
               this.onQuoteSelection(
@@ -4519,8 +4601,8 @@ export struct PostRichContent {
                 this.buildDetailsSelectionSourceHtml(sourceHtml, b.detailsSummary, b.detailsOpen)
               );
             },
-            onLongPressImage: (imageUrl: string, previewUrl: string) => {
-              this.onLongPressImage(imageUrl, previewUrl);
+            onLongPressImage: (imageUrl: string, previewUrl: string, previewUrls: string[], initialIndex: number) => {
+              this.emitNestedImageLongPress(imageUrl, previewUrl, previewUrls, initialIndex);
             },
             onPostUpdated: (post: Post) => {
               this.onPostUpdated(post);
@@ -5002,7 +5084,8 @@ struct RichChatTranscriptBlock {
   };
   @Event onCopyQuoteSelection: (selectedText: string, sourceHtml: string) => void = (_: string, _sourceHtml: string) => {
   };
-  @Event onLongPressImage: (imageUrl: string, previewUrl: string) => void = () => {
+  @Event onLongPressImage: (imageUrl: string, previewUrl: string, previewUrls: string[], initialIndex: number) => void =
+    (_imageUrl: string, _previewUrl: string, _previewUrls: string[], _initialIndex: number) => {
   };
   @Event onPostUpdated: (post: Post) => void = (_: Post) => {
   };
@@ -5127,8 +5210,8 @@ struct RichChatTranscriptBlock {
             onCopyQuoteSelection: (selectedText: string, sourceHtml: string) => {
               this.onCopyQuoteSelection(selectedText, sourceHtml);
             },
-            onLongPressImage: (imageUrl: string, previewUrl: string) => {
-              this.onLongPressImage(imageUrl, previewUrl);
+            onLongPressImage: (imageUrl: string, previewUrl: string, previewUrls: string[], initialIndex: number) => {
+              this.onLongPressImage(imageUrl, previewUrl, previewUrls, initialIndex);
             },
             onPostUpdated: (post: Post) => {
               this.onPostUpdated(post);
@@ -5389,7 +5472,8 @@ struct RichDetailsBlock {
   };
   @Event onCopyQuoteSelection: (selectedText: string, sourceHtml: string) => void = (_: string, _sourceHtml: string) => {
   };
-  @Event onLongPressImage: (imageUrl: string, previewUrl: string) => void = () => {
+  @Event onLongPressImage: (imageUrl: string, previewUrl: string, previewUrls: string[], initialIndex: number) => void =
+    (_imageUrl: string, _previewUrl: string, _previewUrls: string[], _initialIndex: number) => {
   };
   @Event onPostUpdated: (post: Post) => void = (_: Post) => {
   };
@@ -5448,8 +5532,8 @@ struct RichDetailsBlock {
             onCopyQuoteSelection: (selectedText: string, sourceHtml: string) => {
               this.onCopyQuoteSelection(selectedText, sourceHtml);
             },
-            onLongPressImage: (imageUrl: string, previewUrl: string) => {
-              this.onLongPressImage(imageUrl, previewUrl);
+            onLongPressImage: (imageUrl: string, previewUrl: string, previewUrls: string[], initialIndex: number) => {
+              this.onLongPressImage(imageUrl, previewUrl, previewUrls, initialIndex);
             },
             onPostUpdated: (post: Post) => {
               this.onPostUpdated(post);

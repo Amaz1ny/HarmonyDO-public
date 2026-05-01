@@ -25,6 +25,7 @@ import { AuthService } from '../../services/auth/AuthService';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { ErrorView } from '../components/ErrorView';
 import { PrivateMessageComposerSheet } from '../components/PrivateMessageComposerSheet';
+import { ProfileHeroChromeHelper } from '../components/ProfileHeroChromeHelper';
 import { TimeUtils } from '../../common/utils/TimeUtils';
 import { UrlUtils } from '../../common/utils/UrlUtils';
 import { ShareUtils } from '../../common/utils/ShareUtils';
@@ -34,10 +35,7 @@ import { ClipboardService } from '../../common/utils/ClipboardService';
 import { ToastService } from '../../common/utils/ToastService';
 import { FeatureSettingsService } from '../../services/storage/FeatureSettingsService';
 
-const TOP_BAR_HEIGHT: number = 56; // 不含状态栏安全区
 const HEADER_AVATAR_SIZE: number = 72;
-const TAB_HEIGHT: number = 36;
-const EXPANDED_HEIGHT: number = 410; // 不含状态栏安全区
 const TAG: string = 'UserProfilePage';
 const ACTION_PAGE_SIZE: number = 30;
 const REACTION_PAGE_SIZE: number = 20;
@@ -696,7 +694,7 @@ export struct UserProfilePage {
   }
 
   private getHeaderGlassSurface(alphaDark: number, alphaLight: number): string {
-    return ThemeManager.hexWithAlpha('#FFFFFF', WindowManager.isDarkMode() ? alphaDark : alphaLight);
+    return ProfileHeroChromeHelper.getHeaderGlassSurface(alphaDark, alphaLight);
   }
 
   private getHeaderCardBackground(): string {
@@ -909,6 +907,10 @@ export struct UserProfilePage {
     .backgroundColor($r('app.color.background'))
     .hideTitleBar(true)
     .hideToolBar(true)
+    .systemBarStyle(
+      { statusBarContentColor: ProfileHeroChromeHelper.getStatusBarContentColor() },
+      { statusBarContentColor: ProfileHeroChromeHelper.getStatusBarContentColor() }
+    )
   }
 
   @Builder
@@ -1019,44 +1021,36 @@ export struct UserProfilePage {
     return this.clamp((t - 0.4) / 0.6, 0, 1);
   }
 
-  private computeMaskAlpha(t: number): number {
-    // easeOut(1 - t) 近似：1 - (1-x)^2
-    const x: number = this.clamp(1 - t, 0, 1);
-    const eased: number = 1 - (1 - x) * (1 - x);
-    // 遮罩透明度：展开 0.6 → 收起 0.85
-    return 0.6 + (0.85 - 0.6) * eased;
-  }
-
   private clamp(v: number, min: number, max: number): number {
     return Math.max(min, Math.min(max, v));
   }
 
   private getFlexibleHeight(): number {
-    return Math.max(this.getTopBarHeight(), this.computeHeaderHeight() - TAB_HEIGHT);
+    return ProfileHeroChromeHelper.getFlexibleHeightVp(this.computeHeaderHeight());
   }
 
   private getFlexibleMaxHeight(): number {
-    return Math.max(this.getTopBarHeight(), this.getExpandedHeight() - TAB_HEIGHT);
+    return ProfileHeroChromeHelper.getFlexibleMaxHeightVp();
   }
 
   private getTopSafeHeight(): number {
-    return WindowManager.getSystemAvoidAreaTopVp();
+    return ProfileHeroChromeHelper.getTopSafeHeightVp();
   }
 
   private getBottomSafeHeight(): number {
-    return WindowManager.getSystemAvoidAreaBottomVp();
+    return ProfileHeroChromeHelper.getBottomSafeHeightVp();
   }
 
   private getTopBarHeight(): number {
-    return TOP_BAR_HEIGHT + this.getTopSafeHeight();
+    return ProfileHeroChromeHelper.getTopBarHeightVp();
   }
 
   private getPinnedHeaderHeight(): number {
-    return this.getTopBarHeight() + TAB_HEIGHT;
+    return ProfileHeroChromeHelper.getPinnedHeaderHeightVp();
   }
 
   private getExpandedHeight(): number {
-    return EXPANDED_HEIGHT + this.getTopSafeHeight();
+    return ProfileHeroChromeHelper.getExpandedHeightVp();
   }
 
   private getTitleOpacity(): number {
@@ -1068,23 +1062,14 @@ export struct UserProfilePage {
   }
 
   private getMaskAlpha(): number {
-    return this.computeMaskAlpha(this.computeCollapseT());
+    return ProfileHeroChromeHelper.getHeroMaskAlpha(this.computeCollapseT());
   }
 
   @Builder
   TopBarOverlay() {
     Row() {
       // 返回
-      Row() {
-        SymbolGlyph($r('sys.symbol.chevron_left'))
-          .fontSize(18)
-          .fontColor([Color.White])
-      }
-      .width(44)
-      .height(44)
-      .justifyContent(FlexAlign.Center)
-      .alignItems(VerticalAlign.Center)
-      .onClick(() => {
+      this.HeroTopBarButton($r('sys.symbol.chevron_left'), () => {
         RouterManager.pop();
       })
 
@@ -1092,54 +1077,107 @@ export struct UserProfilePage {
 
       // 右侧按钮：搜索 + 私信 + 更多
       Row() {
-        Row() {
-          SymbolGlyph($r('sys.symbol.magnifyingglass'))
-            .fontSize(18)
-            .fontColor([Color.White])
-        }
-        .width(44)
-        .height(44)
-        .justifyContent(FlexAlign.Center)
-        .alignItems(VerticalAlign.Center)
-        .onClick(() => {
+        this.HeroTopBarButton($r('sys.symbol.magnifyingglass'), () => {
           RouterManager.pushPath(RouteConstants.PAGE_SEARCH, `@${this.getTargetUsername()}` as Object);
         })
 
         if (this.canOpenPrivateMessage()) {
-          Row() {
-            SymbolGlyph($r('sys.symbol.message'))
-              .fontSize(18)
-              .fontColor([Color.White])
-          }
-          .width(44)
-          .height(44)
-          .justifyContent(FlexAlign.Center)
-          .alignItems(VerticalAlign.Center)
-          .onClick(() => {
+          this.HeroTopBarButton($r('sys.symbol.message'), () => {
             this.openPrivateMessageSheet();
           })
         }
 
-        Row() {
-          SymbolGlyph($r('sys.symbol.ellipsis_message'))
-            .fontSize(18)
-            .fontColor([Color.White])
-        }
-        .width(44)
-        .height(44)
-        .justifyContent(FlexAlign.Center)
-        .alignItems(VerticalAlign.Center)
-        .bindMenu(this.MoreMenuBuilder())
+        this.HeroTopBarMenuButton($r('sys.symbol.ellipsis_message'))
       }
-      .width(this.canOpenPrivateMessage() ? 132 : 88)
-      .height(TOP_BAR_HEIGHT)
+      .width(ProfileHeroChromeHelper.getTopBarTrailingGroupWidthVp(this.canOpenPrivateMessage() ? 3 : 2))
+      .height(ProfileHeroChromeHelper.getTopBarBaseHeightVp())
       .alignItems(VerticalAlign.Center)
     }
     .width('100%')
     .height(this.getTopBarHeight())
-    .padding({ left: 8, right: 8, top: this.getTopSafeHeight() })
+    .padding({
+      left: ProfileHeroChromeHelper.getTopBarHorizontalPaddingVp(),
+      right: ProfileHeroChromeHelper.getTopBarHorizontalPaddingVp(),
+      top: this.getTopSafeHeight()
+    })
     .backgroundColor(Color.Transparent)
     .alignItems(VerticalAlign.Center)
+  }
+
+  @Builder
+  HeroTopBarButton(icon: Resource, onClick: () => void = () => {}) {
+    Row() {
+      Row() {
+        SymbolGlyph(icon)
+          .fontSize(ProfileHeroChromeHelper.getTopBarButtonIconSizeVp())
+          .fontColor([Color.White])
+      }
+      .width(ProfileHeroChromeHelper.getTopBarButtonVisualSizeVp())
+      .height(ProfileHeroChromeHelper.getTopBarButtonVisualSizeVp())
+      .justifyContent(FlexAlign.Center)
+      .alignItems(VerticalAlign.Center)
+      .borderRadius(ProfileHeroChromeHelper.getTopBarButtonRadiusVp())
+      .backgroundColor(Color.Transparent)
+      .backgroundEffect(
+        {
+          radius: ProfileHeroChromeHelper.getTopBarButtonBlurRadiusVp(),
+          saturation: 1.8,
+          brightness: 1.08,
+          color: $r('app.color.profile_hero_button_tint'),
+          adaptiveColor: AdaptiveColor.DEFAULT,
+          policy: BlurStyleActivePolicy.ALWAYS_ACTIVE,
+          inactiveColor: ProfileHeroChromeHelper.getTopBarButtonFallbackColor()
+        },
+        { disableSystemAdaptation: true }
+      )
+      .border({ width: 0.5, color: $r('app.color.profile_hero_button_stroke') })
+      .shadow({ radius: 6, color: ProfileHeroChromeHelper.getTopBarButtonShadowColor(), offsetX: 0, offsetY: 2 })
+      .clip(true)
+    }
+    .width(ProfileHeroChromeHelper.getTopBarButtonTouchSizeVp())
+    .height(ProfileHeroChromeHelper.getTopBarButtonTouchSizeVp())
+    .justifyContent(FlexAlign.Center)
+    .alignItems(VerticalAlign.Center)
+    .backgroundColor(Color.Transparent)
+    .onClick(onClick)
+  }
+
+  @Builder
+  HeroTopBarMenuButton(icon: Resource) {
+    Row() {
+      Row() {
+        SymbolGlyph(icon)
+          .fontSize(ProfileHeroChromeHelper.getTopBarButtonIconSizeVp())
+          .fontColor([Color.White])
+      }
+      .width(ProfileHeroChromeHelper.getTopBarButtonVisualSizeVp())
+      .height(ProfileHeroChromeHelper.getTopBarButtonVisualSizeVp())
+      .justifyContent(FlexAlign.Center)
+      .alignItems(VerticalAlign.Center)
+      .borderRadius(ProfileHeroChromeHelper.getTopBarButtonRadiusVp())
+      .backgroundColor(Color.Transparent)
+      .backgroundEffect(
+        {
+          radius: ProfileHeroChromeHelper.getTopBarButtonBlurRadiusVp(),
+          saturation: 1.8,
+          brightness: 1.08,
+          color: $r('app.color.profile_hero_button_tint'),
+          adaptiveColor: AdaptiveColor.DEFAULT,
+          policy: BlurStyleActivePolicy.ALWAYS_ACTIVE,
+          inactiveColor: ProfileHeroChromeHelper.getTopBarButtonFallbackColor()
+        },
+        { disableSystemAdaptation: true }
+      )
+      .border({ width: 0.5, color: $r('app.color.profile_hero_button_stroke') })
+      .shadow({ radius: 6, color: ProfileHeroChromeHelper.getTopBarButtonShadowColor(), offsetX: 0, offsetY: 2 })
+      .clip(true)
+    }
+    .width(ProfileHeroChromeHelper.getTopBarButtonTouchSizeVp())
+    .height(ProfileHeroChromeHelper.getTopBarButtonTouchSizeVp())
+    .justifyContent(FlexAlign.Center)
+    .alignItems(VerticalAlign.Center)
+    .backgroundColor(Color.Transparent)
+    .bindMenu(this.MoreMenuBuilder())
   }
 
   @Builder
@@ -1526,7 +1564,7 @@ export struct UserProfilePage {
               .fill(this.currentTabIndex === index ? $r('app.color.primary') : Color.Transparent)
           }
           .layoutWeight(1)
-          .height(TAB_HEIGHT)
+          .height(ProfileHeroChromeHelper.getTabHeightVp())
           .justifyContent(FlexAlign.End)
           .alignItems(HorizontalAlign.Center)
           .onClick(() => {
@@ -1536,10 +1574,10 @@ export struct UserProfilePage {
       }
       .width('100%')
       .padding({ left: 0, right: 0 })
-      .backgroundColor($r('app.color.surface'))
+      .backgroundColor($r('app.color.profile_hero_tab_surface'))
 
       Divider()
-        .color($r('app.color.divider_light'))
+        .color($r('app.color.profile_hero_tab_divider'))
         .strokeWidth(1)
         .margin({ left: 16, right: 16 })
     }
@@ -2765,7 +2803,7 @@ export struct UserProfilePage {
           }
         }
         .width('100%')
-        .padding({ left: 24, right: 24, top: 24, bottom: 24 + WindowManager.getSystemAvoidAreaBottomVp() })
+        .padding({ left: 24, right: 24, top: 24, bottom: 24 + this.getBottomSafeHeight() })
       }
       .width('100%')
       .layoutWeight(1)

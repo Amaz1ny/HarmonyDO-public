@@ -1,10 +1,11 @@
-import { HdsNavDestination } from '@kit.UIDesignKit';
-import { RouterManager } from '../../common/utils/RouterManager';
+import {
+  HdsNavDestination,
+  HdsNavDestinationTitleMode
+} from '@kit.UIDesignKit';
 import { FeatureSettingsService, FeatureSettingsState } from '../../services/storage/FeatureSettingsService';
 import { ToastService } from '../../common/utils/ToastService';
-import { WindowManager } from '../../common/utils/WindowManager';
+import { ImmersiveHdsTitleBarHelper } from '../components/ImmersiveHdsTitleBarHelper';
 
-const TOP_BAR_HEIGHT: number = 56;
 const PAGE_HORIZONTAL_PADDING: number = 16;
 const CARD_CORNER_RADIUS: number = 20;
 const INPUT_CORNER_RADIUS: number = 14;
@@ -26,6 +27,8 @@ export struct FeatureSettingsPage {
   @Local isLoading: boolean = true;
   @Local isSavingStickerSource: boolean = false;
   @Local stickerSourceError: string = '';
+
+  private contentScroller: Scroller = new Scroller();
 
   aboutToAppear(): void {
     this.loadSettings().catch(() => {
@@ -213,60 +216,6 @@ export struct FeatureSettingsPage {
   }
 
   @Builder
-  private TopBar() {
-    Row() {
-      Row() {
-        SymbolGlyph($r('sys.symbol.chevron_left'))
-          .fontSize(18)
-          .fontColor([$r('app.color.on_surface')]);
-      }
-      .width(44)
-      .height(44)
-      .justifyContent(FlexAlign.Center)
-      .alignItems(VerticalAlign.Center)
-      .onClick(() => {
-        RouterManager.pop();
-      });
-
-      Text($r('app.string.profile_feature_settings'))
-        .layoutWeight(1)
-        .textAlign(TextAlign.Center)
-        .fontSize(18)
-        .fontWeight(FontWeight.Medium)
-        .fontColor($r('app.color.on_surface'));
-
-      Blank()
-        .width(44)
-        .height(44);
-    }
-    .width('100%')
-    .height(TOP_BAR_HEIGHT)
-    .padding({ left: 8, right: 8 })
-    .backgroundColor($r('app.color.background'))
-    .alignItems(VerticalAlign.Center);
-  }
-
-  @Builder
-  private HeroCard() {
-    Column({ space: 8 }) {
-      Text($r('app.string.feature_settings_page_title'))
-        .fontSize(24)
-        .fontWeight(FontWeight.Bold)
-        .fontColor($r('app.color.on_surface'));
-      Text($r('app.string.profile_service_feature_hint'))
-        .fontSize(13)
-        .lineHeight(20)
-        .fontColor($r('app.color.on_surface_secondary'));
-    }
-    .width('100%')
-    .alignItems(HorizontalAlign.Start)
-    .padding({ left: 18, right: 18, top: 18, bottom: 18 })
-    .backgroundColor($r('app.color.card_background'))
-    .borderRadius(CARD_CORNER_RADIUS)
-    .border({ width: 1, color: $r('app.color.divider_light') });
-  }
-
-  @Builder
   private SectionTitle(section: FeatureSettingsSection) {
     Column() {
       Text(section.title)
@@ -399,11 +348,11 @@ export struct FeatureSettingsPage {
   build() {
     HdsNavDestination() {
       Column() {
-        this.TopBar();
-
-        Scroll() {
+        Scroll(this.contentScroller) {
           Column() {
-            this.HeroCard();
+            Blank()
+              .height(ImmersiveHdsTitleBarHelper.getContentTopSpacerHeightVp())
+              .width('100%');
 
             ForEach(this.getSections(), (section: FeatureSettingsSection) => {
               this.SectionTitle(section);
@@ -432,11 +381,19 @@ export struct FeatureSettingsPage {
       }
       .width('100%')
       .height('100%')
-      .padding({ top: WindowManager.getSystemAvoidAreaTopVp() })
       .backgroundColor($r('app.color.background'));
     }
-    .hideTitleBar(true)
+    .titleMode(HdsNavDestinationTitleMode.MINI)
+    .titleBar(ImmersiveHdsTitleBarHelper.buildImmersiveTitleBar($r('app.string.profile_feature_settings')))
+    .hideTitleBar(false)
+    .hideBackButton(false)
     .hideToolBar(true)
+    .bindToScrollable([this.contentScroller])
+    .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
+    .systemBarStyle(
+      { statusBarContentColor: ImmersiveHdsTitleBarHelper.getStatusBarContentColor() },
+      { statusBarContentColor: ImmersiveHdsTitleBarHelper.getStatusBarContentColor() }
+    )
     .backgroundColor($r('app.color.background'));
   }
 }

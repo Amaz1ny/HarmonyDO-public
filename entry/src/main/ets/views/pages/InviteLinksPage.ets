@@ -1,20 +1,20 @@
 import { hilog } from '@kit.PerformanceAnalysisKit';
-import { HdsNavDestination } from '@kit.UIDesignKit';
+import { HdsNavDestination, HdsNavDestinationTitleMode } from '@kit.UIDesignKit';
 import { pasteboard } from '@kit.BasicServicesKit';
 import { SystemShareService } from '../../common/utils/SystemShareService';
-import { RouterManager } from '../../common/utils/RouterManager';
+import { WindowManager } from '../../common/utils/WindowManager';
 import { ToastService } from '../../common/utils/ToastService';
 import { ApiClient } from '../../services/network/ApiClient';
 import { InviteLinkDetails, InviteLinkResponse } from '../../models/InviteLink';
 import { TimeUtils } from '../../common/utils/TimeUtils';
 import { AppConstants } from '../../common/constants/AppConstants';
+import { ImmersiveHdsTitleBarHelper } from '../components/ImmersiveHdsTitleBarHelper';
 
 const TAG: string = 'InviteLinksPage';
 const PAGE_HORIZONTAL_PADDING: number = 16;
 const CARD_CORNER_RADIUS: number = 20;
 const HERO_CARD_CORNER_RADIUS: number = 24;
 const CARD_INNER_RADIUS: number = 14;
-const TOP_BAR_HEIGHT: number = 56;
 
 class InviteMeta {
   maxRedemptions: number;
@@ -46,6 +46,8 @@ export struct InviteLinksPage {
   @Local showAdvancedOptions: boolean = false;
   @Local descriptionText: string = '';
   @Local emailText: string = '';
+
+  private contentScroller: Scroller = new Scroller();
 
   aboutToAppear(): void {
     this.loadPendingInvites().catch((err: Object) => {
@@ -222,39 +224,6 @@ export struct InviteLinksPage {
     }
     const subject: string = getContext().resourceManager.getStringSync($r('app.string.invite_share_subject').id);
     await SystemShareService.shareText(trimmed, subject, true);
-  }
-
-  @Builder
-  private TopBar() {
-    Row() {
-      Row() {
-        SymbolGlyph($r('sys.symbol.chevron_left'))
-          .fontSize(18)
-          .fontColor([$r('app.color.on_surface')])
-      }
-      .width(44)
-      .height(44)
-      .justifyContent(FlexAlign.Center)
-      .alignItems(VerticalAlign.Center)
-      .onClick(() => {
-        RouterManager.pop();
-      })
-
-      Text($r('app.string.invite_page_title'))
-        .fontSize(17)
-        .fontWeight(FontWeight.Bold)
-        .fontColor($r('app.color.on_surface'))
-        .layoutWeight(1)
-
-      Blank()
-        .width(44)
-        .height(44)
-    }
-    .width('100%')
-    .height(TOP_BAR_HEIGHT)
-    .padding({ left: 8, right: 8 })
-    .backgroundColor($r('app.color.background'))
-    .alignItems(VerticalAlign.Center)
   }
 
   @Builder
@@ -710,8 +679,12 @@ export struct InviteLinksPage {
 
   @Builder
   private PageContent() {
-    Scroll() {
+    Scroll(this.contentScroller) {
       Column() {
+        Blank()
+          .height(ImmersiveHdsTitleBarHelper.getContentTopSpacerHeightVp())
+          .width('100%')
+
         this.HeroInviteCard()
         if (this.showAdvancedOptions) {
           Blank().height(16)
@@ -728,9 +701,14 @@ export struct InviteLinksPage {
 
         Blank().height(32)
       }
-      .padding({ left: PAGE_HORIZONTAL_PADDING, right: PAGE_HORIZONTAL_PADDING, bottom: 16 })
+      .padding({
+        left: PAGE_HORIZONTAL_PADDING,
+        right: PAGE_HORIZONTAL_PADDING,
+        bottom: 16 + WindowManager.getSystemAvoidAreaBottomVp()
+      })
     }
     .scrollBar(BarState.Off)
+    .edgeEffect(EdgeEffect.Spring)
     .layoutWeight(1)
     .width('100%')
   }
@@ -738,7 +716,6 @@ export struct InviteLinksPage {
   build() {
     HdsNavDestination() {
       Column() {
-        this.TopBar()
         this.PageContent()
       }
       .width('100%')
@@ -746,7 +723,16 @@ export struct InviteLinksPage {
       .backgroundColor($r('app.color.background'))
     }
     .backgroundColor($r('app.color.background'))
-    .hideTitleBar(true)
+    .titleMode(HdsNavDestinationTitleMode.MINI)
+    .titleBar(ImmersiveHdsTitleBarHelper.buildImmersiveTitleBar($r('app.string.invite_page_title')))
+    .hideTitleBar(false)
+    .hideBackButton(false)
     .hideToolBar(true)
+    .bindToScrollable([this.contentScroller])
+    .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
+    .systemBarStyle(
+      { statusBarContentColor: ImmersiveHdsTitleBarHelper.getStatusBarContentColor() },
+      { statusBarContentColor: ImmersiveHdsTitleBarHelper.getStatusBarContentColor() }
+    )
   }
 }

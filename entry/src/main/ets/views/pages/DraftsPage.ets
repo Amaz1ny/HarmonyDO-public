@@ -1,4 +1,4 @@
-import { HdsNavDestination } from '@kit.UIDesignKit';
+import { HdsNavDestination, HdsNavDestinationTitleMode } from '@kit.UIDesignKit';
 import { Draft } from '../../models/Draft';
 import { TimeUtils } from '../../common/utils/TimeUtils';
 import { RouterManager } from '../../common/utils/RouterManager';
@@ -11,8 +11,7 @@ import { SmartAvatar } from '../components/SmartAvatar';
 import { ReplyComposerSheet } from '../components/ReplyComposerSheet';
 import { PrivateMessageComposerSheet } from '../components/PrivateMessageComposerSheet';
 import { CreateTopicComposerSheet } from '../components/CreateTopicComposerSheet';
-
-const TOP_BAR_HEIGHT: number = 56;
+import { ImmersiveHdsTitleBarHelper } from '../components/ImmersiveHdsTitleBarHelper';
 
 @ComponentV2
 export struct DraftsPage {
@@ -36,6 +35,7 @@ export struct DraftsPage {
 
   private createdTopicId: number = 0;
   private isResetLoading: boolean = false;
+  private contentScroller: Scroller = new Scroller();
 
   aboutToAppear(): void {
     this.loadDrafts(true, this.drafts.length === 0, false).catch(() => {
@@ -258,8 +258,6 @@ export struct DraftsPage {
     HdsNavDestination() {
       Stack({ alignContent: Alignment.Bottom }) {
         Column() {
-          this.TopBar()
-
           Refresh({ refreshing: this.isRefreshing }) {
             if (this.isLoading && this.drafts.length === 0 && this.errorMessage.length === 0) {
               Column() {
@@ -284,9 +282,13 @@ export struct DraftsPage {
               .height('100%')
               .justifyContent(FlexAlign.Center)
             } else {
-              List() {
-                if (!this.isLoading && this.drafts.length === 0) {
-                  ListItem() {
+              Scroll(this.contentScroller) {
+                Column() {
+                  Blank()
+                    .height(ImmersiveHdsTitleBarHelper.getContentTopSpacerHeightVp())
+                    .width('100%')
+
+                  if (!this.isLoading && this.drafts.length === 0) {
                     Column() {
                       SymbolGlyph($r('sys.symbol.notepad'))
                         .fontSize(30)
@@ -299,17 +301,13 @@ export struct DraftsPage {
                     .width('100%')
                     .padding({ top: 96, bottom: 96 })
                     .alignItems(HorizontalAlign.Center)
-                  }
-                } else {
-                  ForEach(this.drafts, (draft: Draft) => {
-                    ListItem() {
+                  } else {
+                    ForEach(this.drafts, (draft: Draft) => {
                       this.DraftCard(draft)
-                    }
-                  }, (draft: Draft) => draft.draftKey)
-                }
+                    }, (draft: Draft) => draft.draftKey)
+                  }
 
-                if (this.loadMoreFailed) {
-                  ListItem() {
+                  if (this.loadMoreFailed) {
                     Text('加载更多失败，点击重试')
                       .fontSize(13)
                       .fontColor($r('app.color.primary'))
@@ -320,9 +318,7 @@ export struct DraftsPage {
                         this.loadDrafts(false, false).catch(() => {
                         });
                       })
-                  }
-                } else if (this.isLoadingMore) {
-                  ListItem() {
+                  } else if (this.isLoadingMore) {
                     Row() {
                       LoadingProgress().width(18).height(18)
                       Text('加载中...')
@@ -333,9 +329,7 @@ export struct DraftsPage {
                     .width('100%')
                     .height(44)
                     .justifyContent(FlexAlign.Center)
-                  }
-                } else if (!this.hasMore && this.drafts.length > 0) {
-                  ListItem() {
+                  } else if (!this.hasMore && this.drafts.length > 0) {
                     Text('没有更多了')
                       .fontSize(12)
                       .fontColor($r('app.color.on_surface_tertiary'))
@@ -344,6 +338,8 @@ export struct DraftsPage {
                       .padding({ top: 16, bottom: 12 })
                   }
                 }
+                .width('100%')
+                .alignItems(HorizontalAlign.Center)
               }
               .width('100%')
               .height('100%')
@@ -365,7 +361,6 @@ export struct DraftsPage {
         .width('100%')
         .height('100%')
         .backgroundColor($r('app.color.background'))
-        .padding({ top: WindowManager.getSystemAvoidAreaTopVp() })
 
         this.DeleteConfirmOverlay()
 
@@ -404,39 +399,17 @@ export struct DraftsPage {
       }
     }
     .backgroundColor($r('app.color.background'))
-    .hideTitleBar(true)
+    .titleMode(HdsNavDestinationTitleMode.MINI)
+    .titleBar(ImmersiveHdsTitleBarHelper.buildImmersiveTitleBar($r('app.string.profile_my_drafts')))
+    .hideTitleBar(false)
+    .hideBackButton(false)
     .hideToolBar(true)
-  }
-
-  @Builder
-  private TopBar() {
-    Row() {
-      Row() {
-        SymbolGlyph($r('sys.symbol.chevron_left'))
-          .fontSize(18)
-          .fontColor([$r('app.color.on_surface')])
-      }
-      .width(44)
-      .height(44)
-      .justifyContent(FlexAlign.Center)
-      .alignItems(VerticalAlign.Center)
-      .onClick(() => {
-        RouterManager.pop();
-      })
-
-      Text('我的草稿')
-        .fontSize(17)
-        .fontWeight(FontWeight.Bold)
-        .fontColor($r('app.color.on_surface'))
-        .layoutWeight(1)
-
-      Blank().width(44)
-    }
-    .width('100%')
-    .height(TOP_BAR_HEIGHT)
-    .padding({ left: 8, right: 8 })
-    .backgroundColor($r('app.color.background'))
-    .alignItems(VerticalAlign.Center)
+    .bindToScrollable([this.contentScroller])
+    .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
+    .systemBarStyle(
+      { statusBarContentColor: ImmersiveHdsTitleBarHelper.getStatusBarContentColor() },
+      { statusBarContentColor: ImmersiveHdsTitleBarHelper.getStatusBarContentColor() }
+    )
   }
 
   @Builder

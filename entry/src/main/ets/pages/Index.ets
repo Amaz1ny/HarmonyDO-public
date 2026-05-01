@@ -58,6 +58,9 @@ import {
   FLOATING_TAB_BAR_MARGIN_BOTTOM_VP,
   FLOATING_TAB_BAR_OFFSET_UP_VP,
   FLOATING_TAB_BAR_OPACITY,
+  FLOATING_TAB_BAR_RADIUS_VP,
+  FLOATING_TAB_BAR_SHADOW_OFFSET_Y_VP,
+  FLOATING_TAB_BAR_SHADOW_RADIUS_VP,
   FLOATING_TAB_BAR_WIDTH_LARGE_VP,
   FLOATING_TAB_BAR_WIDTH_MEDIUM_VP,
   FLOATING_TAB_BAR_WIDTH_SMALL_VP
@@ -87,6 +90,7 @@ struct Index {
   @Local currentTabUser: User | null = null;
   @Local currentTabUsername: string = '';
   @Local showCfChallengeOverlay: boolean = false;
+  @Local rootWidthVp: number = 0;
 
   private tabsController: HdsTabsController = new HdsTabsController();
   private authStateListener: (() => void) | null = null;
@@ -124,6 +128,40 @@ struct Index {
 
   private getHdsFloatingTabBarGradientMaskHeight(): number {
     return FLOATING_TAB_BAR_HEIGHT_VP + this.getHdsFloatingTabBarBottomMargin() + 16;
+  }
+
+  private getFloatingTabBarHideTranslate(): number {
+    return FLOATING_TAB_BAR_HEIGHT_VP + this.getHdsFloatingTabBarBottomMargin() + 24;
+  }
+
+  private parseAreaDimension(value: number | string | Resource): number {
+    if (typeof value === 'number') {
+      return value as number;
+    }
+    if (typeof value === 'string') {
+      const parsed: number = Number((value as string).replace('vp', ''));
+      return isNaN(parsed) ? 0 : parsed;
+    }
+    return 0;
+  }
+
+  private updateRootWidthVp(widthValue: number | string | Resource): void {
+    const nextWidth: number = this.parseAreaDimension(widthValue);
+    if (nextWidth <= 0 || Math.abs(nextWidth - this.rootWidthVp) <= 0.5) {
+      return;
+    }
+    this.rootWidthVp = nextWidth;
+  }
+
+  private getHdsFloatingTabBarShadowWidthVp(): number {
+    // 与 HDS 悬浮栏 small / medium / large 分档保持一致，让阴影底层贴合原生胶囊宽度。
+    if (this.rootWidthVp <= 0 || this.rootWidthVp < 600) {
+      return FLOATING_TAB_BAR_WIDTH_SMALL_VP;
+    }
+    if (this.rootWidthVp < 840) {
+      return FLOATING_TAB_BAR_WIDTH_MEDIUM_VP;
+    }
+    return FLOATING_TAB_BAR_WIDTH_LARGE_VP;
   }
 
   private getHdsTabsFloatingStyle(): HdsTabsFloatingStyle {
@@ -475,16 +513,23 @@ struct Index {
           })
           .scrollable(false)
 
+          this.FloatingTabBarShadowPlate()
+
           ReadLaterBubble()
         }
         .width('100%')
         .height('100%')
+        .onAreaChange((_: Area, newArea: Area) => {
+          this.updateRootWidthVp(newArea.width);
+        })
       }
       .navDestination(this.routeMap)
       .hideTitleBar(true)
       .hideToolBar(true)
       .width('100%')
       .height('100%')
+      .backgroundColor($r('app.color.background'))
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
 
       if (this.showCfChallengeOverlay) {
         CfChallengePage({ overlayMode: true })
@@ -495,6 +540,30 @@ struct Index {
     }
     .width('100%')
     .height('100%')
+    .backgroundColor($r('app.color.background'))
+    .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
+  }
+
+  @Builder
+  private FloatingTabBarShadowPlate() {
+    Stack() {
+    }
+    .width(this.getHdsFloatingTabBarShadowWidthVp())
+    .height(FLOATING_TAB_BAR_HEIGHT_VP)
+    .borderRadius(FLOATING_TAB_BAR_RADIUS_VP)
+    .backgroundColor($r('app.color.tab_floating_surface_tint'))
+    .border({ width: 0.5, color: $r('app.color.tab_floating_outline') })
+    .shadow({
+      radius: FLOATING_TAB_BAR_SHADOW_RADIUS_VP,
+      color: $r('app.color.tab_floating_shadow'),
+      offsetX: 0,
+      offsetY: FLOATING_TAB_BAR_SHADOW_OFFSET_Y_VP
+    })
+    .opacity(this.getEffectiveTabBarVisibility())
+    .margin({ bottom: this.getHdsFloatingTabBarBottomMargin() })
+    .translate({ x: 0, y: (1 - this.getEffectiveTabBarVisibility()) * this.getFloatingTabBarHideTranslate() })
+    .enabled(false)
+    .hitTestBehavior(HitTestMode.Transparent)
   }
 
   @Builder

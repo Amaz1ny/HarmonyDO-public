@@ -16,10 +16,13 @@ import { SearchPostCard } from '../components/search/SearchPostCard';
 import { SearchFilterPanel } from '../components/search/SearchFilterPanel';
 import { TagSelectionSheet } from '../components/TagControls';
 import { HdsNavDestination } from '@kit.UIDesignKit';
+import { ImmersiveHdsTitleBarHelper } from '../components/ImmersiveHdsTitleBarHelper';
 import { WindowManager } from '../../common/utils/WindowManager';
 
 const TAG: string = 'SearchPage';
-const TOP_BAR_HEIGHT: number = 56;
+const SEARCH_TOP_BAR_HEIGHT: number = 56;
+const SEARCH_TOP_BAR_BLUR_RADIUS: number = 48;
+const SEARCH_TOP_SAFE_MAX_HEIGHT: number = 48;
 const SEARCH_FIELD_HEIGHT: number = 40;
 const SHEET_NONE: number = 0;
 const SHEET_FILTER: number = 1;
@@ -83,8 +86,20 @@ export struct SearchPage {
   @Local isAfterDateSheetVisible: boolean = false;
   @Local isBeforeDateSheetVisible: boolean = false;
 
-  private listScroller: Scroller = new Scroller();
+  private contentScroller: Scroller = new Scroller();
   private hotTagsLoadVersion: number = 0;
+
+  private getSearchTopSafeHeightVp(): number {
+    const topSafeHeight: number = WindowManager.getSystemAvoidAreaTopVp();
+    if (topSafeHeight <= 0) {
+      return 0;
+    }
+    return Math.min(topSafeHeight, SEARCH_TOP_SAFE_MAX_HEIGHT);
+  }
+
+  private getSearchTopBarTotalHeightVp(): number {
+    return this.getSearchTopSafeHeightVp() + SEARCH_TOP_BAR_HEIGHT;
+  }
 
   aboutToAppear(): void {
     this.initializePage();
@@ -172,6 +187,14 @@ export struct SearchPage {
 
   private hasAppliedSearchCriteria(): boolean {
     return this.hasRunnableSearchCriteria(this.query, this.filter);
+  }
+
+  private shouldRenderRecentSearchesDirectly(): boolean {
+    return !this.isLoading &&
+      this.errorMessage.length === 0 &&
+      !this.hasAppliedSearchCriteria() &&
+      !this.isLoadingRecent &&
+      this.recentSearches.length > 0;
   }
 
   private pushUniqueTag(target: string[], rawName: string): void {
@@ -397,7 +420,7 @@ export struct SearchPage {
       this.currentPage = page;
 
       if (scrollToTop) {
-        this.listScroller.scrollTo({ xOffset: 0, yOffset: 0, animation: { duration: 120, curve: Curve.EaseOut } });
+        this.contentScroller.scrollTo({ xOffset: 0, yOffset: 0, animation: { duration: 120, curve: Curve.EaseOut } });
       }
     } catch (err) {
       hilog.error(0x0000, TAG, 'fetchSearchPage failed: %{public}s', JSON.stringify(err));
@@ -810,143 +833,111 @@ export struct SearchPage {
 
   build() {
     HdsNavDestination() {
-      Stack() {
+      Stack({ alignContent: Alignment.TopStart }) {
         Column() {
-          this.TopBar()
+          this.SearchTopBar()
 
-          if (this.filter.isNotEmpty) {
-            ActiveSearchFiltersBar({
-              filter: this.filter,
-              onClearCategory: () => this.clearFilterCategory(),
-              onRemoveTag: (t: string) => this.removeFilterTag(t),
-              onClearStatus: () => this.clearFilterStatus(),
-              onClearDateRange: () => this.clearFilterDateRange(),
-              onClearAll: () => this.clearAllFilters()
-            })
-          }
+          if (this.shouldRenderRecentSearchesDirectly()) {
+            this.RecentSearchesView()
 
-          if (this.hasAppliedSearchCriteria() &&
-            (!this.isLoading || this.postResults.length > 0 || this.userResults.length > 0 || this.topicResults.length > 0)) {
-            this.SearchSortRow()
-          }
-
-          if (this.isLoading) {
-            Column() {
-              LoadingSpinner({ message: '' })
-            }
-            .width('100%')
-            .layoutWeight(1)
-            .justifyContent(FlexAlign.Center)
-          } else if (this.errorMessage.length > 0) {
-            Column() {
-              ErrorView({
-                title: $r('app.string.load_failed'),
-                message: this.errorMessage,
-                showRetry: true,
-                onRetry: () => {
-                  if (this.categories.length === 0) {
-                    this.loadData();
-                  } else {
-                    this.performSearch();
-                  }
-                }
-              })
-            }
-            .width('100%')
-            .layoutWeight(1)
-            .justifyContent(FlexAlign.Center)
-          } else if (!this.hasAppliedSearchCriteria()) {
-            if (this.isLoadingRecent) {
-              Column() {
-                LoadingSpinner({ message: '' })
-              }
+            Blank()
               .width('100%')
               .layoutWeight(1)
-              .justifyContent(FlexAlign.Center)
-            } else if (this.recentSearches.length > 0) {
-              this.RecentSearchesView()
-            } else {
-              Column() {
-                SymbolGlyph($r('sys.symbol.magnifyingglass'))
-                  .fontSize(28)
-                  .fontColor([$r('app.color.on_surface_tertiary')])
-                  .margin({ bottom: 12 })
-                Text($r('app.string.search_empty_hint'))
-                  .fontSize(14)
-                  .fontColor($r('app.color.on_surface_secondary'))
-              }
-              .width('100%')
-              .layoutWeight(1)
-              .justifyContent(FlexAlign.Center)
-              .alignItems(HorizontalAlign.Center)
-            }
-          } else if (this.postResults.length === 0 && this.userResults.length === 0) {
-            Column() {
-              SymbolGlyph($r('sys.symbol.info_circle'))
-                .fontSize(26)
-                .fontColor([$r('app.color.on_surface_tertiary')])
-                .margin({ bottom: 10 })
-              Text($r('app.string.search_no_results'))
-                .fontSize(14)
-                .fontColor($r('app.color.on_surface_secondary'))
-            }
-            .width('100%')
-            .layoutWeight(1)
-            .justifyContent(FlexAlign.Center)
-            .alignItems(HorizontalAlign.Center)
+              .backgroundColor($r('app.color.background'))
           } else {
-            List({ scroller: this.listScroller }) {
-              if (this.postResults.length > 0) {
-                ForEach(this.postResults, (p: SearchPost) => {
-                  ListItem() {
-                    SearchPostCard({
-                      post: p,
-                      category: this.getCategoryById(p.topic !== null ? (p.topic as SearchTopic).categoryId : null),
-                      parentCategory: this.getParentCategory(this.getCategoryById(
-                        p.topic !== null ? (p.topic as SearchTopic).categoryId : null
-                      )),
-                      onTap: () => {
-                        RouterManager.pushTopicDetail(p.topicId, p.postNumber);
+            Scroll(this.contentScroller) {
+              Column() {
+                if (this.filter.isNotEmpty) {
+                  ActiveSearchFiltersBar({
+                    filter: this.filter,
+                    onClearCategory: () => this.clearFilterCategory(),
+                    onRemoveTag: (t: string) => this.removeFilterTag(t),
+                    onClearStatus: () => this.clearFilterStatus(),
+                    onClearDateRange: () => this.clearFilterDateRange(),
+                    onClearAll: () => this.clearAllFilters()
+                  })
+                }
+
+                if (this.hasAppliedSearchCriteria() &&
+                  (!this.isLoading || this.postResults.length > 0 || this.userResults.length > 0 || this.topicResults.length > 0)) {
+                  this.SearchSortRow()
+                }
+
+                if (this.isLoading) {
+                  Column() {
+                    LoadingSpinner({ message: '' })
+                  }
+                  .width('100%')
+                  .height(420)
+                  .justifyContent(FlexAlign.Center)
+                } else if (this.errorMessage.length > 0) {
+                  Column() {
+                    ErrorView({
+                      title: $r('app.string.load_failed'),
+                      message: this.errorMessage,
+                      showRetry: true,
+                      onRetry: () => {
+                        if (this.categories.length === 0) {
+                          this.loadData();
+                        } else {
+                          this.performSearch();
+                        }
                       }
                     })
                   }
-                  .padding({ bottom: 12 })
-                }, (p: SearchPost) => p.id.toString())
-              }
-
-              if (this.userResults.length > 0) {
-                ListItem() {
-                  this.SectionHeader($r('app.string.search_users'))
-                }
-                ForEach(this.userResults, (u: SearchUser) => {
-                  ListItem() {
-                    this.UserResultRow(u)
+                  .width('100%')
+                  .height(420)
+                  .justifyContent(FlexAlign.Center)
+                } else if (!this.hasAppliedSearchCriteria()) {
+                  if (this.isLoadingRecent) {
+                    Column() {
+                      LoadingSpinner({ message: '' })
+                    }
+                    .width('100%')
+                    .height(420)
+                    .justifyContent(FlexAlign.Center)
+                  } else if (this.recentSearches.length > 0) {
+                    this.RecentSearchesView()
+                  } else {
+                    Column() {
+                      SymbolGlyph($r('sys.symbol.magnifyingglass'))
+                        .fontSize(28)
+                        .fontColor([$r('app.color.on_surface_tertiary')])
+                        .margin({ bottom: 12 })
+                      Text($r('app.string.search_empty_hint'))
+                        .fontSize(14)
+                        .fontColor($r('app.color.on_surface_secondary'))
+                    }
+                    .width('100%')
+                    .height(420)
+                    .justifyContent(FlexAlign.Center)
+                    .alignItems(HorizontalAlign.Center)
                   }
-                  .padding({ bottom: 12 })
-                }, (u: SearchUser) => u.id.toString())
-              }
-
-              if (this.isLoadingMore) {
-                ListItem() {
-                  Row() {
-                    LoadingProgress()
-                      .width(14)
-                      .height(14)
-                    Text('加载中...')
-                      .fontSize(12)
+                } else if (this.postResults.length === 0 && this.userResults.length === 0) {
+                  Column() {
+                    SymbolGlyph($r('sys.symbol.info_circle'))
+                      .fontSize(26)
+                      .fontColor([$r('app.color.on_surface_tertiary')])
+                      .margin({ bottom: 10 })
+                    Text($r('app.string.search_no_results'))
+                      .fontSize(14)
                       .fontColor($r('app.color.on_surface_secondary'))
-                      .margin({ left: 8 })
                   }
                   .width('100%')
-                  .padding({ top: 12, bottom: 12 })
+                  .height(420)
                   .justifyContent(FlexAlign.Center)
-                  .alignItems(VerticalAlign.Center)
+                  .alignItems(HorizontalAlign.Center)
+                } else {
+                  this.ResultsContent()
                 }
               }
+              .width('100%')
+              .backgroundColor($r('app.color.background'))
             }
             .width('100%')
             .layoutWeight(1)
-            .padding({ left: 16, right: 16, top: 8, bottom: 12 })
+            .scrollBar(BarState.Off)
+            .edgeEffect(EdgeEffect.Spring)
             .backgroundColor($r('app.color.background'))
             .onReachEnd(() => {
               this.loadMore();
@@ -955,8 +946,7 @@ export struct SearchPage {
         }
         .width('100%')
         .height('100%')
-        // 全局沉浸式：为顶部状态栏安全区预留 padding，避免内容被挖孔/状态栏遮挡
-        .padding({ top: WindowManager.getSystemAvoidAreaTopVp() })
+        .backgroundColor($r('app.color.background'))
       }
       .width('100%')
       .height('100%')
@@ -981,83 +971,131 @@ export struct SearchPage {
     .backgroundColor($r('app.color.background'))
     .hideTitleBar(true)
     .hideToolBar(true)
+    .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
+    .systemBarStyle(
+      { statusBarContentColor: ImmersiveHdsTitleBarHelper.getStatusBarContentColor() },
+      { statusBarContentColor: ImmersiveHdsTitleBarHelper.getStatusBarContentColor() }
+    )
   }
 
   @Builder
-  TopBar() {
-    Row() {
-      Row() {
-        SymbolGlyph($r('sys.symbol.chevron_left'))
-          .fontSize(22)
-          .fontColor([$r('app.color.on_surface')])
-      }
-      .width(44)
-      .height(44)
-      .justifyContent(FlexAlign.Center)
-      .alignItems(VerticalAlign.Center)
-      .onClick(() => {
-        RouterManager.pop();
-      })
-
-      TextInput({ text: this.query, placeholder: $r('app.string.search_hint_advanced') })
-        .fontSize(18)
-        .fontWeight(FontWeight.Medium)
-        .fontColor($r('app.color.on_surface'))
-        .placeholderColor($r('app.color.on_surface_secondary'))
-        .backgroundColor(Color.Transparent)
-        .height(SEARCH_FIELD_HEIGHT)
-        .layoutWeight(1)
-        .margin({ left: 8, right: 8 })
-        .onChange((value: string) => {
-          if (value !== this.query) {
-            this.query = value;
-            if (this.query.trim().length === 0 && !this.hasRunnableSearchCriteria('', this.filter)) {
-              this.errorMessage = '';
-              this.resetSearchResults();
-            }
+  ResultsContent() {
+    Column() {
+      if (this.postResults.length > 0) {
+        ForEach(this.postResults, (p: SearchPost) => {
+          Column() {
+            SearchPostCard({
+              post: p,
+              category: this.getCategoryById(p.topic !== null ? (p.topic as SearchTopic).categoryId : null),
+              parentCategory: this.getParentCategory(this.getCategoryById(
+                p.topic !== null ? (p.topic as SearchTopic).categoryId : null
+              )),
+              onTap: () => {
+                RouterManager.pushTopicDetail(p.topicId, p.postNumber);
+              }
+            })
           }
-        })
-        .onSubmit(() => {
-          this.performSearch();
-        })
+          .padding({ bottom: 12 })
+        }, (p: SearchPost) => p.id.toString())
+      }
 
-      if (this.query.length > 0) {
+      if (this.userResults.length > 0) {
+        this.SectionHeader($r('app.string.search_users'))
+        ForEach(this.userResults, (u: SearchUser) => {
+          Column() {
+            this.UserResultRow(u)
+          }
+          .padding({ bottom: 12 })
+        }, (u: SearchUser) => u.id.toString())
+      }
+
+      if (this.isLoadingMore) {
         Row() {
-          SymbolGlyph($r('sys.symbol.xmark_circle_fill'))
-            .fontSize(18)
-            .fontColor([$r('app.color.on_surface_secondary')])
+          LoadingProgress()
+            .width(14)
+            .height(14)
+          Text('\u52a0\u8f7d\u4e2d...')
+            .fontSize(12)
+            .fontColor($r('app.color.on_surface_secondary'))
+            .margin({ left: 8 })
+        }
+        .width('100%')
+        .padding({ top: 12, bottom: 12 })
+        .justifyContent(FlexAlign.Center)
+        .alignItems(VerticalAlign.Center)
+      }
+    }
+    .width('100%')
+    .padding({ left: 16, right: 16, top: 8, bottom: 24 })
+    .backgroundColor($r('app.color.background'))
+  }
+
+  @Builder
+  SearchTopBar() {
+    Column() {
+      Blank()
+        .width('100%')
+        .height(this.getSearchTopSafeHeightVp())
+
+      Row() {
+        Row() {
+          SymbolGlyph($r('sys.symbol.chevron_left'))
+            .fontSize(22)
+            .fontColor([$r('app.color.on_surface')])
         }
         .width(44)
         .height(44)
         .justifyContent(FlexAlign.Center)
         .alignItems(VerticalAlign.Center)
         .onClick(() => {
-          this.query = '';
-          this.errorMessage = '';
-          if (this.filter.isNotEmpty) {
-            this.performSearch();
-          } else {
-            this.resetSearchResults();
-          }
+          RouterManager.pop();
         })
-      }
 
-      Row() {
-        SymbolGlyph($r('sys.symbol.magnifyingglass'))
-          .fontSize(20)
-          .fontColor([$r('app.color.on_surface_secondary')])
-      }
-      .width(44)
-      .height(44)
-      .justifyContent(FlexAlign.Center)
-      .alignItems(VerticalAlign.Center)
-      .onClick(() => {
-        this.performSearch();
-      })
+        TextInput({ text: this.query, placeholder: $r('app.string.search_hint_advanced') })
+          .fontSize(18)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.on_surface'))
+          .placeholderColor($r('app.color.on_surface_secondary'))
+          .backgroundColor(Color.Transparent)
+          .height(SEARCH_FIELD_HEIGHT)
+          .layoutWeight(1)
+          .margin({ left: 8, right: 8 })
+          .onChange((value: string) => {
+            if (value !== this.query) {
+              this.query = value;
+              if (this.query.trim().length === 0 && !this.hasRunnableSearchCriteria('', this.filter)) {
+                this.errorMessage = '';
+                this.resetSearchResults();
+              }
+            }
+          })
+          .onSubmit(() => {
+            this.performSearch();
+          })
 
-      Stack() {
+        if (this.query.length > 0) {
+          Row() {
+            SymbolGlyph($r('sys.symbol.xmark_circle_fill'))
+              .fontSize(18)
+              .fontColor([$r('app.color.on_surface_secondary')])
+          }
+          .width(44)
+          .height(44)
+          .justifyContent(FlexAlign.Center)
+          .alignItems(VerticalAlign.Center)
+          .onClick(() => {
+            this.query = '';
+            this.errorMessage = '';
+            if (this.filter.isNotEmpty) {
+              this.performSearch();
+            } else {
+              this.resetSearchResults();
+            }
+          })
+        }
+
         Row() {
-          SymbolGlyph($r('sys.symbol.line_3_horizontal'))
+          SymbolGlyph($r('sys.symbol.magnifyingglass'))
             .fontSize(20)
             .fontColor([$r('app.color.on_surface_secondary')])
         }
@@ -1065,27 +1103,56 @@ export struct SearchPage {
         .height(44)
         .justifyContent(FlexAlign.Center)
         .alignItems(VerticalAlign.Center)
+        .onClick(() => {
+          this.performSearch();
+        })
 
-        // 激活提示点（8x8）
-        if (this.filter.isNotEmpty) {
-          Circle()
-            .width(8)
-            .height(8)
-            .fill($r('app.color.primary'))
-            .position({ x: 28, y: 12 })
+        Stack() {
+          Row() {
+            SymbolGlyph($r('sys.symbol.line_3_horizontal'))
+              .fontSize(20)
+              .fontColor([$r('app.color.on_surface_secondary')])
+          }
+          .width(44)
+          .height(44)
+          .justifyContent(FlexAlign.Center)
+          .alignItems(VerticalAlign.Center)
+
+          // 激活提示点（8x8）
+          if (this.filter.isNotEmpty) {
+            Circle()
+              .width(8)
+              .height(8)
+              .fill($r('app.color.primary'))
+              .position({ x: 28, y: 12 })
+          }
         }
+        .width(44)
+        .height(44)
+        .onClick(() => {
+          this.openFilterSheet();
+        })
       }
-      .width(44)
-      .height(44)
-      .onClick(() => {
-        this.openFilterSheet();
-      })
+      .width('100%')
+      .height(SEARCH_TOP_BAR_HEIGHT)
+      .padding({ left: 8, right: 8, top: 8, bottom: 6 })
+      .alignItems(VerticalAlign.Center)
     }
     .width('100%')
-    .height(TOP_BAR_HEIGHT)
-    .padding({ left: 8, right: 8, top: 8, bottom: 6 })
-    .backgroundColor($r('app.color.background'))
-    .alignItems(VerticalAlign.Center)
+    .height(this.getSearchTopBarTotalHeightVp())
+    .backgroundEffect(
+      {
+        radius: SEARCH_TOP_BAR_BLUR_RADIUS,
+        saturation: 1.6,
+        brightness: 1.04,
+        color: $r('app.color.tab_glass_tint'),
+        adaptiveColor: AdaptiveColor.DEFAULT,
+        policy: BlurStyleActivePolicy.ALWAYS_ACTIVE,
+        inactiveColor: $r('app.color.background')
+      },
+      { disableSystemAdaptation: false }
+    )
+    .border({ width: { bottom: 0.5 }, color: $r('app.color.divider_light') })
   }
 
   @Builder
@@ -1240,38 +1307,38 @@ export struct SearchPage {
       .width('100%')
       .padding({ left: 16, right: 16, top: 16, bottom: 8 })
 
-      List() {
+      Column() {
         ForEach(this.recentSearches, (q: string) => {
-          ListItem() {
-            Row() {
-              SymbolGlyph($r('sys.symbol.clock'))
-                .fontSize(16)
-                .fontColor([$r('app.color.on_surface_tertiary')])
-                .margin({ right: 10 })
-              Text(q)
-                .fontSize(15)
-                .fontColor($r('app.color.on_surface'))
-                .layoutWeight(1)
-                .maxLines(1)
-                .textOverflow({ overflow: TextOverflow.Ellipsis })
-            }
-            .width('100%')
-            .height(48)
-            .padding({ left: 16, right: 16 })
-            .alignItems(VerticalAlign.Center)
+          Row() {
+            SymbolGlyph($r('sys.symbol.clock'))
+              .fontSize(16)
+              .fontColor([$r('app.color.on_surface_tertiary')])
+              .margin({ right: 10 })
+            Text(q)
+              .fontSize(15)
+              .fontColor($r('app.color.on_surface'))
+              .layoutWeight(1)
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
           }
+          .width('100%')
+          .height(48)
+          .padding({ left: 16, right: 16 })
+          .alignItems(VerticalAlign.Center)
+          .border({
+            width: { bottom: 0.5 },
+            color: $r('app.color.divider_light')
+          })
           .onClick(() => {
             this.onRecentQueryClick(q);
           })
         }, (q: string) => q)
       }
       .width('100%')
-      .layoutWeight(1)
       .backgroundColor($r('app.color.background'))
-      .divider({ strokeWidth: 0.5, color: $r('app.color.divider_light'), startMargin: 16, endMargin: 16 })
     }
     .width('100%')
-    .layoutWeight(1)
+    .padding({ bottom: 24 })
   }
 
   @Builder
