@@ -16,7 +16,15 @@ import { TimeUtils } from '../../common/utils/TimeUtils';
 import { UrlUtils } from '../../common/utils/UrlUtils';
 import { RouterManager } from '../../common/utils/RouterManager';
 import { TagBadge as TopicTagBadge } from '../components/TopicBadges';
-import { ActionBarButton, ActionBarStyle, HdsActionBar, HdsNavDestination } from '@kit.UIDesignKit';
+import {
+  ActionBarButton,
+  ActionBarStyle,
+  BlurStrategy,
+  HdsActionBar,
+  HdsNavDestination,
+  HdsNavDestinationTitleMode,
+  hdsEffect
+} from '@kit.UIDesignKit';
 import { ColorMetrics, LengthMetrics } from '@ohos.arkui.node';
 import { WindowManager } from '../../common/utils/WindowManager';
 import { SearchPost, SearchResult } from '../../models/SearchResult';
@@ -38,9 +46,11 @@ import { BookmarkEditSheet } from '../components/BookmarkEditSheet';
 import { UserStatusEmoji } from '../components/UserStatusEmoji';
 import { TopicDetailChromeHelper } from '../components/TopicDetailChromeHelper';
 import { FloatingActionChromeHelper } from '../components/FloatingActionChromeHelper';
+import { ImmersiveHdsTitleBarHelper } from '../components/ImmersiveHdsTitleBarHelper';
 import { AppContext } from '../../common/utils/AppContext';
 import { PostShareImageParams, postShareImageBuilder } from '../components/PostShareImageCard';
 import { PreferencesUtil } from '../../services/storage/PreferencesUtil';
+import { FeatureSettingsService } from '../../services/storage/FeatureSettingsService';
 import { MAX_READ_LATER_ITEMS, ReadLaterService } from '../../services/storage/ReadLaterService';
 import { MessageBusMessage, MessageBusService } from '../../services/messagebus/MessageBusService';
 import { TopicTrackingService } from '../../services/messagebus/TopicTrackingService';
@@ -65,7 +75,6 @@ const BOTTOM_BAR_HIDE_DELTA: number = 50;
 const BOTTOM_BAR_ANIM_DURATION: number = 180;
 const BOTTOM_BAR_SHOW_DELAY_MS: number = 1200;
 const BOTTOM_BAR_HIDE_EXTRA_TRANSLATE: number = 24;
-const DETAIL_ACTION_BAR_OPACITY: number = 0.86;
 const PROGRESS_CAPSULE_HEIGHT: number = 32;
 const PROGRESS_BOTTOM_NO_BAR: number = 24;
 const PROGRESS_GAP_ABOVE_BAR: number = 16;
@@ -86,6 +95,9 @@ const POST_REACTION_RATE_LIMIT_FALLBACK_SECONDS: number = 13;
 const POST_REACTION_PICKER_PANEL_RADIUS: number = 30;
 const POST_REACTION_PICKER_SCREEN_MARGIN: number = 16;
 const POST_REACTION_PICKER_EDGE_GAP: number = 8;
+const TOP_BAR_EFFECT_END_OFFSET: number = 56;
+const TOP_BAR_TRANSLUCENT_LIGHT: string = 'FFFFFF';
+const TOP_BAR_TRANSLUCENT_DARK: string = '1B1D22';
 
 class ReactionPickerAnchorRect {
   x: number = 0;
@@ -140,6 +152,7 @@ export struct TopicDetailPage {
   @Local timeTick: number = 0;
   @Local showBottomBar: boolean = true;
   @Local bottomBarVisibility: number = 1;
+  @Local autoHideBottomBarOnScroll: boolean = true;
   @Local detailActionBarExpanded: boolean = true;
   @Local detailRootWidthVp: number = 0;
   @Local detailRootHeightVp: number = 0;
@@ -224,6 +237,7 @@ export struct TopicDetailPage {
 
   // 详情页底部 HDS ActionBar 分享操作 Sheet
   @Local isTopicShareActionSheetVisible: boolean = false;
+  @Local isTopicTitleBarMenuSheetVisible: boolean = false;
 
   // 生成分享图片（Sheet）
   @Local isShareImageSheetVisible: boolean = false;
@@ -253,6 +267,8 @@ export struct TopicDetailPage {
   @Local replySheetTargetAvatarTemplate: string = '';
   @Local replySheetInitialContent: string = '';
   @Local replySheetRequestKey: string = '';
+  @Local replyFabIlluminatedType: hdsEffect.PointLightIlluminatedType = hdsEffect.PointLightIlluminatedType.NONE;
+  @Local topBarButtonIlluminatedType: hdsEffect.PointLightIlluminatedType = hdsEffect.PointLightIlluminatedType.NONE;
 
   // 导出文章（Sheet）
   @Local isExportSheetVisible: boolean = false;
@@ -314,6 +330,8 @@ export struct TopicDetailPage {
     this.attachAppForegroundListener();
     this.initAuthState();
     this.syncReadLaterState().catch(() => {
+    });
+    this.syncScrollAutoHideSettings().catch(() => {
     });
     this.attachTopicChannel();
 
@@ -556,6 +574,66 @@ export struct TopicDetailPage {
     return FloatingActionChromeHelper.getBottomTranslateYVp(
       FAB_BOTTOM_MARGIN_VP + this.getDetailBottomBarReservedBottomVp()
     );
+  }
+
+  private clamp01(value: number): number {
+    return Math.max(0, Math.min(1, value));
+  }
+
+  private toHexByte(value: number): string {
+    const chars: string = '0123456789ABCDEF';
+    const v: number = Math.max(0, Math.min(255, Math.round(value)));
+    return chars.charAt(Math.floor(v / 16)) + chars.charAt(v % 16);
+  }
+
+  private getTopBarEffectProgress(): number {
+    if (this.isSearchMode) {
+      return 1;
+    }
+    return this.clamp01(this.scrollOffset / TOP_BAR_EFFECT_END_OFFSET);
+  }
+
+  private getTopBarTintColor(): string {
+    const progress: number = this.getTopBarEffectProgress();
+    const alpha: number = WindowManager.isDarkMode()
+      ? 0 + 179 * progress
+      : 0 + 204 * progress;
+    const rgb: string = WindowManager.isDarkMode() ? TOP_BAR_TRANSLUCENT_DARK : TOP_BAR_TRANSLUCENT_LIGHT;
+    return `#${this.toHexByte(alpha)}${rgb}`;
+  }
+
+  private getTopBarButtonTintColor(): string {
+    const progress: number = this.getTopBarEffectProgress();
+    const alpha: number = WindowManager.isDarkMode()
+      ? 0 + 96 * progress
+      : 0 + 108 * progress;
+    const rgb: string = WindowManager.isDarkMode() ? TOP_BAR_TRANSLUCENT_DARK : TOP_BAR_TRANSLUCENT_LIGHT;
+    return `#${this.toHexByte(alpha)}${rgb}`;
+  }
+
+  private getTopBarButtonStrokeColor(): string {
+    const progress: number = this.getTopBarEffectProgress();
+    const alpha: number = WindowManager.isDarkMode()
+      ? 0 + 22 * progress
+      : 0 + 24 * progress;
+    const rgb: string = WindowManager.isDarkMode() ? 'FFFFFF' : '000000';
+    return `#${this.toHexByte(alpha)}${rgb}`;
+  }
+
+  private getTopBarDividerOpacity(): number {
+    return this.getTopBarEffectProgress();
+  }
+
+  private shouldShowTopBarButtonGlass(): boolean {
+    return false;
+  }
+
+  private releaseReplyFabLight(): void {
+    this.replyFabIlluminatedType = hdsEffect.PointLightIlluminatedType.NONE;
+  }
+
+  private releaseTopBarButtonLight(): void {
+    this.topBarButtonIlluminatedType = hdsEffect.PointLightIlluminatedType.NONE;
   }
 
   @Monitor('isShareImageSheetVisible')
@@ -4153,6 +4231,14 @@ export struct TopicDetailPage {
     this.isTopicShareActionSheetVisible = false;
   }
 
+  private openTopicTitleBarMenuSheet(): void {
+    this.isTopicTitleBarMenuSheetVisible = true;
+  }
+
+  private closeTopicTitleBarMenuSheet(): void {
+    this.isTopicTitleBarMenuSheetVisible = false;
+  }
+
   private getDetailBottomBarVisibleTranslateY(): number {
     return -(this.getFloatingTabBarBottomOffsetVp() + FLOATING_TAB_BAR_HEIGHT_VP);
   }
@@ -4237,7 +4323,21 @@ export struct TopicDetailPage {
     this.bottomBarVisibility = visible ? 1 : 0;
   }
 
+  private async syncScrollAutoHideSettings(): Promise<void> {
+    const settings = await FeatureSettingsService.getInstance().loadSettings();
+    this.autoHideBottomBarOnScroll = settings.autoHideBottomBarOnScroll;
+    if (!this.autoHideBottomBarOnScroll) {
+      this._bottomBarDelta = 0;
+      this.setBottomBarVisibleInstant(true);
+    }
+  }
+
   private hideBottomBar(): void {
+    if (!this.autoHideBottomBarOnScroll) {
+      this._bottomBarDelta = 0;
+      this.setBottomBarVisibleInstant(true);
+      return;
+    }
     this.clearBottomBarShowTimer();
     this.setBottomBarVisible(false);
   }
@@ -4248,6 +4348,11 @@ export struct TopicDetailPage {
   }
 
   private scheduleBottomBarShow(): void {
+    if (!this.autoHideBottomBarOnScroll) {
+      this._bottomBarDelta = 0;
+      this.setBottomBarVisibleInstant(true);
+      return;
+    }
     if (this.showBottomBar && this.bottomBarVisibility >= 1) {
       this.clearBottomBarShowTimer();
       return;
@@ -4741,7 +4846,10 @@ export struct TopicDetailPage {
                   // 底部工具栏显隐：
                   // - 向上滚动（offset<0）→ 显示
                   // - 向下滚动（offset>0）→ 隐藏
-                  if (next <= 0) {
+                  if (!this.autoHideBottomBarOnScroll) {
+                    this._bottomBarDelta = 0;
+                    this.showBottomBarImmediate();
+                  } else if (next <= 0) {
                     this._bottomBarDelta = 0;
                     this.showBottomBarImmediate();
                   } else if (offset < -0.01) {
@@ -4767,7 +4875,11 @@ export struct TopicDetailPage {
                 })
                 .onScrollStop(() => {
                   this._bottomBarDelta = 0;
-                  this.scheduleBottomBarShow();
+                  if (!this.autoHideBottomBarOnScroll) {
+                    this.showBottomBarImmediate();
+                  } else {
+                    this.scheduleBottomBarShow();
+                  }
                 })
               }
               .onRefreshing(() => {
@@ -4781,11 +4893,9 @@ export struct TopicDetailPage {
         .height('100%')
         .backgroundColor($r('app.color.surface'))
 
-        // 顶部定制阅读栏覆盖在内容上方，保留阅读页操作密度，同时让内容滚入背后形成沉浸光感。
+        // 搜索态仍保留自定义输入顶栏；常规阅读态切换到原生 HDS titleBar。
         if (this.isSearchMode) {
           this.TopicSearchTopBar()
-        } else {
-          this.TopBar()
         }
 
         // 浮层：进度胶囊 + 底部工具栏 + FAB
@@ -4819,14 +4929,15 @@ export struct TopicDetailPage {
             isExpand: this.detailActionBarExpanded,
             $isExpand: (isExpand: boolean) => {
               this.detailActionBarExpanded = isExpand;
-            }
+            },
+            blurStrategy: BlurStrategy.ADAPTIVE
           })
           .width(this.getDetailBottomBarWidthVp())
           .height(FLOATING_TAB_BAR_HEIGHT_VP)
           .borderRadius(FLOATING_TAB_BAR_HEIGHT_VP / 2)
           .border({ width: 0.5, color: $r('app.color.detail_action_bar_stroke') })
           .shadow({ radius: 22, color: $r('app.color.detail_action_bar_shadow'), offsetX: 0, offsetY: 8 })
-          .opacity(this.bottomBarVisibility * DETAIL_ACTION_BAR_OPACITY)
+          .opacity(this.bottomBarVisibility)
           .position({ x: '50%', y: '100%' })
           .translate({
             x: '-50%',
@@ -4845,8 +4956,16 @@ export struct TopicDetailPage {
           }
           .width(FloatingActionChromeHelper.getButtonSizeVp())
           .height(FloatingActionChromeHelper.getButtonSizeVp())
+          .padding(0)
           .borderRadius(FloatingActionChromeHelper.getReplyRadiusVp())
           .backgroundColor(Color.Transparent)
+          .visualEffect(
+            new hdsEffect.HdsEffectBuilder()
+              .pointLight({
+                illuminatedType: this.replyFabIlluminatedType
+              })
+              .buildEffect()
+          )
           .backgroundEffect(
             {
               radius: FloatingActionChromeHelper.getBlurRadiusVp(),
@@ -4870,6 +4989,13 @@ export struct TopicDetailPage {
           .position({ x: this.getReplyFabPositionX(), y: '100%' })
           .translate({ x: this.getReplyFabTranslateX(), y: this.getReplyFabTranslateY() })
           .animation({ duration: 220, curve: Curve.EaseOut })
+          .onTouch((event: TouchEvent) => {
+            if (event.type === TouchType.Down) {
+              this.replyFabIlluminatedType = hdsEffect.PointLightIlluminatedType.BORDER_CONTENT;
+            } else if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
+              this.releaseReplyFabLight();
+            }
+          })
           .onClick(() => {
             this.openReplySheet();
           })
@@ -4893,6 +5019,17 @@ export struct TopicDetailPage {
         }
 
         // 底部 HDS ActionBar 分享操作 Sheet 宿主（避免在 HDS CustomBuilder 内 bindMenu 丢失页面上下文）
+        Column() {
+        }
+        .width(0)
+        .height(0)
+        .bindSheet($$this.isTopicTitleBarMenuSheetVisible, this.TopicTitleBarMenuSheetBuilder, {
+          height: SheetSize.FIT_CONTENT,
+          dragBar: true,
+          showClose: false,
+          backgroundColor: $r('app.color.surface')
+        })
+
         Column() {
         }
         .width(0)
@@ -5001,112 +5138,230 @@ export struct TopicDetailPage {
       })
     }
     .backgroundColor($r('app.color.surface'))
-    .hideTitleBar(true)
+    .titleMode(HdsNavDestinationTitleMode.MINI)
+    .titleBar(ImmersiveHdsTitleBarHelper.buildImmersiveTitleBarWithTwoMenus(
+      this.topicTitle.length > 0 ? this.topicTitle : `#${this.topicId}`,
+      $r('sys.symbol.magnifyingglass'),
+      $r('app.string.search_hint'),
+      () => {
+        this.enterSearchMode();
+      },
+      $r('sys.symbol.ellipsis_message'),
+      '更多',
+      () => {
+        this.openTopicTitleBarMenuSheet();
+      },
+      true,
+      true
+    ))
+    .hideBackButton(false)
+    .hideTitleBar(this.isSearchMode)
     .hideToolBar(true)
+    .bindToScrollable(this.isSearchMode ? [] : [this.listScroller])
     .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
     .systemBarStyle(
-      { statusBarContentColor: TopicDetailChromeHelper.getStatusBarContentColor() },
-      { statusBarContentColor: TopicDetailChromeHelper.getStatusBarContentColor() }
+      { statusBarContentColor: this.isSearchMode
+        ? TopicDetailChromeHelper.getStatusBarContentColor()
+        : ImmersiveHdsTitleBarHelper.getStatusBarContentColor() },
+      { statusBarContentColor: this.isSearchMode
+        ? TopicDetailChromeHelper.getStatusBarContentColor()
+        : ImmersiveHdsTitleBarHelper.getStatusBarContentColor() }
     )
   }
 
   @Builder
-  TopBar() {
-    Column() {
-      Blank()
-        .width('100%')
-        .height(TopicDetailChromeHelper.getTopSafeHeightVp())
-
+  TopBarIconButton(symbol: Resource, iconColor: ResourceColor, onClick: () => void) {
+    Button() {
       Stack() {
-        if (this.showTitle) {
+        if (this.shouldShowTopBarButtonGlass()) {
+          Blank()
+            .width(40)
+            .height(40)
+            .borderRadius(20)
+            .backgroundColor(Color.Transparent)
+            .backgroundEffect(
+              {
+                radius: 28,
+                saturation: 1.55,
+                brightness: 1.06,
+                color: this.getTopBarButtonTintColor(),
+                adaptiveColor: AdaptiveColor.DEFAULT,
+                policy: BlurStyleActivePolicy.ALWAYS_ACTIVE,
+                inactiveColor: this.getTopBarButtonTintColor()
+              },
+              { disableSystemAdaptation: true }
+            )
+            .border({ width: 0.5, color: this.getTopBarButtonStrokeColor() })
+        }
+
+        SymbolGlyph(symbol)
+          .fontSize(18)
+          .fontColor([iconColor])
+      }
+      .width(40)
+      .height(40)
+    }
+    .width(40)
+    .height(40)
+    .padding(0)
+    .borderRadius(20)
+    .backgroundColor(Color.Transparent)
+    .visualEffect(
+      new hdsEffect.HdsEffectBuilder()
+        .pointLight({
+          illuminatedType: this.topBarButtonIlluminatedType
+        })
+        .buildEffect()
+    )
+    .onTouch((event: TouchEvent) => {
+      if (event.type === TouchType.Down) {
+        this.topBarButtonIlluminatedType = hdsEffect.PointLightIlluminatedType.BORDER_CONTENT;
+      } else if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
+        this.releaseTopBarButtonLight();
+      }
+    })
+    .onClick(() => {
+      onClick();
+    })
+  }
+
+  @Builder
+  TopBarMenuButton(symbol: Resource, iconColor: ResourceColor) {
+    Button() {
+      Stack() {
+        if (this.shouldShowTopBarButtonGlass()) {
+          Blank()
+            .width(40)
+            .height(40)
+            .borderRadius(20)
+            .backgroundColor(Color.Transparent)
+            .backgroundEffect(
+              {
+                radius: 28,
+                saturation: 1.55,
+                brightness: 1.06,
+                color: this.getTopBarButtonTintColor(),
+                adaptiveColor: AdaptiveColor.DEFAULT,
+                policy: BlurStyleActivePolicy.ALWAYS_ACTIVE,
+                inactiveColor: this.getTopBarButtonTintColor()
+              },
+              { disableSystemAdaptation: true }
+            )
+            .border({ width: 0.5, color: this.getTopBarButtonStrokeColor() })
+        }
+
+        SymbolGlyph(symbol)
+          .fontSize(18)
+          .fontColor([iconColor])
+      }
+      .width(40)
+      .height(40)
+    }
+    .width(40)
+    .height(40)
+    .padding(0)
+    .borderRadius(20)
+    .backgroundColor(Color.Transparent)
+    .visualEffect(
+      new hdsEffect.HdsEffectBuilder()
+        .pointLight({
+          illuminatedType: this.topBarButtonIlluminatedType
+        })
+        .buildEffect()
+    )
+    .onTouch((event: TouchEvent) => {
+      if (event.type === TouchType.Down) {
+        this.topBarButtonIlluminatedType = hdsEffect.PointLightIlluminatedType.BORDER_CONTENT;
+      } else if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
+        this.releaseTopBarButtonLight();
+      }
+    })
+    .bindMenu(this.MoreMenuBuilder())
+  }
+
+  @Builder
+  TopBar() {
+    Stack() {
+      if (this.getTopBarEffectProgress() > 0.12) {
+        Column()
+          .width('100%')
+          .height(TopicDetailChromeHelper.getTopBarRenderHeightVp())
+          .backgroundColor(Color.Transparent)
+          .backgroundEffect(
+            {
+              radius: TopicDetailChromeHelper.getTopBarBlurRadiusVp(),
+              saturation: 1.7,
+              brightness: 1.06,
+              color: this.getTopBarTintColor(),
+              adaptiveColor: AdaptiveColor.DEFAULT,
+              policy: BlurStyleActivePolicy.ALWAYS_ACTIVE,
+              inactiveColor: this.getTopBarTintColor()
+            },
+            { disableSystemAdaptation: true }
+          )
+          .position({ x: 0, y: 0 })
+      }
+
+      Column() {
+        Blank()
+          .width('100%')
+          .height(TopicDetailChromeHelper.getTopSafeHeightVp())
+
+        Stack() {
+          if (this.showTitle) {
+            Row() {
+              Text(this.topicTitle.length > 0 ? this.topicTitle : `#${this.topicId}`)
+                .fontSize(16)
+                .fontWeight(FontWeight.Bold)
+                .fontColor($r('app.color.on_surface'))
+                .maxLines(1)
+                .textOverflow({ overflow: TextOverflow.Ellipsis })
+                .textAlign(TextAlign.Center)
+                .width('100%')
+            }
+            .width('100%')
+            .height(TopicDetailChromeHelper.getTopBarBaseHeightVp())
+            .padding({ left: 56, right: 96 })
+            .justifyContent(FlexAlign.Center)
+            .alignItems(VerticalAlign.Center)
+          }
+
           Row() {
-            Text(this.topicTitle.length > 0 ? this.topicTitle : `#${this.topicId}`)
-              .fontSize(16)
-              .fontWeight(FontWeight.Bold)
-              .fontColor($r('app.color.on_surface'))
-              .maxLines(1)
-              .textOverflow({ overflow: TextOverflow.Ellipsis })
-              .textAlign(TextAlign.Center)
-              .width('100%')
+            this.TopBarIconButton($r('sys.symbol.chevron_left'), $r('app.color.on_surface'), () => {
+              RouterManager.pop();
+            })
+
+            Blank().layoutWeight(1)
+
+            this.TopBarIconButton($r('sys.symbol.magnifyingglass'), $r('app.color.on_surface_secondary'), () => {
+              this.enterSearchMode();
+            })
+            this.TopBarMenuButton($r('sys.symbol.ellipsis_message'), $r('app.color.on_surface_secondary'))
           }
           .width('100%')
           .height(TopicDetailChromeHelper.getTopBarBaseHeightVp())
-          .padding({ left: 56, right: 96 })
-          .justifyContent(FlexAlign.Center)
-          .alignItems(VerticalAlign.Center)
-        }
-
-        Row() {
-          Row() {
-            SymbolGlyph($r('sys.symbol.chevron_left'))
-              .fontSize(18)
-              .fontColor([$r('app.color.on_surface')])
-          }
-          .width(44)
-          .height(44)
-          .justifyContent(FlexAlign.Center)
-          .alignItems(VerticalAlign.Center)
-          .onClick(() => {
-            RouterManager.pop();
+          .padding({
+            left: TopicDetailChromeHelper.getTopBarHorizontalPaddingVp(),
+            right: TopicDetailChromeHelper.getTopBarHorizontalPaddingVp()
           })
-
-          Blank().layoutWeight(1)
-
-          Row() {
-            SymbolGlyph($r('sys.symbol.magnifyingglass'))
-              .fontSize(18)
-              .fontColor([$r('app.color.on_surface_secondary')])
-          }
-          .width(44)
-          .height(44)
-          .justifyContent(FlexAlign.Center)
           .alignItems(VerticalAlign.Center)
-          .onClick(() => {
-            this.enterSearchMode();
-          })
-          Row() {
-            SymbolGlyph($r('sys.symbol.ellipsis_message'))
-              .fontSize(18)
-              .fontColor([$r('app.color.on_surface_secondary')])
-          }
-          .width(44)
-          .height(44)
-          .justifyContent(FlexAlign.Center)
-          .alignItems(VerticalAlign.Center)
-          .bindMenu(this.MoreMenuBuilder())
         }
         .width('100%')
         .height(TopicDetailChromeHelper.getTopBarBaseHeightVp())
-        .padding({
-          left: TopicDetailChromeHelper.getTopBarHorizontalPaddingVp(),
-          right: TopicDetailChromeHelper.getTopBarHorizontalPaddingVp()
-        })
-        .alignItems(VerticalAlign.Center)
+
+        if (this.getTopBarDividerOpacity() > 0) {
+          Divider()
+            .color($r('app.color.topic_detail_top_bar_divider'))
+            .strokeWidth(0.5)
+            .opacity(this.getTopBarDividerOpacity())
+        }
       }
       .width('100%')
-      .height(TopicDetailChromeHelper.getTopBarBaseHeightVp())
-
-      if (this.scrollOffset > 0) {
-        Divider()
-          .color($r('app.color.topic_detail_top_bar_divider'))
-          .strokeWidth(0.5)
-      }
+      .height('100%')
     }
     .width('100%')
-    .height(TopicDetailChromeHelper.getTopBarTotalHeightVp())
+    .height(TopicDetailChromeHelper.getTopBarRenderHeightVp())
     .backgroundColor(Color.Transparent)
-    .backgroundEffect(
-      {
-        radius: TopicDetailChromeHelper.getTopBarBlurRadiusVp(),
-        saturation: 1.7,
-        brightness: 1.06,
-        color: $r('app.color.topic_detail_top_bar_tint'),
-        adaptiveColor: AdaptiveColor.DEFAULT,
-        policy: BlurStyleActivePolicy.ALWAYS_ACTIVE,
-        inactiveColor: $r('app.color.topic_detail_top_bar_tint')
-      },
-      { disableSystemAdaptation: true }
-    )
   }
 
   @Builder
@@ -5118,16 +5373,7 @@ export struct TopicDetailPage {
 
       Row() {
         // 返回（退出话题内搜索模式）
-        Row() {
-          SymbolGlyph($r('sys.symbol.chevron_left'))
-            .fontSize(18)
-            .fontColor([$r('app.color.on_surface')])
-        }
-        .width(44)
-        .height(44)
-        .justifyContent(FlexAlign.Center)
-        .alignItems(VerticalAlign.Center)
-        .onClick(() => {
+        this.TopBarIconButton($r('sys.symbol.chevron_left'), $r('app.color.on_surface'), () => {
           this.exitSearchMode();
         })
 
@@ -5196,16 +5442,7 @@ export struct TopicDetailPage {
         .alignItems(VerticalAlign.Center)
 
         // 搜索按钮
-        Row() {
-          SymbolGlyph($r('sys.symbol.magnifyingglass'))
-            .fontSize(18)
-            .fontColor([$r('app.color.on_surface_secondary')])
-        }
-        .width(44)
-        .height(44)
-        .justifyContent(FlexAlign.Center)
-        .alignItems(VerticalAlign.Center)
-        .onClick(() => {
+        this.TopBarIconButton($r('sys.symbol.magnifyingglass'), $r('app.color.on_surface_secondary'), () => {
           this.performTopicSearch(true);
         })
       }
@@ -5229,10 +5466,10 @@ export struct TopicDetailPage {
         radius: TopicDetailChromeHelper.getTopBarBlurRadiusVp(),
         saturation: 1.7,
         brightness: 1.06,
-        color: $r('app.color.topic_detail_top_bar_tint'),
+        color: this.getTopBarTintColor(),
         adaptiveColor: AdaptiveColor.DEFAULT,
         policy: BlurStyleActivePolicy.ALWAYS_ACTIVE,
-        inactiveColor: $r('app.color.topic_detail_top_bar_tint')
+        inactiveColor: this.getTopBarTintColor()
       },
       { disableSystemAdaptation: true }
     )
@@ -5536,6 +5773,35 @@ export struct TopicDetailPage {
     .backgroundColor($r('app.color.search_bar_background'))
     .borderRadius(12)
     .shadow({ radius: 10, color: this.getMenuShadowColor(), offsetX: 0, offsetY: 6 })
+  }
+
+  @Builder
+  TopicTitleBarMenuSheetBuilder() {
+    Column() {
+      this.ImageContextItem($r('sys.symbol.bookmark'), this.getTopicBookmarkMenuLabel(), () => {
+        this.closeTopicTitleBarMenuSheet();
+        this.handleTopicBookmarkAction().catch((err: Object) => {
+          hilog.error(0x0000, TAG, 'Handle topic bookmark failed: %{public}s', JSON.stringify(err));
+        });
+      })
+
+      this.ImageContextItem($r('sys.symbol.clock'), this.getReadLaterMenuLabel(), () => {
+        this.closeTopicTitleBarMenuSheet();
+        this.handleReadLaterAction().catch((err: Object) => {
+          hilog.error(0x0000, TAG, 'Handle read later action failed: %{public}s', JSON.stringify(err));
+        });
+      })
+
+      this.ImageContextItem($r('sys.symbol.bell'), '订阅设置', () => {
+        this.closeTopicTitleBarMenuSheet();
+        this.openTopicNotificationSheet();
+      })
+
+      Blank().height(16 + WindowManager.getSystemAvoidAreaBottomVp())
+    }
+    .width('100%')
+    .padding({ top: 8 })
+    .backgroundColor($r('app.color.surface'))
   }
 
   private getPostShareUrl(post: Post): string {

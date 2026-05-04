@@ -1,7 +1,8 @@
 import { WindowManager } from '../../common/utils/WindowManager';
 
 const TOPIC_DETAIL_TOP_BAR_HEIGHT_VP: number = 56;
-const TOPIC_DETAIL_TOP_BAR_BLUR_RADIUS_VP: number = 56;
+const TOPIC_DETAIL_TOP_BAR_BLUR_RADIUS_VP: number = 22;
+const TOPIC_DETAIL_TOP_BAR_MASK_EXTRA_HEIGHT_VP: number = 20;
 const TOPIC_DETAIL_TOP_BAR_PADDING_H_VP: number = 8;
 const TOPIC_DETAIL_SEARCH_FIELD_HEIGHT_VP: number = 40;
 const TOPIC_DETAIL_LIGHT_STATUS_BAR_CONTENT_COLOR: string = '#000000';
@@ -20,8 +21,16 @@ export class TopicDetailChromeHelper {
     return TopicDetailChromeHelper.getTopSafeHeightVp() + TOPIC_DETAIL_TOP_BAR_HEIGHT_VP;
   }
 
+  static getTopBarMaskExtraHeightVp(): number {
+    return TOPIC_DETAIL_TOP_BAR_MASK_EXTRA_HEIGHT_VP;
+  }
+
+  static getTopBarRenderHeightVp(): number {
+    return TopicDetailChromeHelper.getTopBarTotalHeightVp() + TOPIC_DETAIL_TOP_BAR_MASK_EXTRA_HEIGHT_VP;
+  }
+
   static getContentTopSpacerHeightVp(): number {
-    return TopicDetailChromeHelper.getTopBarTotalHeightVp();
+    return TopicDetailChromeHelper.getTopBarRenderHeightVp();
   }
 
   static getTopBarBlurRadiusVp(): number {
