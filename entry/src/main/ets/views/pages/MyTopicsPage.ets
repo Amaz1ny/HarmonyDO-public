@@ -12,6 +12,8 @@ import { ErrorView } from '../components/ErrorView';
 import { TopicCard } from '../components/TopicCard';
 import { TopicPreviewDialog } from '../components/TopicPreviewDialog';
 import { ImmersiveHdsTitleBarHelper } from '../components/ImmersiveHdsTitleBarHelper';
+import { ModalChromeHelper } from '../components/ModalChromeHelper';
+import { ThemeManager } from '../../common/theme/ThemeManager';
 
 @ComponentV2
 export struct MyTopicsPage {
@@ -187,7 +189,7 @@ export struct MyTopicsPage {
 
   build() {
     HdsNavDestination() {
-      Stack({ alignContent: Alignment.Center }) {
+      Stack({ alignContent: Alignment.TopStart }) {
         Column() {
           Refresh({ refreshing: this.isRefreshing }) {
             if (this.isLoading && this.topics.length === 0 && this.errorMessage.length === 0) {
@@ -251,7 +253,7 @@ export struct MyTopicsPage {
                 if (this.loadMoreFailed) {
                   Text('加载更多失败，点击重试')
                     .fontSize(13)
-                    .fontColor($r('app.color.primary'))
+                    .fontColor(ThemeManager.getCurrentAccentColorHex())
                     .width('100%')
                     .textAlign(TextAlign.Center)
                     .padding({ top: 12, bottom: 12 })
@@ -280,12 +282,14 @@ export struct MyTopicsPage {
                 }
                 }
                 .width('100%')
+                .constraintSize({ minHeight: '100%' })
                 .padding({ left: 12, right: 12, top: 12, bottom: 12 + WindowManager.getSystemAvoidAreaBottomVp() })
+                .justifyContent(FlexAlign.Start)
                 .alignItems(HorizontalAlign.Center)
               }
               .width('100%')
               .height('100%')
-              .backgroundColor($r('app.color.background'))
+              .backgroundColor(ThemeManager.getCurrentAccentBackgroundColorHex())
               .scrollBar(BarState.Off)
               .edgeEffect(EdgeEffect.Spring)
               .onReachEnd(() => {
@@ -302,12 +306,14 @@ export struct MyTopicsPage {
         }
         .width('100%')
         .height('100%')
-        .backgroundColor($r('app.color.background'))
+        .backgroundColor(ThemeManager.getCurrentAccentBackgroundColorHex())
 
         this.TopicPreviewOverlay()
       }
+      .width('100%')
+      .height('100%')
     }
-    .backgroundColor($r('app.color.background'))
+    .backgroundColor(ThemeManager.getCurrentAccentBackgroundColorHex())
     .titleMode(HdsNavDestinationTitleMode.MINI)
     .titleBar(ImmersiveHdsTitleBarHelper.buildImmersiveTitleBarWithMenu(
       $r('app.string.profile_my_topics'),
@@ -336,7 +342,8 @@ export struct MyTopicsPage {
         }
         .width('100%')
         .height('100%')
-        .backgroundColor('#66000000')
+        .backgroundColor(ModalChromeHelper.getMaskColor())
+        .backgroundBlurStyle(ModalChromeHelper.getDialogBlurStyle())
         .onClick(() => {
           this.closeTopicPreview();
         })

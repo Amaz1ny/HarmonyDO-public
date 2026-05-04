@@ -15,6 +15,7 @@ import { FeatureSettingsService } from '../../services/storage/FeatureSettingsSe
 import { LoginCredential, LoginCredentialStore } from '../../services/auth/LoginCredentialStore';
 import { LoginAutoFillUtils } from '../../common/utils/LoginAutoFillUtils';
 import { ImmersiveHdsTitleBarHelper } from '../components/ImmersiveHdsTitleBarHelper';
+import { ThemeManager } from '../../common/theme/ThemeManager';
 
 const TAG: string = 'LoginPage';
 const LOGIN_URL: string = `${AppConstants.BASE_URL}/login`;
@@ -679,7 +680,7 @@ export struct LoginPage {
         if (this.progress > 0 && this.progress < 100 && this.errorMessage.length === 0) {
           Progress({ value: this.progress, total: 100 })
             .height(2)
-            .color($r('app.color.primary'))
+            .color(ThemeManager.getCurrentAccentColorHex())
         }
 
         Stack() {
@@ -768,7 +769,7 @@ export struct LoginPage {
                 .margin({ left: 24, right: 24, bottom: 14 })
               Button('重试')
                 .type(ButtonType.Capsule)
-                .backgroundColor($r('app.color.primary'))
+                .backgroundColor(ThemeManager.getCurrentAccentColorHex())
                 .fontColor('#FFFFFF')
                 .onClick(() => {
                   this.reloadPage();
@@ -778,7 +779,7 @@ export struct LoginPage {
             .height('100%')
             .justifyContent(FlexAlign.Center)
             .alignItems(HorizontalAlign.Center)
-            .backgroundColor($r('app.color.background'))
+            .backgroundColor(ThemeManager.getCurrentAccentBackgroundColorHex())
           }
         }
         .width('100%')
@@ -786,9 +787,9 @@ export struct LoginPage {
       }
       .width('100%')
       .height('100%')
-      .backgroundColor($r('app.color.background'))
+      .backgroundColor(ThemeManager.getCurrentAccentBackgroundColorHex())
     }
-    .backgroundColor($r('app.color.background'))
+    .backgroundColor(ThemeManager.getCurrentAccentBackgroundColorHex())
     .titleMode(HdsNavDestinationTitleMode.MINI)
     .titleBar(ImmersiveHdsTitleBarHelper.buildImmersiveTitleBarWithMenu(
       '登录 Linux.do',

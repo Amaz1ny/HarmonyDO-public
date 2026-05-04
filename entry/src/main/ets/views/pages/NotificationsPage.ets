@@ -329,10 +329,10 @@ export struct NotificationsPage {
                 Row() {
                   SymbolGlyph($r('sys.symbol.arrow_clockwise'))
                     .fontSize(14)
-                    .fontColor([$r('app.color.primary')])
+                    .fontColor([ThemeManager.getCurrentAccentColorHex()])
                   Text('加载更多失败，点击重试')
                     .fontSize(13)
-                    .fontColor($r('app.color.primary'))
+                    .fontColor(ThemeManager.getCurrentAccentColorHex())
                     .margin({ left: 6 })
                 }
                 .width('100%')
@@ -362,11 +362,13 @@ export struct NotificationsPage {
               }
               }
               .width('100%')
+              .constraintSize({ minHeight: '100%' })
               .padding({ left: 16, right: 16, top: 12, bottom: 12 + WindowManager.getSystemAvoidAreaBottomVp() })
+              .justifyContent(FlexAlign.Start)
             }
             .width('100%')
             .height('100%')
-            .backgroundColor($r('app.color.background'))
+            .backgroundColor(ThemeManager.getCurrentAccentBackgroundColorHex())
             .scrollBar(BarState.Off)
             .edgeEffect(EdgeEffect.Spring)
             .onReachEnd(() => {
@@ -381,9 +383,9 @@ export struct NotificationsPage {
       }
       .width('100%')
       .height('100%')
-      .backgroundColor($r('app.color.background'))
+      .backgroundColor(ThemeManager.getCurrentAccentBackgroundColorHex())
     }
-    .backgroundColor($r('app.color.background'))
+    .backgroundColor(ThemeManager.getCurrentAccentBackgroundColorHex())
     .titleMode(HdsNavDestinationTitleMode.MINI)
     .titleBar(ImmersiveHdsTitleBarHelper.buildImmersiveTitleBarWithMenu(
       $r('app.string.tab_notifications'),
@@ -444,7 +446,7 @@ export struct NotificationsPage {
             Circle()
               .width(8)
               .height(8)
-              .fill($r('app.color.primary'))
+              .fill(ThemeManager.getCurrentAccentColorHex())
               .margin({ left: 8, top: 4 })
           }
         }

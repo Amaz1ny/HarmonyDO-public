@@ -4,6 +4,7 @@ import { TagInfo, TagSearchResult } from '../../models/TagSearchResult';
 import { TagBadge, BadgeIconUtils } from './TopicBadges';
 import { ErrorView } from './ErrorView';
 import { WindowManager } from '../../common/utils/WindowManager';
+import { ThemeManager } from '../../common/theme/ThemeManager';
 
 /**
  * 标签相关通用组件：
@@ -27,6 +28,8 @@ export const DEFAULT_AVAILABLE_TAGS: string[] = [
 @ComponentV2
 export struct TagChip {
   @Param tagName: string = '';
+  @Param accentSurfaceVariantColorHex: string = ThemeManager.getCurrentAccentSurfaceVariantColorHex();
+  @Param themeRevision: number = 0;
   @Event onRemove: () => void = () => {};
 
   build() {
@@ -51,7 +54,7 @@ export struct TagChip {
       })
     }
     .padding({ left: 8, right: 8, top: 4, bottom: 4 })
-    .backgroundColor($r('app.color.tag_background'))
+    .backgroundColor(this.accentSurfaceVariantColorHex)
     .borderRadius(6)
     .margin({ right: 6 })
   }
@@ -67,6 +70,11 @@ export struct TagSelectionSheet {
   @Param maxTags: number = 5;
   @Param showHeaderBar: boolean = false;
   @Param showDragHandle: boolean = true;
+  @Param accentColorHex: string = ThemeManager.getCurrentAccentColorHex();
+  @Param accentSurfaceColorHex: string = ThemeManager.getCurrentAccentSurfaceColorHex();
+  @Param accentSurfaceVariantColorHex: string = ThemeManager.getCurrentAccentSurfaceVariantColorHex();
+  @Param accentSelectedBackgroundColorHex: string = ThemeManager.getCurrentAccentSelectedBackgroundColorHex();
+  @Param themeRevision: number = 0;
 
   @Event onToggleTag: (tagName: string) => void = () => {};
   @Event onDone: () => void = () => {};
@@ -245,7 +253,7 @@ export struct TagSelectionSheet {
         }
         .height(40)
         .padding({ left: 14, right: 10 })
-        .backgroundColor($r('app.color.search_background'))
+        .backgroundColor(this.accentSurfaceVariantColorHex)
         .borderRadius(20)
         .layoutWeight(1)
         .alignItems(VerticalAlign.Center)
@@ -253,13 +261,13 @@ export struct TagSelectionSheet {
         Button() {
           Text(this.doneText)
             .fontSize(14)
-            .fontColor($r('app.color.primary'))
+            .fontColor(this.accentColorHex)
             .fontWeight(FontWeight.Medium)
         }
         .height(40)
         .padding({ left: 16, right: 16 })
         .borderRadius(20)
-        .backgroundColor($r('app.color.badge_background_light'))
+        .backgroundColor(this.accentSelectedBackgroundColorHex)
         .margin({ left: 10 })
         .onClick(() => {
           this.onDone();
@@ -280,6 +288,8 @@ export struct TagSelectionSheet {
           ForEach(this.selectedTags, (t: string) => {
             TagChip({
               tagName: t,
+              accentSurfaceVariantColorHex: this.accentSurfaceVariantColorHex,
+              themeRevision: this.themeRevision,
               onRemove: () => {
                 this.onToggleTag(t);
               }
@@ -346,7 +356,7 @@ export struct TagSelectionSheet {
                 } else {
                   SymbolGlyph($r('sys.symbol.plus_circle'))
                     .fontSize(18)
-                    .fontColor([$r('app.color.primary')])
+                    .fontColor([this.accentColorHex])
                 }
               }
               .width('100%')
@@ -362,7 +372,7 @@ export struct TagSelectionSheet {
         }
         .layoutWeight(1)
         .width('100%')
-        .backgroundColor($r('app.color.surface'))
+        .backgroundColor(this.accentSurfaceColorHex)
         .divider({ strokeWidth: 0.5, color: $r('app.color.skeleton_base'), startMargin: 16, endMargin: 16 })
       }
 
@@ -381,10 +391,10 @@ export struct TagSelectionSheet {
       }
       .width('100%')
       .padding({ left: 16, right: 16, top: 12, bottom: 20 + WindowManager.getSystemAvoidAreaBottomVp() })
-      .backgroundColor($r('app.color.surface'))
+      .backgroundColor(this.accentSurfaceColorHex)
     }
     .width('100%')
     .height('100%')
-    .backgroundColor($r('app.color.surface'))
+    .backgroundColor(this.accentSurfaceColorHex)
   }
 }

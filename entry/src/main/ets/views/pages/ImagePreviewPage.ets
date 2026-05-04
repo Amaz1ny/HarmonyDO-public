@@ -10,6 +10,7 @@ import { ToastService } from '../../common/utils/ToastService';
 import { DownloadedImage, ImageDownloadService } from '../../common/utils/ImageDownloadService';
 import { ZoomableImage } from '../components/ZoomableImage';
 import { ImagePreviewChromeHelper } from '../components/ImagePreviewChromeHelper';
+import { ModalChromeHelper } from '../components/ModalChromeHelper';
 
 @ComponentV2
 export struct ImagePreviewPage {
@@ -185,7 +186,9 @@ export struct ImagePreviewPage {
           height: SheetSize.FIT_CONTENT,
           dragBar: true,
           showClose: false,
-          backgroundColor: $r('app.color.surface')
+          backgroundColor: ModalChromeHelper.getSheetBackgroundColor(),
+          maskColor: ModalChromeHelper.getMaskColor(),
+          blurStyle: ModalChromeHelper.getSheetBlurStyle()
         })
       }
       .width('100%')

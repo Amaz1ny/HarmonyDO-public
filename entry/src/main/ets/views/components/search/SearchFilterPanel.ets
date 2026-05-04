@@ -1,6 +1,7 @@
 import { Category } from '../../../models/Category';
 import { SearchFilter, SearchStatus } from '../../../models/SearchFilter';
 import { BadgeIconUtils } from '../TopicBadges';
+import { ThemeManager } from '../../../common/theme/ThemeManager';
 
 const HANDLE_WIDTH: number = 32;
 const HANDLE_HEIGHT: number = 4;
@@ -16,6 +17,11 @@ export struct SearchFilterPanel {
   @Param filter: SearchFilter = new SearchFilter();
   @Param categories: Category[] = [];
   @Param hotTags: string[] = [];
+  @Param accentColorHex: string = ThemeManager.getCurrentAccentColorHex();
+  @Param accentSurfaceColorHex: string = ThemeManager.getCurrentAccentSurfaceColorHex();
+  @Param accentSurfaceVariantColorHex: string = ThemeManager.getCurrentAccentSurfaceVariantColorHex();
+  @Param accentSelectedBackgroundColorHex: string = ThemeManager.getCurrentAccentSelectedBackgroundColorHex();
+  @Param themeRevision: number = 0;
 
   @Event onReset: () => void = () => {};
   @Event onApply: () => void = () => {};
@@ -103,7 +109,7 @@ export struct SearchFilterPanel {
         }
         .width('100%')
         .height(48)
-        .backgroundColor($r('app.color.primary'))
+        .backgroundColor(this.accentColorHex)
         .borderRadius(12)
         .onClick(() => {
           this.onApply();
@@ -111,11 +117,11 @@ export struct SearchFilterPanel {
       }
       .width('100%')
       .padding({ left: 16, right: 16, top: 12, bottom: 16 })
-      .backgroundColor($r('app.color.surface'))
+      .backgroundColor(this.accentSurfaceColorHex)
     }
     .width('100%')
     .height('100%')
-    .backgroundColor($r('app.color.surface'))
+    .backgroundColor(this.accentSurfaceColorHex)
   }
 
   @Builder
@@ -266,20 +272,22 @@ export struct SearchFilterPanel {
       }
       Text(tag)
         .fontSize(12)
-        .fontColor(selected ? $r('app.color.primary') : $r('app.color.on_surface_secondary'))
+        .fontColor(selected ? this.accentColorHex : $r('app.color.on_surface_secondary'))
         .fontWeight(selected ? FontWeight.Bold : FontWeight.Normal)
 
       if (selected) {
         SymbolGlyph($r('sys.symbol.checkmark'))
           .fontSize(14)
-          .fontColor([$r('app.color.primary')])
+          .fontColor([this.accentColorHex])
           .margin({ left: 4 })
       }
     }
     .padding({ left: 10, right: 10, top: 6, bottom: 6 })
-    .backgroundColor(selected ? $r('app.color.badge_background_light') : $r('app.color.search_bar_background'))
+    .backgroundColor(selected
+      ? this.accentSelectedBackgroundColorHex
+      : this.accentSurfaceVariantColorHex)
     .borderRadius(8)
-    .border({ width: 1, color: selected ? $r('app.color.primary') : Color.Transparent })
+    .border({ width: 1, color: selected ? this.accentColorHex : Color.Transparent })
     .margin({ right: 8, bottom: 8 })
     .onClick(() => {
       this.onToggleTag(tag);
@@ -405,14 +413,16 @@ export struct SearchFilterPanel {
       if (selected) {
         SymbolGlyph($r('sys.symbol.checkmark'))
           .fontSize(14)
-          .fontColor([$r('app.color.primary')])
+          .fontColor([this.accentColorHex])
           .margin({ left: 6 })
       }
     }
     .padding({ left: 10, right: 10, top: 6, bottom: 6 })
-    .backgroundColor($r('app.color.search_bar_background'))
+    .backgroundColor(selected
+      ? this.accentSelectedBackgroundColorHex
+      : this.accentSurfaceVariantColorHex)
     .borderRadius(6)
-    .border({ width: 1, color: selected ? $r('app.color.primary') : Color.Transparent })
+    .border({ width: 1, color: selected ? this.accentColorHex : Color.Transparent })
     .margin({ right: 8, bottom: 8 })
     .onClick(() => {
       this.onCategoryChange(null, null);
@@ -474,24 +484,26 @@ export struct SearchFilterPanel {
       if (icon !== null) {
         SymbolGlyph(icon as Resource)
           .fontSize(14)
-          .fontColor([selected ? $r('app.color.primary') : $r('app.color.on_surface_secondary')])
+          .fontColor([selected ? this.accentColorHex : $r('app.color.on_surface_secondary')])
           .margin({ right: 4 })
       }
       Text(label)
         .fontSize(12)
-        .fontColor(selected ? $r('app.color.primary') : $r('app.color.on_surface_secondary'))
+        .fontColor(selected ? this.accentColorHex : $r('app.color.on_surface_secondary'))
         .fontWeight(selected ? FontWeight.Bold : FontWeight.Medium)
       if (selected && icon === null) {
         SymbolGlyph($r('sys.symbol.checkmark'))
           .fontSize(14)
-          .fontColor([$r('app.color.primary')])
+          .fontColor([this.accentColorHex])
           .margin({ left: 4 })
       }
     }
     .padding({ left: 12, right: 12, top: 8, bottom: 8 })
-    .backgroundColor(selected ? $r('app.color.badge_background_light') : $r('app.color.search_bar_background'))
+    .backgroundColor(selected
+      ? this.accentSelectedBackgroundColorHex
+      : this.accentSurfaceVariantColorHex)
     .borderRadius(8)
-    .border({ width: 1, color: selected ? $r('app.color.primary') : Color.Transparent })
+    .border({ width: 1, color: selected ? this.accentColorHex : Color.Transparent })
     .margin({ right: 8, bottom: 8 })
     .onClick(() => {
       onTap();

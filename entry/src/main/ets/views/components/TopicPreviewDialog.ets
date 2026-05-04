@@ -15,6 +15,8 @@ import { SmartAvatar } from './SmartAvatar';
 import { TagBadge } from './TopicBadges';
 import { CategoryIcon } from './CategoryIcon';
 import { PostRichContent } from './PostRichContent';
+import { ModalChromeHelper } from './ModalChromeHelper';
+import { ThemeManager } from '../../common/theme/ThemeManager';
 
 const TAG: string = 'TopicPreviewDialog';
 
@@ -136,7 +138,8 @@ export struct TopicPreviewDialog {
     .width(this.compactMode ? '88%' : '92%')
     .height(this.compactMode ? '54%' : '72%')
     .constraintSize({ maxWidth: this.compactMode ? 500 : 560 })
-    .backgroundColor($r('app.color.surface'))
+    .backgroundColor(ModalChromeHelper.getDialogBackgroundColor())
+    .backgroundBlurStyle(ModalChromeHelper.getDialogBlurStyle())
     .borderRadius(24)
     .clip(true)
     .shadow({ radius: 18, color: '#26000000', offsetX: 0, offsetY: 10 })
@@ -154,7 +157,7 @@ export struct TopicPreviewDialog {
       if (this.topic.pinned) {
         SymbolGlyph($r('sys.symbol.pin'))
           .fontSize(18)
-          .fontColor([$r('app.color.primary')])
+          .fontColor([ThemeManager.getCurrentAccentColorHex()])
           .margin({ right: 6, top: 4 })
       }
       if (this.topic.hasAcceptedAnswer) {
@@ -379,7 +382,7 @@ export struct TopicPreviewDialog {
       .type(ButtonType.Capsule)
       .width(46)
       .height(42)
-      .backgroundColor($r('app.color.surface_variant'))
+      .backgroundColor(ThemeManager.getCurrentAccentSurfaceVariantColorHex())
         .onClick(() => {
           this.shareTopic().catch((_: Object) => {
           });
@@ -392,8 +395,8 @@ export struct TopicPreviewDialog {
           .type(ButtonType.Capsule)
           .fontSize(14)
           .height(42)
-          .backgroundColor($r('app.color.surface_variant'))
-          .fontColor($r('app.color.primary'))
+          .backgroundColor(ThemeManager.getCurrentAccentSurfaceVariantColorHex())
+          .fontColor(ThemeManager.getCurrentAccentColorHex())
           .padding({ left: 16, right: 16 })
           .onClick(() => {
             this.onSecondaryAction(this.topic);
@@ -406,7 +409,7 @@ export struct TopicPreviewDialog {
         .type(ButtonType.Capsule)
         .fontSize(14)
         .height(42)
-        .backgroundColor($r('app.color.primary'))
+        .backgroundColor(ThemeManager.getCurrentAccentColorHex())
         .fontColor(Color.White)
         .padding({ left: 18, right: 18 })
         .onClick(() => {
@@ -420,7 +423,7 @@ export struct TopicPreviewDialog {
       top: this.compactMode ? 10 : 14,
       bottom: this.compactMode ? 10 : 14
     })
-    .backgroundColor($r('app.color.surface'))
+    .backgroundColor(ThemeManager.getCurrentAccentSurfaceColorHex())
     .border({
       width: { top: 1 },
       color: { top: $r('app.color.divider_light') }

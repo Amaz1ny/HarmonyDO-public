@@ -15,6 +15,8 @@ import { ErrorView } from '../components/ErrorView';
 import { TopicCard } from '../components/TopicCard';
 import { TopicPreviewDialog } from '../components/TopicPreviewDialog';
 import { ImmersiveHdsTitleBarHelper } from '../components/ImmersiveHdsTitleBarHelper';
+import { ModalChromeHelper } from '../components/ModalChromeHelper';
+import { ThemeManager } from '../../common/theme/ThemeManager';
 
 @ComponentV2
 export struct BrowsingHistoryPage {
@@ -197,7 +199,7 @@ export struct BrowsingHistoryPage {
   build() {
     Stack({ alignContent: Alignment.TopStart }) {
       HdsNavDestination() {
-        Stack({ alignContent: Alignment.Center }) {
+        Stack({ alignContent: Alignment.TopStart }) {
           Column() {
             Refresh({ refreshing: this.isRefreshing }) {
               if (this.isLoading && this.topics.length === 0 && this.errorMessage.length === 0) {
@@ -264,7 +266,7 @@ export struct BrowsingHistoryPage {
                     if (this.loadMoreFailed) {
                       Text('加载更多失败，点击重试')
                         .fontSize(13)
-                        .fontColor($r('app.color.primary'))
+                        .fontColor(ThemeManager.getCurrentAccentColorHex())
                         .width('100%')
                         .textAlign(TextAlign.Center)
                         .padding({ top: 12, bottom: 12 })
@@ -293,12 +295,14 @@ export struct BrowsingHistoryPage {
                     }
                   }
                   .width('100%')
+                  .constraintSize({ minHeight: '100%' })
                   .padding({ left: 12, right: 12, top: 12, bottom: 12 + WindowManager.getSystemAvoidAreaBottomVp() })
+                  .justifyContent(FlexAlign.Start)
                   .alignItems(HorizontalAlign.Center)
                 }
                 .width('100%')
                 .height('100%')
-                .backgroundColor($r('app.color.background'))
+                .backgroundColor(ThemeManager.getCurrentAccentBackgroundColorHex())
                 .scrollBar(BarState.Off)
                 .edgeEffect(EdgeEffect.Spring)
                 .onReachEnd(() => {
@@ -315,14 +319,16 @@ export struct BrowsingHistoryPage {
           }
           .width('100%')
           .height('100%')
-          .backgroundColor($r('app.color.background'))
+          .backgroundColor(ThemeManager.getCurrentAccentBackgroundColorHex())
 
           this.TopicPreviewOverlay()
         }
+        .width('100%')
+        .height('100%')
       }
       .width('100%')
       .height('100%')
-      .backgroundColor($r('app.color.background'))
+      .backgroundColor(ThemeManager.getCurrentAccentBackgroundColorHex())
       .titleMode(HdsNavDestinationTitleMode.MINI)
       .titleBar(ImmersiveHdsTitleBarHelper.buildImmersiveTitleBarWithMenu(
         '浏览历史',
@@ -344,7 +350,7 @@ export struct BrowsingHistoryPage {
     }
     .width('100%')
     .height('100%')
-    .backgroundColor($r('app.color.background'))
+    .backgroundColor(ThemeManager.getCurrentAccentBackgroundColorHex())
   }
 
   @Builder
@@ -355,7 +361,8 @@ export struct BrowsingHistoryPage {
         }
         .width('100%')
         .height('100%')
-        .backgroundColor('#66000000')
+        .backgroundColor(ModalChromeHelper.getMaskColor())
+        .backgroundBlurStyle(ModalChromeHelper.getDialogBlurStyle())
         .onClick(() => {
           this.closeTopicPreview();
         })

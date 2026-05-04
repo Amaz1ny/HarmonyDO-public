@@ -6,6 +6,7 @@ import { WindowManager } from '../../common/utils/WindowManager';
 import { RouterManager } from '../../common/utils/RouterManager';
 import { ToastService } from '../../common/utils/ToastService';
 import { UserSummarySnapshotService } from '../../services/storage/UserSummarySnapshotService';
+import { AppearanceSettingsService, AppearanceSettingsState } from '../../services/storage/AppearanceSettingsService';
 import { AuthService } from '../../services/auth/AuthService';
 import { NotificationTrackingService } from '../../services/messagebus/NotificationTrackingService';
 import { ApiClient } from '../../services/network/ApiClient';
@@ -23,6 +24,7 @@ import {
   FLOATING_TAB_BAR_OFFSET_UP_VP,
   FLOATING_TAB_BAR_CONTENT_EXTRA_PADDING_VP
 } from '../../common/constants/LayoutConstants';
+import { ModalChromeHelper } from '../components/ModalChromeHelper';
 
 const TAG: string = 'ProfilePage';
 const HEADER_AVATAR_SIZE: number = 72;
@@ -59,17 +61,22 @@ export struct ProfilePage {
   @Local currentUser: User | null = null;
   @Local summary: UserSummary | null = null;
   @Local isLoggingOut: boolean = false;
+  @Local themeAccentColorHex: string = ThemeManager.getCurrentAccentColorHex();
+  @Local accentBackgroundColorHex: string = ThemeManager.getCurrentAccentBackgroundColorHex();
+  @Local accentSurfaceColorHex: string = ThemeManager.getCurrentAccentSurfaceColorHex();
 
   private scroller: Scroller = new Scroller();
   private hasBootstrapped: boolean = false;
   private loadRequestId: number = 0;
   private authStateListener: (() => void) | null = null;
   private notificationTrackingListener: (() => void) | null = null;
+  private appearanceSettingsListener: ((state: AppearanceSettingsState) => void) | null = null;
   private lastFreshCurrentUserSyncAt: number = 0;
 
   aboutToAppear(): void {
     this.attachAuthStateListener();
     this.attachNotificationTrackingListener();
+    this.attachAppearanceSettingsListener();
     const showLoading: boolean = !this.hasBootstrapped;
     this.hasBootstrapped = true;
     this.refreshPage(showLoading).catch((err: Object) => {
@@ -80,6 +87,33 @@ export struct ProfilePage {
   aboutToDisappear(): void {
     this.detachAuthStateListener();
     this.detachNotificationTrackingListener();
+    this.detachAppearanceSettingsListener();
+  }
+
+  private applyAppearanceSettingsState(state: AppearanceSettingsState): void {
+    this.themeAccentColorHex = ThemeManager.getAccentColorHex(state.accentColor);
+    this.accentBackgroundColorHex = ThemeManager.getAccentBackgroundColorHex(state.accentColor);
+    this.accentSurfaceColorHex = ThemeManager.getAccentSurfaceColorHex(state.accentColor);
+  }
+
+  private attachAppearanceSettingsListener(): void {
+    if (this.appearanceSettingsListener !== null) {
+      return;
+    }
+    const service: AppearanceSettingsService = AppearanceSettingsService.getInstance();
+    this.applyAppearanceSettingsState(service.getSnapshot());
+    this.appearanceSettingsListener = (state: AppearanceSettingsState) => {
+      this.applyAppearanceSettingsState(state);
+    };
+    service.addListener(this.appearanceSettingsListener);
+  }
+
+  private detachAppearanceSettingsListener(): void {
+    if (this.appearanceSettingsListener === null) {
+      return;
+    }
+    AppearanceSettingsService.getInstance().removeListener(this.appearanceSettingsListener);
+    this.appearanceSettingsListener = null;
   }
 
   private getFloatingTabBarReservedBottomVp(): number {
@@ -661,6 +695,10 @@ export struct ProfilePage {
     RouterManager.pushDrafts();
   }
 
+  private openPrivateMessages(): void {
+    RouterManager.pushPrivateMessages();
+  }
+
   private openMyTopics(): void {
     RouterManager.pushMyTopics();
   }
@@ -792,18 +830,20 @@ export struct ProfilePage {
       }
       .width('100%')
       .height('100%')
-      .backgroundColor($r('app.color.background'))
+      .backgroundColor(this.accentBackgroundColorHex)
 
       this.TopBar()
     }
     .width('100%')
     .height('100%')
-    .backgroundColor($r('app.color.background'))
+    .backgroundColor(this.accentBackgroundColorHex)
     .bindSheet($$this.isNotificationQuickPanelVisible, this.NotificationQuickPanelBuilder, {
       detents: [SheetSize.MEDIUM, SheetSize.LARGE],
       showClose: false,
       enableFloatingDragBar: true,
-      backgroundColor: $r('app.color.surface')
+      backgroundColor: ModalChromeHelper.getSheetBackgroundColor(),
+      maskColor: ModalChromeHelper.getMaskColor(),
+      blurStyle: ModalChromeHelper.getSheetBlurStyle()
     })
   }
 
@@ -1044,7 +1084,7 @@ export struct ProfilePage {
                   }
                 }
                 .padding({ left: 8, right: 8, top: 3, bottom: 3 })
-                .backgroundColor($r('app.color.card_background'))
+                .backgroundColor(this.accentSurfaceColorHex)
                 .borderRadius(10)
                 .margin({ bottom: 4 })
               }
@@ -1065,7 +1105,7 @@ export struct ProfilePage {
           .width(36)
           .height(36)
           .borderRadius(18)
-          .backgroundColor($r('app.color.card_background'))
+          .backgroundColor(this.accentSurfaceColorHex)
           .justifyContent(FlexAlign.Center)
           .alignItems(VerticalAlign.Center)
           .margin({ left: 12 })
@@ -1351,7 +1391,7 @@ export struct ProfilePage {
     }
     .width('100%')
     .padding({ left: 16, right: 16, top: 16, bottom: 16 })
-    .backgroundColor($r('app.color.card_background'))
+    .backgroundColor(this.accentSurfaceColorHex)
     .borderRadius(24)
     .border({ width: 1, color: $r('app.color.divider_light') })
     .shadow({ radius: 14, color: $r('app.color.shadow_light'), offsetX: 0, offsetY: 6 })
@@ -1360,6 +1400,15 @@ export struct ProfilePage {
   @Builder
   private LoggedInOptionsCard() {
     Column() {
+      this.OptionItem({
+        iconSymbol: $r('sys.symbol.message'),
+        iconBgColor: '#E8EAF6',
+        iconColor: '#3949AB',
+        title: $r('app.string.profile_private_messages'),
+        subtitle: $r('app.string.profile_growth_messages_hint'),
+        showDivider: true,
+        onClick: () => { this.openPrivateMessages(); }
+      })
       this.OptionItem({
         iconSymbol: $r('sys.symbol.clock'),
         iconBgColor: '#F3E5F5',
@@ -1391,7 +1440,7 @@ export struct ProfilePage {
       }
     }
     .width('100%')
-    .backgroundColor($r('app.color.card_background'))
+    .backgroundColor(this.accentSurfaceColorHex)
     .borderRadius(20)
     .border({ width: 1, color: $r('app.color.divider_light') })
     .shadow({ radius: 12, color: $r('app.color.shadow_light'), offsetX: 0, offsetY: 6 })
@@ -1479,7 +1528,7 @@ export struct ProfilePage {
         title: $r('app.string.profile_appearance'),
         subtitle: $r('app.string.profile_service_appearance_hint'),
         showDivider: true,
-        onClick: () => { this.showPendingToast('外观设置'); }
+        onClick: () => { RouterManager.pushAppearanceSettings(); }
       })
       this.OptionItem({
         iconSymbol: $r('sys.symbol.wifi'),
@@ -1519,7 +1568,7 @@ export struct ProfilePage {
       })
     }
     .width('100%')
-    .backgroundColor($r('app.color.card_background'))
+    .backgroundColor(this.accentSurfaceColorHex)
     .borderRadius(20)
     .border({ width: 1, color: $r('app.color.divider_light') })
     .shadow({ radius: 12, color: $r('app.color.shadow_light'), offsetX: 0, offsetY: 6 })
@@ -1572,7 +1621,7 @@ export struct ProfilePage {
       }
       .width('100%')
       .height(52)
-      .backgroundColor($r('app.color.primary'))
+      .backgroundColor(this.themeAccentColorHex)
       .borderRadius(16)
       .onClick(() => {
         RouterManager.pushLogin();
@@ -1610,7 +1659,7 @@ export struct ProfilePage {
 
   private getHeaderAccentColor(): string {
     if (this.currentUser === null) {
-      return '#0088CC';
+      return this.themeAccentColorHex;
     }
     return this.getTrustLevelColor();
   }

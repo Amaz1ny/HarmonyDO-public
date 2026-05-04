@@ -4,6 +4,7 @@ import { WindowManager } from '../../common/utils/WindowManager';
 import { LoadingSpinner } from './LoadingSpinner';
 import { SmartAvatar } from './SmartAvatar';
 import { ToastService } from '../../common/utils/ToastService';
+import { ThemeManager } from '../../common/theme/ThemeManager';
 
 @ComponentV2
 export struct PrivateMessageComposerSheet {
@@ -208,7 +209,7 @@ export struct PrivateMessageComposerSheet {
           .type(ButtonType.Capsule)
           .fontSize(13)
           .height(34)
-          .backgroundColor($r('app.color.surface_variant'))
+          .backgroundColor(ThemeManager.getCurrentAccentSurfaceVariantColorHex())
           .fontColor($r('app.color.on_surface_secondary'))
           .onClick(() => {
             this.closeSheet(false).catch((_: Object) => {
@@ -274,7 +275,7 @@ export struct PrivateMessageComposerSheet {
         .height(48)
         .padding({ left: 14, right: 14 })
         .margin({ left: 16, right: 16, top: 12 })
-        .backgroundColor($r('app.color.surface_variant'))
+        .backgroundColor(ThemeManager.getCurrentAccentSurfaceVariantColorHex())
         .borderRadius(14)
         .fontSize(15)
         .fontColor($r('app.color.on_surface'))
@@ -290,7 +291,7 @@ export struct PrivateMessageComposerSheet {
         .height(240)
         .padding(12)
         .margin({ left: 16, right: 16, top: 12 })
-        .backgroundColor($r('app.color.surface_variant'))
+        .backgroundColor(ThemeManager.getCurrentAccentSurfaceVariantColorHex())
         .borderRadius(16)
         .fontSize(15)
         .fontColor($r('app.color.on_surface'))
@@ -308,7 +309,7 @@ export struct PrivateMessageComposerSheet {
           .type(ButtonType.Capsule)
           .layoutWeight(1)
           .height(44)
-          .backgroundColor($r('app.color.surface_variant'))
+          .backgroundColor(ThemeManager.getCurrentAccentSurfaceVariantColorHex())
           .fontColor($r('app.color.on_surface_secondary'))
           .onClick(() => {
             this.closeSheet(false).catch((_: Object) => {
@@ -322,7 +323,7 @@ export struct PrivateMessageComposerSheet {
           .layoutWeight(1)
           .height(44)
           .enabled(!this.isSubmitting)
-          .backgroundColor($r('app.color.primary'))
+          .backgroundColor(ThemeManager.getCurrentAccentColorHex())
           .fontColor(Color.White)
           .onClick(() => {
             this.submit().catch((_: Object) => {
@@ -335,6 +336,6 @@ export struct PrivateMessageComposerSheet {
       Blank().height(20 + WindowManager.getSystemAvoidAreaBottomVp())
     }
     .width('100%')
-    .backgroundColor($r('app.color.surface'))
+    .backgroundColor(ThemeManager.getCurrentAccentSurfaceColorHex())
   }
 }

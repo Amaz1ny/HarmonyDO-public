@@ -1,11 +1,12 @@
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { image } from '@kit.ImageKit';
-import { componentSnapshot } from '@kit.ArkUI';
+import { componentSnapshot, KeyboardAvoidMode } from '@kit.ArkUI';
 import fileIo from '@ohos.file.fs';
-import { Post, PostReaction, PostReactionState, ReplyToUser } from '../../models/Post';
+import { Post, PostBoost, PostBoostUser, PostReaction, PostReactionState, ReplyToUser } from '../../models/Post';
+import { NestedChildrenResponse, NestedNode, NestedRootsResponse } from '../../models/NestedTopic';
 import { Category, SiteResponse } from '../../models/Category';
 import { GrantedBadge } from '../../models/Badge';
-import { UserStatus } from '../../models/User';
+import { User, UserStatus } from '../../models/User';
 import { ApiClient } from '../../services/network/ApiClient';
 import { AuthService } from '../../services/auth/AuthService';
 import { LoadingSpinner } from '../components/LoadingSpinner';
@@ -20,6 +21,7 @@ import { ActionBarButton, ActionBarStyle, HdsActionBar, HdsNavDestination } from
 import { ColorMetrics, LengthMetrics } from '@ohos.arkui.node';
 import { WindowManager } from '../../common/utils/WindowManager';
 import { SearchPost, SearchResult } from '../../models/SearchResult';
+import { Emoji } from '../../models/Emoji';
 import { ShareUtils } from '../../common/utils/ShareUtils';
 import { SystemShareService } from '../../common/utils/SystemShareService';
 import { ExternalLinkService } from '../../common/utils/ExternalLinkService';
@@ -34,6 +36,7 @@ import { EmojiResolver } from '../../common/utils/EmojiResolver';
 import { PostRichContent } from '../components/PostRichContent';
 import { PostLinks } from '../components/PostLinks';
 import { ReplyComposerSheet } from '../components/ReplyComposerSheet';
+import { ComposerEmojiPanel } from '../components/ComposerEmojiPanel';
 import { BookmarkEditSheet } from '../components/BookmarkEditSheet';
 import { UserStatusEmoji } from '../components/UserStatusEmoji';
 import { TopicDetailChromeHelper } from '../components/TopicDetailChromeHelper';
@@ -41,6 +44,7 @@ import { FloatingActionChromeHelper } from '../components/FloatingActionChromeHe
 import { AppContext } from '../../common/utils/AppContext';
 import { PostShareImageParams, postShareImageBuilder } from '../components/PostShareImageCard';
 import { PreferencesUtil } from '../../services/storage/PreferencesUtil';
+import { AppearanceSettingsService, AppearanceSettingsState } from '../../services/storage/AppearanceSettingsService';
 import { MAX_READ_LATER_ITEMS, ReadLaterService } from '../../services/storage/ReadLaterService';
 import { MessageBusMessage, MessageBusService } from '../../services/messagebus/MessageBusService';
 import { TopicTrackingService } from '../../services/messagebus/TopicTrackingService';
@@ -56,6 +60,8 @@ import {
   FLOATING_TAB_BAR_WIDTH_SMALL_VP,
   FLOATING_TAB_BAR_CONTENT_EXTRA_PADDING_VP
 } from '../../common/constants/LayoutConstants';
+import { ModalChromeHelper } from '../components/ModalChromeHelper';
+import { ThemeManager } from '../../common/theme/ThemeManager';
 
 const TAG: string = 'TopicDetailPage';
 const TITLE_SHOW_OFFSET: number = 160;
@@ -86,12 +92,36 @@ const POST_REACTION_RATE_LIMIT_FALLBACK_SECONDS: number = 13;
 const POST_REACTION_PICKER_PANEL_RADIUS: number = 30;
 const POST_REACTION_PICKER_SCREEN_MARGIN: number = 16;
 const POST_REACTION_PICKER_EDGE_GAP: number = 8;
+const SHORT_REPLY_MAX_COUNT: number = 50;
+const SHORT_REPLY_COLLAPSED_GROUP_LIMIT: number = 6;
+const SHORT_REPLY_INPUT_MAX_LENGTH: number = 16;
+const SHORT_REPLY_EMOJI_PANEL_HEIGHT: number = 280;
+const SHORT_REPLY_EMOJI_MARKER_START: number = 0xE000;
+const SHORT_REPLY_EMOJI_MARKER_END: number = 0xF8FF;
+const SHORT_REPLY_EMOJI_MARKER_RANGE: number = SHORT_REPLY_EMOJI_MARKER_END - SHORT_REPLY_EMOJI_MARKER_START + 1;
 
 class ReactionPickerAnchorRect {
   x: number = 0;
   y: number = 0;
   width: number = 0;
   height: number = 0;
+}
+
+class ShortReplyGroup {
+  raw: string = '';
+  boosts: PostBoost[] = [];
+
+  constructor() {
+  }
+}
+
+class ShortReplyInlineToken {
+  key: string = '';
+  text: string = '';
+  emojiUrl: string = '';
+
+  constructor() {
+  }
 }
 
 /**
@@ -145,6 +175,24 @@ export struct TopicDetailPage {
   @Local detailRootHeightVp: number = 0;
   @Local isSummaryMode: boolean = false;
   @Local isAuthorOnlyMode: boolean = false;
+  @Local isTopLevelMode: boolean = false;
+  @Local isNestedView: boolean = false;
+  @Local isDetailFilterSheetVisible: boolean = false;
+  @Local nestedSort: string = 'old';
+  @Local nestedRoots: NestedNode[] = [];
+  @Local nestedOpPost: Post | null = null;
+  @Local nestedLoading: boolean = false;
+  @Local nestedLoadingMore: boolean = false;
+  @Local nestedErrorMessage: string = '';
+  @Local nestedHasMoreRoots: boolean = false;
+  @Local nestedPage: number = 0;
+  @Local nestedChildrenMap: Map<number, NestedNode[]> = new Map<number, NestedNode[]>();
+  @Local nestedChildrenHasMoreMap: Map<number, boolean> = new Map<number, boolean>();
+  @Local nestedChildrenPageMap: Map<number, number> = new Map<number, number>();
+  @Local nestedExpandedPostNumbers: number[] = [];
+  @Local nestedLoadingChildrenPostNumber: number = 0;
+  @Local nestedChildrenErrorPostNumber: number = 0;
+  @Local nestedUiVersion: number = 0;
   @Local isClosed: boolean = false;
   @Local hasAcceptedAnswer: boolean = false;
   @Local acceptedAnswerPostNumber: number = 0;
@@ -164,6 +212,18 @@ export struct TopicDetailPage {
   @Local postLikeMutatingPostId: number = 0;
   @Local postLikeUiVersion: number = 0;
   @Local postReactionUiVersion: number = 0;
+  @Local boostUiVersion: number = 0;
+  @Local boostComposerVisible: boolean = false;
+  @Local boostComposerPostId: number = 0;
+  @Local boostInput: string = '';
+  @Local boostInputSelectionStart: number = 0;
+  @Local boostInputSelectionEnd: number = 0;
+  @Local boostSubmitting: boolean = false;
+  @Local boostDeletingId: number = 0;
+  @Local boostDeleteActionKey: string = '';
+  @Local boostEmojiPanelVisible: boolean = false;
+  @Local expandedBoostPostIds: number[] = [];
+  @Local expandedBoostGroupKeys: string[] = [];
   @Local postReadUiVersion: number = 0;
   @Local unreadDotBlinkOpacity: number = 1;
   private unreadDotBlinkTimerId: number = -1;
@@ -263,6 +323,13 @@ export struct TopicDetailPage {
   @Local exportProgressText: string = '';
   @Local holdingHandStatus: HoldingHandState = HoldingHandState.UNKNOWN_STATUS;
 
+  @Local accentColorHex: string = ThemeManager.getCurrentAccentColorHex();
+  @Local accentBackgroundColorHex: string = ThemeManager.getCurrentAccentBackgroundColorHex();
+  @Local accentSurfaceColorHex: string = ThemeManager.getCurrentAccentSurfaceColorHex();
+  @Local accentSurfaceVariantColorHex: string = ThemeManager.getCurrentAccentSurfaceVariantColorHex();
+  @Local accentSelectedBackgroundColorHex: string = ThemeManager.getCurrentAccentSelectedBackgroundColorHex();
+  @Local appearanceThemeRevision: number = 0;
+
   private timeTickTimerId: number = -1;
   private shareImageRequestId: number = 0;
   private shareImageLastScheduledRequestId: number = -1;
@@ -288,6 +355,12 @@ export struct TopicDetailPage {
   private reactionPickerRootHeight: number = 0;
   private reactionPickerAnimationTimerId: number = -1;
   private reactionPickerAnimationToken: number = 0;
+  private readonly boostInputController: TextInputController = new TextInputController();
+  private boostEmojiMarkerMap: Map<string, string> = new Map<string, string>();
+  private boostEmojiMarkerSerial: number = 0;
+  private boostKeyboardAvoidModeApplied: boolean = false;
+  private boostPreviousKeyboardAvoidMode: KeyboardAvoidMode = KeyboardAvoidMode.OFFSET;
+  private boostEmojiPanelSwitchToken: number = 0;
 
   // MessageBus：话题频道（实时新回复）
   private topicChannelKey: string = '';
@@ -297,6 +370,7 @@ export struct TopicDetailPage {
   private authStateListener: (() => void) | null = null;
   private holdingHandListener: ((status: HoldingHandState) => void) | null = null;
   private appForegroundListener: ((isForeground: boolean) => void) | null = null;
+  private appearanceSettingsListener: ((state: AppearanceSettingsState) => void) | null = null;
   private topicChannelAttached: boolean = false;
   private pendingTopicCreatedPostIds: number[] = [];
   private realtimeFetchQueue: number[] = [];
@@ -312,6 +386,7 @@ export struct TopicDetailPage {
     this.attachHoldingHandListener();
     this.attachReadLaterListener();
     this.attachAppForegroundListener();
+    this.attachAppearanceSettingsListener();
     this.initAuthState();
     this.syncReadLaterState().catch(() => {
     });
@@ -334,6 +409,7 @@ export struct TopicDetailPage {
   }
 
   aboutToDisappear(): void {
+    this.restoreBoostKeyboardAvoidMode();
     // Use the more accurate highestSeen from ScreenTrack before stopping it
     if (this.screenTrack !== null) {
       const trackHighest: number = (this.screenTrack as ScreenTrack).getHighestSeen();
@@ -361,6 +437,36 @@ export struct TopicDetailPage {
     this.detachHoldingHandListener();
     this.detachReadLaterListener();
     this.detachAppForegroundListener();
+    this.detachAppearanceSettingsListener();
+  }
+
+  private applyAppearanceSettingsState(state: AppearanceSettingsState): void {
+    this.accentColorHex = ThemeManager.getAccentColorHex(state.accentColor);
+    this.accentBackgroundColorHex = ThemeManager.getAccentBackgroundColorHex(state.accentColor);
+    this.accentSurfaceColorHex = ThemeManager.getAccentSurfaceColorHex(state.accentColor);
+    this.accentSurfaceVariantColorHex = ThemeManager.getAccentSurfaceVariantColorHex(state.accentColor);
+    this.accentSelectedBackgroundColorHex = ThemeManager.getAccentSelectedBackgroundColorHex(state.accentColor);
+    this.appearanceThemeRevision = this.appearanceThemeRevision + 1;
+  }
+
+  private attachAppearanceSettingsListener(): void {
+    if (this.appearanceSettingsListener !== null) {
+      return;
+    }
+    const service: AppearanceSettingsService = AppearanceSettingsService.getInstance();
+    this.applyAppearanceSettingsState(service.getSnapshot());
+    this.appearanceSettingsListener = (state: AppearanceSettingsState) => {
+      this.applyAppearanceSettingsState(state);
+    };
+    service.addListener(this.appearanceSettingsListener);
+  }
+
+  private detachAppearanceSettingsListener(): void {
+    if (this.appearanceSettingsListener === null) {
+      return;
+    }
+    AppearanceSettingsService.getInstance().removeListener(this.appearanceSettingsListener);
+    this.appearanceSettingsListener = null;
   }
 
   private attachAuthStateListener(): void {
@@ -1032,9 +1138,1182 @@ export struct TopicDetailPage {
         return this.expandedReplies[i];
       }
     }
+    if (this.nestedOpPost !== null && (this.nestedOpPost as Post).id === postId) {
+      return this.nestedOpPost as Post;
+    }
+    const nestedPost: Post | null = this.findPostByIdInNestedNodes(this.nestedRoots, postId);
+    if (nestedPost !== null) {
+      return nestedPost;
+    }
     return null;
   }
 
+  private findPostByIdInNestedNodes(nodes: NestedNode[], postId: number): Post | null {
+    for (let i = 0; i < nodes.length; i++) {
+      const node: NestedNode = nodes[i];
+      if (node.post.id === postId) {
+        return node.post;
+      }
+      const loadedChildren: NestedNode[] = this.getNestedVisibleChildren(node);
+      const childPost: Post | null = this.findPostByIdInNestedNodes(loadedChildren, postId);
+      if (childPost !== null) {
+        return childPost;
+      }
+    }
+    return null;
+  }
+
+
+
+  private getCurrentUsername(): string {
+    const auth: AuthService = AuthService.getInstance();
+    const username: string = auth.getCurrentUsername();
+    return username !== undefined && username !== null ? username.trim() : '';
+  }
+
+  private isCurrentUserPost(post: Post): boolean {
+    const currentUsername: string = this.getCurrentUsername().toLowerCase();
+    return currentUsername.length > 0 && post.username.toLowerCase() === currentUsername;
+  }
+
+  private normalizeShortReplyRaw(raw: string): string {
+    return raw !== undefined && raw !== null ? raw.toString().trim() : '';
+  }
+
+  private resetBoostInput(): void {
+    this.boostInput = '';
+    this.boostInputSelectionStart = 0;
+    this.boostInputSelectionEnd = 0;
+    this.boostEmojiMarkerMap = new Map<string, string>();
+    this.boostEmojiMarkerSerial = 0;
+  }
+
+  private isBoostEmojiMarkerChar(ch: string): boolean {
+    if (ch.length === 0) {
+      return false;
+    }
+    const code: number = ch.charCodeAt(0);
+    return code >= SHORT_REPLY_EMOJI_MARKER_START && code <= SHORT_REPLY_EMOJI_MARKER_END;
+  }
+
+  private createBoostEmojiMarker(name: string): string {
+    const safeName: string = name !== undefined && name !== null ? name.trim() : '';
+    if (safeName.length === 0) {
+      return '';
+    }
+    for (let i = 0; i < SHORT_REPLY_EMOJI_MARKER_RANGE; i++) {
+      const code: number = SHORT_REPLY_EMOJI_MARKER_START
+        + ((this.boostEmojiMarkerSerial + i) % SHORT_REPLY_EMOJI_MARKER_RANGE);
+      const marker: string = String.fromCharCode(code);
+      if (this.boostInput.indexOf(marker) < 0) {
+        this.boostEmojiMarkerSerial = this.boostEmojiMarkerSerial + i + 1;
+        this.boostEmojiMarkerMap.set(marker, safeName);
+        return marker;
+      }
+    }
+    return '';
+  }
+
+  private buildBoostRawInput(): string {
+    let out: string = '';
+    for (let i = 0; i < this.boostInput.length; i++) {
+      const ch: string = this.boostInput.charAt(i);
+      if (this.isBoostEmojiMarkerChar(ch) && this.boostEmojiMarkerMap.has(ch)) {
+        const name: string = this.boostEmojiMarkerMap.get(ch) as string;
+        out = `${out}:${name}:`;
+      } else {
+        out = `${out}${ch}`;
+      }
+    }
+    return out;
+  }
+
+  private buildBoostDisplayText(): string {
+    return this.buildBoostRawInput();
+  }
+
+  private hasBoostEmojiMarkerInInput(): boolean {
+    for (let i = 0; i < this.boostInput.length; i++) {
+      const ch: string = this.boostInput.charAt(i);
+      if (this.isBoostEmojiMarkerChar(ch) && this.boostEmojiMarkerMap.has(ch)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private hasShortReplyInlineEmoji(raw: string): boolean {
+    const tokens: ShortReplyInlineToken[] = this.tokenizeShortReplyInline(raw);
+    for (let i = 0; i < tokens.length; i++) {
+      if (tokens[i].emojiUrl.length > 0) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private shouldUseBoostInputRichOverlay(): boolean {
+    if (this.hasBoostEmojiMarkerInInput()) {
+      return true;
+    }
+    return this.hasShortReplyInlineEmoji(this.buildBoostDisplayText());
+  }
+
+  private isBoostSubmitEnabled(): boolean {
+    return !this.boostSubmitting && this.getBoostInputVisualLength(this.normalizeShortReplyRaw(this.boostInput)) > 0;
+  }
+
+  private applyBoostKeyboardAvoidMode(): void {
+    if (this.boostKeyboardAvoidModeApplied) {
+      return;
+    }
+    try {
+      const uiContext = this.getUIContext();
+      this.boostPreviousKeyboardAvoidMode = uiContext.getKeyboardAvoidMode();
+      uiContext.setKeyboardAvoidMode(KeyboardAvoidMode.RESIZE);
+      this.boostKeyboardAvoidModeApplied = true;
+    } catch (_) {
+    }
+  }
+
+  private restoreBoostKeyboardAvoidMode(): void {
+    if (!this.boostKeyboardAvoidModeApplied) {
+      return;
+    }
+    try {
+      this.getUIContext().setKeyboardAvoidMode(this.boostPreviousKeyboardAvoidMode);
+    } catch (_) {
+    }
+    this.boostKeyboardAvoidModeApplied = false;
+  }
+
+  private stopBoostInputEditing(): void {
+    try {
+      this.boostInputController.stopEditing();
+    } catch (_) {
+    }
+  }
+
+  private toggleBoostEmojiPanel(): void {
+    const nextVisible: boolean = !this.boostEmojiPanelVisible;
+    this.boostEmojiPanelSwitchToken = this.boostEmojiPanelSwitchToken + 1;
+    const switchToken: number = this.boostEmojiPanelSwitchToken;
+    if (!nextVisible) {
+      this.boostEmojiPanelVisible = false;
+      return;
+    }
+    this.stopBoostInputEditing();
+    this.boostEmojiPanelVisible = false;
+    setTimeout(() => {
+      if (switchToken !== this.boostEmojiPanelSwitchToken || !this.boostComposerVisible) {
+        return;
+      }
+      this.boostEmojiPanelVisible = true;
+    }, 120);
+  }
+
+  private normalizeBoostInputSelectionPosition(position: number): number {
+    if (position < 0) {
+      return 0;
+    }
+    if (position > this.boostInput.length) {
+      return this.boostInput.length;
+    }
+    return position;
+  }
+
+  private syncBoostInputSelection(selectionStart: number, selectionEnd: number): void {
+    const start: number = this.normalizeBoostInputSelectionPosition(selectionStart);
+    const end: number = this.normalizeBoostInputSelectionPosition(selectionEnd);
+    if (start <= end) {
+      this.boostInputSelectionStart = start;
+      this.boostInputSelectionEnd = end;
+    } else {
+      this.boostInputSelectionStart = end;
+      this.boostInputSelectionEnd = start;
+    }
+  }
+
+  private restoreBoostInputCaretAsync(position: number): void {
+    const target: number = this.normalizeBoostInputSelectionPosition(position);
+    this.boostInputSelectionStart = target;
+    this.boostInputSelectionEnd = target;
+    setTimeout(() => {
+      const safeTarget: number = this.normalizeBoostInputSelectionPosition(target);
+      this.boostInputSelectionStart = safeTarget;
+      this.boostInputSelectionEnd = safeTarget;
+      try {
+        this.boostInputController.caretPosition(safeTarget);
+      } catch (_) {
+      }
+    }, 16);
+  }
+
+  private getShortReplyUnicodeEmoji(nameRaw: string): string {
+    const name: string = nameRaw !== undefined && nameRaw !== null ? nameRaw.toString().trim().toLowerCase() : '';
+    if (name.length === 0) {
+      return '';
+    }
+    if (name === 'waving_hand' || name === 'wave') return String.fromCodePoint(0x1F44B);
+    if (name === 'grinning_face' || name === 'grinning' || name === 'smile') return String.fromCodePoint(0x1F600);
+    if (name === 'grin' || name === 'beaming_face_with_smiling_eyes') return String.fromCodePoint(0x1F601);
+    if (name === 'joy' || name === 'face_with_tears_of_joy') return String.fromCodePoint(0x1F602);
+    if (name === 'smiley' || name === 'grinning_face_with_big_eyes') return String.fromCodePoint(0x1F603);
+    if (name === 'grinning_face_with_smiling_eyes' || name === 'smile_big') return String.fromCodePoint(0x1F604);
+    if (name === 'grinning_face_with_sweat' || name === 'sweat_smile') return String.fromCodePoint(0x1F605);
+    if (name === 'laughing' || name === 'satisfied') return String.fromCodePoint(0x1F606);
+    if (name === 'grinning_squinting_face' || name === 'squinting_face' || name === 'satisfied') return String.fromCodePoint(0x1F606);
+    if (name === 'smiling_face_with_halo' || name === 'innocent') return String.fromCodePoint(0x1F607);
+    if (name === 'smiling_face_with_horns') return String.fromCodePoint(0x1F608);
+    if (name === 'rofl' || name === 'rolling_on_the_floor_laughing') return String.fromCodePoint(0x1F923);
+    if (name === 'wink' || name === 'winking_face') return String.fromCodePoint(0x1F609);
+    if (name === 'blush' || name === 'smiling_face_with_smiling_eyes') return String.fromCodePoint(0x1F60A);
+    if (name === 'slight_smile' || name === 'slightly_smiling_face') return String.fromCodePoint(0x1F642);
+    if (name === 'upside_down_face') return String.fromCodePoint(0x1F643);
+    if (name === 'melting_face') return String.fromCodePoint(0x1FAE0);
+    if (name === 'heart_eyes' || name === 'smiling_face_with_heart_eyes') return String.fromCodePoint(0x1F60D);
+    if (name === 'star_struck') return String.fromCodePoint(0x1F929);
+    if (name === 'kissing_heart' || name === 'face_blowing_a_kiss') return String.fromCodePoint(0x1F618);
+    if (name === 'smiling_face_with_hearts' || name === 'smiling_face_with_three_hearts') return String.fromCodePoint(0x1F970);
+    if (name === 'yum' || name === 'face_savoring_food') return String.fromCodePoint(0x1F60B);
+    if (name === 'stuck_out_tongue' || name === 'face_with_tongue') return String.fromCodePoint(0x1F61B);
+    if (name === 'stuck_out_tongue_winking_eye' || name === 'winking_face_with_tongue') return String.fromCodePoint(0x1F61C);
+    if (name === 'stuck_out_tongue_closed_eyes' || name === 'squinting_face_with_tongue') return String.fromCodePoint(0x1F61D);
+    if (name === 'sunglasses' || name === 'smiling_face_with_sunglasses') return String.fromCodePoint(0x1F60E);
+    if (name === 'thinking' || name === 'thinking_face') return String.fromCodePoint(0x1F914);
+    if (name === 'pleading_face') return String.fromCodePoint(0x1F97A);
+    if (name === 'zany_face') return String.fromCodePoint(0x1F92A);
+    if (name === 'partying_face' || name === 'tada_face') return String.fromCodePoint(0x1F973);
+    if (name === 'rolling_eyes') return String.fromCodePoint(0x1F644);
+    if (name === 'neutral_face') return String.fromCodePoint(0x1F610);
+    if (name === 'expressionless') return String.fromCodePoint(0x1F611);
+    if (name === 'flushed') return String.fromCodePoint(0x1F633);
+    if (name === 'sob') return String.fromCodePoint(0x1F62D);
+    if (name === 'cry') return String.fromCodePoint(0x1F622);
+    if (name === 'angry') return String.fromCodePoint(0x1F620);
+    if (name === 'rage') return String.fromCodePoint(0x1F621);
+    if (name === 'thumbsup' || name === 'thumbs_up' || name === '+1') return String.fromCodePoint(0x1F44D);
+    if (name === 'thumbsdown' || name === 'thumbs_down' || name === '-1') return String.fromCodePoint(0x1F44E);
+    if (name === 'clap') return String.fromCodePoint(0x1F44F);
+    if (name === 'raised_hands') return String.fromCodePoint(0x1F64C);
+    if (name === 'pray') return String.fromCodePoint(0x1F64F);
+    if (name === 'ok_hand') return String.fromCodePoint(0x1F44C);
+    if (name === 'muscle') return String.fromCodePoint(0x1F4AA);
+    if (name === 'fire') return String.fromCodePoint(0x1F525);
+    if (name === 'rocket') return String.fromCodePoint(0x1F680);
+    if (name === 'heart' || name === 'red_heart') return String.fromCodePoint(0x2764, 0xFE0F);
+    if (name === 'orange_heart') return String.fromCodePoint(0x1F9E1);
+    if (name === 'yellow_heart') return String.fromCodePoint(0x1F49B);
+    if (name === 'green_heart') return String.fromCodePoint(0x1F49A);
+    if (name === 'blue_heart') return String.fromCodePoint(0x1F499);
+    if (name === 'purple_heart') return String.fromCodePoint(0x1F49C);
+    if (name === 'broken_heart') return String.fromCodePoint(0x1F494);
+    if (name === '100') return String.fromCodePoint(0x1F4AF);
+    if (name === 'tada') return String.fromCodePoint(0x1F389);
+    if (name === 'cow' || name === 'cow_face') return String.fromCodePoint(0x1F42E);
+    if (name === 'monkey') return String.fromCodePoint(0x1F412);
+    if (name === 'see_no_evil') return String.fromCodePoint(0x1F648);
+    if (name === 'hear_no_evil') return String.fromCodePoint(0x1F649);
+    if (name === 'speak_no_evil') return String.fromCodePoint(0x1F64A);
+    if (name === 'cat') return String.fromCodePoint(0x1F431);
+    if (name === 'dog') return String.fromCodePoint(0x1F436);
+    if (name === 'service_dog') return String.fromCodePoint(0x1F415, 0x200D, 0x1F9BA);
+    if (name === 'poop') return String.fromCodePoint(0x1F4A9);
+    if (name === 'eyes') return String.fromCodePoint(0x1F440);
+    return '';
+  }
+
+  private formatShortReplyDisplayText(raw: string): string {
+    return this.normalizeShortReplyRaw(raw);
+  }
+
+  private isShortReplyEmojiName(nameRaw: string): boolean {
+    const name: string = nameRaw !== undefined && nameRaw !== null ? nameRaw.toString().trim() : '';
+    if (name.length === 0) {
+      return false;
+    }
+    for (let i = 0; i < name.length; i++) {
+      const code: number = name.charCodeAt(i);
+      if (code <= 32 || name.charAt(i) === ':') {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  private appendShortReplyTextToken(tokens: ShortReplyInlineToken[], textRaw: string): void {
+    const text: string = textRaw !== undefined && textRaw !== null ? textRaw : '';
+    if (text.length === 0) {
+      return;
+    }
+    const token: ShortReplyInlineToken = new ShortReplyInlineToken();
+    token.key = `t_${tokens.length}_${text.length}_${text}`;
+    token.text = text;
+    tokens.push(token);
+  }
+
+  private appendShortReplyEmojiToken(tokens: ShortReplyInlineToken[], shortcode: string, name: string): void {
+    const emojiUrl: string = EmojiResolver.resolveEmojiUrl(shortcode);
+    if (emojiUrl.length > 0) {
+      const token: ShortReplyInlineToken = new ShortReplyInlineToken();
+      token.key = `e_${tokens.length}_${shortcode}`;
+      token.text = shortcode;
+      token.emojiUrl = emojiUrl;
+      tokens.push(token);
+      return;
+    }
+
+    this.appendShortReplyTextToken(tokens, shortcode);
+  }
+
+  private tokenizeShortReplyInline(raw: string): ShortReplyInlineToken[] {
+    const text: string = this.formatShortReplyDisplayText(raw);
+    const tokens: ShortReplyInlineToken[] = [];
+    if (text.length === 0) {
+      return tokens;
+    }
+
+    let cursor: number = 0;
+    while (cursor < text.length) {
+      const start: number = text.indexOf(':', cursor);
+      if (start < 0) {
+        this.appendShortReplyTextToken(tokens, text.substring(cursor));
+        break;
+      }
+
+      const end: number = text.indexOf(':', start + 1);
+      if (end < 0) {
+        this.appendShortReplyTextToken(tokens, text.substring(cursor));
+        break;
+      }
+
+      const name: string = text.substring(start + 1, end);
+      if (!this.isShortReplyEmojiName(name)) {
+        this.appendShortReplyTextToken(tokens, text.substring(cursor, start + 1));
+        cursor = start + 1;
+        continue;
+      }
+
+      if (start > cursor) {
+        this.appendShortReplyTextToken(tokens, text.substring(cursor, start));
+      }
+      this.appendShortReplyEmojiToken(tokens, text.substring(start, end + 1), name);
+      cursor = end + 1;
+    }
+
+    return tokens;
+  }
+
+  private shouldUseShortReplyEmojiImage(raw: string): boolean {
+    return this.formatShortReplyDisplayText(raw) === raw && this.getShortReplyEmojiUrl(raw).length > 0;
+  }
+
+  private getShortReplyGroupKey(postId: number, raw: string): string {
+    return `${postId}:${this.normalizeShortReplyRaw(raw)}`;
+  }
+
+  private getBoostDisplayText(boost: PostBoost): string {
+    const raw: string = this.normalizeShortReplyRaw(boost.raw);
+    if (raw.length > 0) {
+      return raw;
+    }
+    const cooked: string = boost.cooked !== undefined && boost.cooked !== null ? boost.cooked.trim() : '';
+    if (cooked.length === 0) {
+      return '';
+    }
+    return HtmlToMarkdown.convert(cooked).replace(/\s+/g, ' ').trim();
+  }
+
+  private getPostBoosts(post: Post): PostBoost[] {
+    const trackedVersion: number = this.boostUiVersion;
+    if (trackedVersion < 0) {
+      return [];
+    }
+    return post.boosts !== null ? (post.boosts as PostBoost[]) : [];
+  }
+
+  private getPostBoostCount(post: Post): number {
+    return this.getPostBoosts(post).length;
+  }
+
+  private buildShortReplyGroups(post: Post): ShortReplyGroup[] {
+    const boosts: PostBoost[] = this.getPostBoosts(post);
+    const groups: ShortReplyGroup[] = [];
+    const indexMap: Map<string, number> = new Map<string, number>();
+    for (let i = 0; i < boosts.length; i++) {
+      const boost: PostBoost = boosts[i];
+      const raw: string = this.formatShortReplyDisplayText(this.getBoostDisplayText(boost));
+      if (raw.length === 0) {
+        continue;
+      }
+      if (indexMap.has(raw)) {
+        const idx: number = indexMap.get(raw) as number;
+        groups[idx].boosts.push(boost);
+      } else {
+        const group: ShortReplyGroup = new ShortReplyGroup();
+        group.raw = raw;
+        group.boosts = [boost];
+        indexMap.set(raw, groups.length);
+        groups.push(group);
+      }
+    }
+    return groups;
+  }
+
+  private getShortReplyPreviewBoosts(group: ShortReplyGroup): PostBoost[] {
+    const out: PostBoost[] = [];
+    for (let i = 0; i < group.boosts.length && i < 3; i++) {
+      out.push(group.boosts[i]);
+    }
+    return out;
+  }
+
+  private getVisibleShortReplyGroups(post: Post): ShortReplyGroup[] {
+    const groups: ShortReplyGroup[] = this.buildShortReplyGroups(post);
+    if (this.isBoostPostExpanded(post.id) || groups.length <= SHORT_REPLY_COLLAPSED_GROUP_LIMIT) {
+      return groups;
+    }
+    const visible: ShortReplyGroup[] = [];
+    for (let i = 0; i < groups.length && i < SHORT_REPLY_COLLAPSED_GROUP_LIMIT; i++) {
+      visible.push(groups[i]);
+    }
+    return visible;
+  }
+
+  private hasHiddenShortReplyGroups(post: Post): boolean {
+    return this.buildShortReplyGroups(post).length > SHORT_REPLY_COLLAPSED_GROUP_LIMIT;
+  }
+
+  private isBoostPostExpanded(postId: number): boolean {
+    for (let i = 0; i < this.expandedBoostPostIds.length; i++) {
+      if (this.expandedBoostPostIds[i] === postId) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private toggleBoostPostExpanded(postId: number): void {
+    const next: number[] = [];
+    let found: boolean = false;
+    for (let i = 0; i < this.expandedBoostPostIds.length; i++) {
+      if (this.expandedBoostPostIds[i] === postId) {
+        found = true;
+      } else {
+        next.push(this.expandedBoostPostIds[i]);
+      }
+    }
+    if (!found) {
+      next.push(postId);
+    }
+    this.expandedBoostPostIds = next;
+    this.boostUiVersion = this.boostUiVersion + 1;
+  }
+
+  private isBoostGroupExpanded(postId: number, raw: string): boolean {
+    const key: string = this.getShortReplyGroupKey(postId, raw);
+    for (let i = 0; i < this.expandedBoostGroupKeys.length; i++) {
+      if (this.expandedBoostGroupKeys[i] === key) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private toggleBoostGroupExpanded(postId: number, raw: string): void {
+    const key: string = this.getShortReplyGroupKey(postId, raw);
+    const next: string[] = [];
+    let found: boolean = false;
+    for (let i = 0; i < this.expandedBoostGroupKeys.length; i++) {
+      if (this.expandedBoostGroupKeys[i] === key) {
+        found = true;
+      } else {
+        next.push(this.expandedBoostGroupKeys[i]);
+      }
+    }
+    if (!found) {
+      next.push(key);
+    }
+    this.expandedBoostGroupKeys = next;
+    this.boostUiVersion = this.boostUiVersion + 1;
+  }
+
+  private getShortReplyDeleteActionKey(postId: number, raw: string, boost: PostBoost): string {
+    const rawKey: string = this.normalizeShortReplyRaw(raw);
+    const boostKey: string = boost.id > 0 ? boost.id.toString() : `${this.getBoostUserName(boost)}_${rawKey}`;
+    return `${postId}:${rawKey}:${boostKey}`;
+  }
+
+  private isShortReplyDeleteActionVisible(postId: number, raw: string, boost: PostBoost): boolean {
+    if (boost.id <= 0 || !this.isBoostOwnedOrDeletable(boost)) {
+      return false;
+    }
+    if (this.boostDeletingId > 0 && boost.id === this.boostDeletingId) {
+      return true;
+    }
+    return this.boostDeleteActionKey === this.getShortReplyDeleteActionKey(postId, raw, boost);
+  }
+
+  private toggleShortReplyDeleteAction(postId: number, raw: string, boost: PostBoost): void {
+    if (boost.id <= 0 || !this.isBoostOwnedOrDeletable(boost) || this.boostDeletingId > 0) {
+      return;
+    }
+    const key: string = this.getShortReplyDeleteActionKey(postId, raw, boost);
+    this.boostDeleteActionKey = this.boostDeleteActionKey === key ? '' : key;
+  }
+
+  private clearShortReplyDeleteAction(): void {
+    this.boostDeleteActionKey = '';
+  }
+
+  private isShortReplyGroupDeleteActionVisible(postId: number, group: ShortReplyGroup): boolean {
+    const boost: PostBoost | null = this.getDeletableBoostInGroup(group);
+    if (boost === null) {
+      return false;
+    }
+    return this.isShortReplyDeleteActionVisible(postId, group.raw, boost as PostBoost);
+  }
+
+  private isBoostOwnedOrDeletable(boost: PostBoost): boolean {
+    if (boost.canDelete) {
+      return true;
+    }
+    const currentUsername: string = this.getCurrentUsername().toLowerCase();
+    if (currentUsername.length === 0 || boost.user === null) {
+      return false;
+    }
+    const user: PostBoostUser = boost.user as PostBoostUser;
+    return user.username.toLowerCase() === currentUsername;
+  }
+
+  private getDeletableBoostInGroup(group: ShortReplyGroup): PostBoost | null {
+    for (let i = 0; i < group.boosts.length; i++) {
+      if (group.boosts[i].id > 0 && this.isBoostOwnedOrDeletable(group.boosts[i])) {
+        return group.boosts[i];
+      }
+    }
+    return null;
+  }
+
+  private hasCurrentUserBoost(post: Post): boolean {
+    const currentUsername: string = this.getCurrentUsername().toLowerCase();
+    if (currentUsername.length === 0) {
+      return false;
+    }
+    const boosts: PostBoost[] = this.getPostBoosts(post);
+    for (let i = 0; i < boosts.length; i++) {
+      if (boosts[i].user === null) {
+        continue;
+      }
+      const user: PostBoostUser = boosts[i].user as PostBoostUser;
+      if (user.username.toLowerCase() === currentUsername) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private shouldShowBoostRocket(post: Post): boolean {
+    if (this.isGuestMode || post.id <= 0 || post.isDeleted || post.hidden) {
+      return false;
+    }
+    if (this.isClosed) {
+      return false;
+    }
+    if (this.isCurrentUserPost(post)) {
+      return false;
+    }
+    if (this.getPostBoostCount(post) >= SHORT_REPLY_MAX_COUNT) {
+      return false;
+    }
+    if (post.canBoost) {
+      return true;
+    }
+    return !this.hasCurrentUserBoost(post);
+  }
+
+  private getBoostUserAvatarUrl(boost: PostBoost, size: number): string {
+    if (boost.user === null) {
+      return '';
+    }
+    const user: PostBoostUser = boost.user as PostBoostUser;
+    const template: string = user.avatarTemplate !== undefined && user.avatarTemplate !== null ? user.avatarTemplate : '';
+    if (template.trim().length === 0) {
+      return '';
+    }
+    return UrlUtils.getAvatarUrl(template, size);
+  }
+
+  private getBoostUserName(boost: PostBoost): string {
+    if (boost.user === null) {
+      return '';
+    }
+    const user: PostBoostUser = boost.user as PostBoostUser;
+    if (user.name !== null && (user.name as string).trim().length > 0) {
+      return user.name as string;
+    }
+    return user.username;
+  }
+
+  private getShortReplyEmojiUrl(raw: string): string {
+    const text: string = this.normalizeShortReplyRaw(raw);
+    if (text.startsWith(':') && text.endsWith(':') && text.length > 2) {
+      return EmojiResolver.resolveEmojiUrl(text);
+    }
+    return '';
+  }
+
+  private getCodePointAt(text: string, index: number): number {
+    if (index < 0 || index >= text.length) {
+      return 0;
+    }
+    const first: number = text.charCodeAt(index);
+    if (first >= 0xD800 && first <= 0xDBFF && index + 1 < text.length) {
+      const second: number = text.charCodeAt(index + 1);
+      if (second >= 0xDC00 && second <= 0xDFFF) {
+        return (first - 0xD800) * 0x400 + (second - 0xDC00) + 0x10000;
+      }
+    }
+    return first;
+  }
+
+  private getCodePointSize(text: string, index: number): number {
+    const cp: number = this.getCodePointAt(text, index);
+    return cp > 0xFFFF ? 2 : 1;
+  }
+
+  private isVariationOrModifierCodePoint(cp: number): boolean {
+    if (cp >= 0xFE00 && cp <= 0xFE0F) return true;
+    if (cp >= 0xE0100 && cp <= 0xE01EF) return true;
+    if (cp >= 0x1F3FB && cp <= 0x1F3FF) return true;
+    if (cp === 0x20E3) return true;
+    return false;
+  }
+
+  private isRegionalIndicatorCodePoint(cp: number): boolean {
+    return cp >= 0x1F1E6 && cp <= 0x1F1FF;
+  }
+
+  private skipEmojiTail(text: string, index: number): number {
+    let cursor: number = index;
+    while (cursor < text.length) {
+      const cp: number = this.getCodePointAt(text, cursor);
+      if (this.isVariationOrModifierCodePoint(cp)) {
+        cursor = cursor + this.getCodePointSize(text, cursor);
+        continue;
+      }
+      break;
+    }
+    return cursor;
+  }
+
+  private readTextUnitEnd(text: string, start: number): number {
+    let cursor: number = start;
+    const firstCp: number = this.getCodePointAt(text, cursor);
+    cursor = cursor + this.getCodePointSize(text, cursor);
+
+    if (this.isRegionalIndicatorCodePoint(firstCp) && cursor < text.length) {
+      const nextCp: number = this.getCodePointAt(text, cursor);
+      if (this.isRegionalIndicatorCodePoint(nextCp)) {
+        return cursor + this.getCodePointSize(text, cursor);
+      }
+    }
+
+    cursor = this.skipEmojiTail(text, cursor);
+    while (cursor < text.length) {
+      const cp: number = this.getCodePointAt(text, cursor);
+      if (cp !== 0x200D) {
+        break;
+      }
+      cursor = cursor + this.getCodePointSize(text, cursor);
+      if (cursor >= text.length) {
+        break;
+      }
+      cursor = cursor + this.getCodePointSize(text, cursor);
+      cursor = this.skipEmojiTail(text, cursor);
+    }
+    return cursor;
+  }
+
+  private getShortcodeEnd(text: string, start: number): number {
+    if (start < 0 || start >= text.length || text.charAt(start) !== ':') {
+      return -1;
+    }
+    const end: number = text.indexOf(':', start + 1);
+    if (end <= start + 1) {
+      return -1;
+    }
+    const name: string = text.substring(start + 1, end);
+    if (!this.isShortReplyEmojiName(name)) {
+      return -1;
+    }
+    return end + 1;
+  }
+
+  private getBoostInputVisualLength(value: string): number {
+    const text: string = value !== undefined && value !== null ? value : '';
+    let count: number = 0;
+    let cursor: number = 0;
+    while (cursor < text.length) {
+      const shortcodeEnd: number = this.getShortcodeEnd(text, cursor);
+      if (shortcodeEnd > cursor) {
+        count = count + 1;
+        cursor = shortcodeEnd;
+        continue;
+      }
+      cursor = this.readTextUnitEnd(text, cursor);
+      count = count + 1;
+    }
+    return count;
+  }
+
+  private trimBoostInput(value: string): string {
+    const raw: string = value !== undefined && value !== null ? value : '';
+    if (this.getBoostInputVisualLength(raw) <= SHORT_REPLY_INPUT_MAX_LENGTH) {
+      return raw;
+    }
+    let count: number = 0;
+    let cursor: number = 0;
+    while (cursor < raw.length && count < SHORT_REPLY_INPUT_MAX_LENGTH) {
+      const shortcodeEnd: number = this.getShortcodeEnd(raw, cursor);
+      if (shortcodeEnd > cursor) {
+        cursor = shortcodeEnd;
+        count = count + 1;
+        continue;
+      }
+      cursor = this.readTextUnitEnd(raw, cursor);
+      count = count + 1;
+    }
+    return raw.substring(0, cursor);
+  }
+
+  private openBoostComposer(post: Post): void {
+    if (!this.shouldShowBoostRocket(post)) {
+      if (this.isGuestMode) {
+        ToastService.show('登录后可使用小火箭');
+      } else if (this.isCurrentUserPost(post)) {
+        ToastService.show('不能给自己的楼层发送简短回复');
+      } else if (this.getPostBoostCount(post) >= SHORT_REPLY_MAX_COUNT) {
+        ToastService.show('该楼层简短回复已满');
+      }
+      return;
+    }
+    this.closeReactionPicker();
+    this.clearShortReplyDeleteAction();
+    this.boostComposerPostId = post.id;
+    this.resetBoostInput();
+    this.applyBoostKeyboardAvoidMode();
+    this.boostEmojiPanelVisible = false;
+    this.boostComposerVisible = true;
+  }
+
+  private closeBoostComposer(): void {
+    if (this.boostSubmitting) {
+      return;
+    }
+    this.boostEmojiPanelSwitchToken = this.boostEmojiPanelSwitchToken + 1;
+    this.boostComposerVisible = false;
+    this.boostComposerPostId = 0;
+    this.resetBoostInput();
+    this.boostEmojiPanelVisible = false;
+    this.restoreBoostKeyboardAvoidMode();
+    this.clearShortReplyDeleteAction();
+  }
+
+  private insertBoostEmoji(emoji: Emoji): void {
+    const name: string = emoji.name !== undefined && emoji.name !== null ? emoji.name.trim() : '';
+    if (name.length === 0) {
+      return;
+    }
+    const selectionStart: number = this.normalizeBoostInputSelectionPosition(this.boostInputSelectionStart);
+    const selectionEnd: number = this.normalizeBoostInputSelectionPosition(this.boostInputSelectionEnd);
+    const start: number = selectionStart <= selectionEnd ? selectionStart : selectionEnd;
+    const end: number = selectionStart <= selectionEnd ? selectionEnd : selectionStart;
+    const prefix: string = this.boostInput.substring(0, start);
+    const suffix: string = this.boostInput.substring(end);
+    if (this.getBoostInputVisualLength(`${prefix}${suffix}`) + 1 > SHORT_REPLY_INPUT_MAX_LENGTH) {
+      ToastService.show(`最多 ${SHORT_REPLY_INPUT_MAX_LENGTH} 字`);
+      return;
+    }
+    const text: string = this.createBoostEmojiMarker(name);
+    if (text.length === 0) {
+      return;
+    }
+    const next: string = `${prefix}${text}${suffix}`;
+    if (this.getBoostInputVisualLength(next) > SHORT_REPLY_INPUT_MAX_LENGTH) {
+      ToastService.show(`最多 ${SHORT_REPLY_INPUT_MAX_LENGTH} 字`);
+      return;
+    }
+    this.boostInput = next;
+    this.restoreBoostInputCaretAsync(start + text.length);
+  }
+
+  private createBoostUserFromCurrentUser(): PostBoostUser | null {
+    const auth: AuthService = AuthService.getInstance();
+    const currentUser: User | null = auth.getCurrentUser();
+    if (currentUser === null && this.getCurrentUsername().length === 0) {
+      return null;
+    }
+    const out: PostBoostUser = new PostBoostUser();
+    if (currentUser !== null) {
+      const user: User = currentUser as User;
+      out.id = user.id;
+      out.username = user.username;
+      out.name = user.name;
+      out.avatarTemplate = user.avatarTemplate !== null ? (user.avatarTemplate as string) : '';
+      return out;
+    }
+    out.username = this.getCurrentUsername();
+    return out;
+  }
+
+  private ensureCreatedBoostForDisplay(boost: PostBoost, rawText: string): PostBoost {
+    const cloned: PostBoost | null = PostBoost.cloneValue(boost);
+    const out: PostBoost = cloned !== null ? (cloned as PostBoost) : new PostBoost();
+    const safeRaw: string = this.normalizeShortReplyRaw(rawText);
+    if (out.raw.trim().length === 0 && out.cooked.trim().length === 0 && safeRaw.length > 0) {
+      out.raw = safeRaw;
+    }
+    if (out.user === null) {
+      out.user = this.createBoostUserFromCurrentUser();
+    }
+    out.canDelete = true;
+    return out;
+  }
+
+  private buildPostWithBoosts(source: Post, boosts: PostBoost[], canBoost: boolean): Post {
+    const cloned: Post = this.clonePost(source);
+    const safeBoosts: PostBoost[] = PostBoost.cloneList(boosts);
+    cloned.boosts = safeBoosts.length > 0 ? safeBoosts : null;
+    cloned.canBoost = canBoost;
+    return cloned;
+  }
+
+  private applyCreatedBoost(post: Post, boost: PostBoost, rawText: string): void {
+    const source: Post | null = this.findPostById(post.id);
+    const base: Post = source !== null ? (source as Post) : post;
+    const nextBoost: PostBoost = this.ensureCreatedBoostForDisplay(boost, rawText);
+    const boosts: PostBoost[] = PostBoost.cloneList(base.boosts);
+    let replaced: boolean = false;
+    for (let i = 0; i < boosts.length; i++) {
+      if (nextBoost.id > 0 && boosts[i].id === nextBoost.id) {
+        boosts[i] = nextBoost;
+        replaced = true;
+        break;
+      }
+    }
+    if (!replaced) {
+      boosts.push(nextBoost);
+    }
+    this.replacePostInstance(this.buildPostWithBoosts(base, boosts, false));
+    this.boostUiVersion = this.boostUiVersion + 1;
+  }
+
+  private readPositiveMessageNumber(data: Record<string, Object>, key: string): number {
+    const value: Object | undefined = data[key];
+    if (value === undefined || value === null) {
+      return 0;
+    }
+    const parsed: number = Number(value.toString());
+    if (isNaN(parsed) || parsed <= 0) {
+      return 0;
+    }
+    return Math.round(parsed);
+  }
+
+  private readTopicMessagePostId(data: Record<string, Object>): number {
+    const postId: number = this.readPositiveMessageNumber(data, 'post_id');
+    if (postId > 0) {
+      return postId;
+    }
+    return this.readPositiveMessageNumber(data, 'id');
+  }
+
+  private readBoostIdFromMessage(data: Record<string, Object>): number {
+    const id: number = this.readPositiveMessageNumber(data, 'boost_id');
+    if (id > 0) {
+      return id;
+    }
+    const boostVal: Object | undefined = data['boost'];
+    if (boostVal !== undefined && boostVal !== null && typeof boostVal === 'object') {
+      return this.readPositiveMessageNumber(boostVal as Record<string, Object>, 'id');
+    }
+    return 0;
+  }
+
+  private readBoostFromMessage(data: Record<string, Object>): PostBoost | null {
+    const boostVal: Object | undefined = data['boost'];
+    if (boostVal === undefined || boostVal === null || typeof boostVal !== 'object') {
+      return null;
+    }
+    const boost: PostBoost = PostBoost.fromJson(boostVal as Record<string, Object>);
+    if (boost.id <= 0 && this.getBoostDisplayText(boost).length === 0) {
+      return null;
+    }
+    return boost;
+  }
+
+  private hasCurrentUserBoostInList(boosts: PostBoost[]): boolean {
+    for (let i = 0; i < boosts.length; i++) {
+      if (this.isBoostOwnedOrDeletable(boosts[i])) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private mergeIncomingBoost(existing: PostBoost, incoming: PostBoost): PostBoost {
+    const cloned: PostBoost | null = PostBoost.cloneValue(incoming);
+    const out: PostBoost = cloned !== null ? (cloned as PostBoost) : new PostBoost();
+    if (out.raw.trim().length === 0 && existing.raw.trim().length > 0) {
+      out.raw = existing.raw;
+    }
+    if (out.cooked.trim().length === 0 && existing.cooked.trim().length > 0) {
+      out.cooked = existing.cooked;
+    }
+    if (out.user === null) {
+      out.user = PostBoostUser.cloneValue(existing.user);
+    }
+    out.canDelete = out.canDelete || existing.canDelete;
+    out.canFlag = out.canFlag || existing.canFlag;
+    if (out.availableFlags.length === 0 && existing.availableFlags.length > 0) {
+      const flags: string[] = [];
+      for (let i = 0; i < existing.availableFlags.length; i++) {
+        flags.push(existing.availableFlags[i]);
+      }
+      out.availableFlags = flags;
+    }
+    if (out.userFlagStatus === null && existing.userFlagStatus !== null) {
+      out.userFlagStatus = existing.userFlagStatus;
+    }
+    return out;
+  }
+
+  private getCanBoostAfterIncomingBoostAdded(base: Post, boosts: PostBoost[]): boolean {
+    if (this.isCurrentUserPost(base)) {
+      return false;
+    }
+    if (boosts.length >= SHORT_REPLY_MAX_COUNT) {
+      return false;
+    }
+    if (this.hasCurrentUserBoostInList(boosts)) {
+      return false;
+    }
+    return base.canBoost;
+  }
+
+  private getCanBoostAfterIncomingBoostRemoved(base: Post, boosts: PostBoost[], removedBoost: PostBoost): boolean {
+    if (this.isCurrentUserPost(base)) {
+      return false;
+    }
+    if (boosts.length >= SHORT_REPLY_MAX_COUNT) {
+      return false;
+    }
+    if (this.hasCurrentUserBoostInList(boosts)) {
+      return false;
+    }
+    if (this.isBoostOwnedOrDeletable(removedBoost)) {
+      return true;
+    }
+    return base.canBoost;
+  }
+
+  private applyIncomingBoostAdded(postId: number, boost: PostBoost): boolean {
+    if (postId <= 0) {
+      return false;
+    }
+    const source: Post | null = this.findPostById(postId);
+    if (source === null) {
+      return false;
+    }
+    const base: Post = source as Post;
+    const cloned: PostBoost | null = PostBoost.cloneValue(boost);
+    let nextBoost: PostBoost = cloned !== null ? (cloned as PostBoost) : new PostBoost();
+    const boosts: PostBoost[] = PostBoost.cloneList(base.boosts);
+    let replaced: boolean = false;
+    for (let i = 0; i < boosts.length; i++) {
+      if (nextBoost.id > 0 && boosts[i].id === nextBoost.id) {
+        nextBoost = this.mergeIncomingBoost(boosts[i], nextBoost);
+        boosts[i] = nextBoost;
+        replaced = true;
+        break;
+      }
+    }
+    if (this.getBoostDisplayText(nextBoost).length === 0) {
+      return false;
+    }
+    if (!replaced) {
+      boosts.push(nextBoost);
+    }
+    this.replacePostInstance(this.buildPostWithBoosts(
+      base,
+      boosts,
+      this.getCanBoostAfterIncomingBoostAdded(base, boosts)
+    ));
+    this.boostUiVersion = this.boostUiVersion + 1;
+    return true;
+  }
+
+  private applyIncomingBoostRemoved(postId: number, boostId: number): boolean {
+    if (postId <= 0 || boostId <= 0) {
+      return false;
+    }
+    const source: Post | null = this.findPostById(postId);
+    if (source === null) {
+      return false;
+    }
+    const base: Post = source as Post;
+    const boosts: PostBoost[] = PostBoost.cloneList(base.boosts);
+    const nextBoosts: PostBoost[] = [];
+    let removedBoost: PostBoost | null = null;
+    for (let i = 0; i < boosts.length; i++) {
+      if (boosts[i].id === boostId) {
+        removedBoost = boosts[i];
+      } else {
+        nextBoosts.push(boosts[i]);
+      }
+    }
+    if (removedBoost === null) {
+      return false;
+    }
+    this.replacePostInstance(this.buildPostWithBoosts(
+      base,
+      nextBoosts,
+      this.getCanBoostAfterIncomingBoostRemoved(base, nextBoosts, removedBoost as PostBoost)
+    ));
+    this.clearShortReplyDeleteAction();
+    this.boostUiVersion = this.boostUiVersion + 1;
+    return true;
+  }
+
+  private async fetchAndApplyIncomingBoost(postId: number, boostId: number, requestId: number): Promise<void> {
+    if (postId <= 0 || boostId <= 0) {
+      return;
+    }
+    try {
+      const boost: PostBoost = await ApiClient.getInstance().getBoost(boostId);
+      if (requestId !== this.realtimeRequestId) {
+        return;
+      }
+      this.applyIncomingBoostAdded(postId, boost);
+    } catch (err) {
+      hilog.warn(0x0000, TAG, 'Realtime boost fetch failed: %{public}s', JSON.stringify(err));
+    }
+  }
+
+  private handleRealtimeBoostAdded(data: Record<string, Object>): void {
+    const postId: number = this.readTopicMessagePostId(data);
+    if (postId <= 0) {
+      return;
+    }
+    const boost: PostBoost | null = this.readBoostFromMessage(data);
+    if (boost !== null) {
+      const applied: boolean = this.applyIncomingBoostAdded(postId, boost as PostBoost);
+      if (applied) {
+        return;
+      }
+    }
+    const boostId: number = this.readBoostIdFromMessage(data);
+    if (boostId <= 0) {
+      return;
+    }
+    const requestId: number = this.realtimeRequestId;
+    this.fetchAndApplyIncomingBoost(postId, boostId, requestId).catch((_: Object) => {
+    });
+  }
+
+  private handleRealtimeBoostRemoved(data: Record<string, Object>): void {
+    const postId: number = this.readTopicMessagePostId(data);
+    if (postId <= 0) {
+      return;
+    }
+    const boostId: number = this.readBoostIdFromMessage(data);
+    if (boostId <= 0) {
+      return;
+    }
+    this.applyIncomingBoostRemoved(postId, boostId);
+  }
+
+  private applyDeletedBoost(postId: number, boost: PostBoost): void {
+    const source: Post | null = this.findPostById(postId);
+    if (source === null) {
+      return;
+    }
+    const base: Post = source as Post;
+    const boosts: PostBoost[] = PostBoost.cloneList(base.boosts);
+    const nextBoosts: PostBoost[] = [];
+    for (let i = 0; i < boosts.length; i++) {
+      if (boosts[i].id !== boost.id) {
+        nextBoosts.push(boosts[i]);
+      }
+    }
+    const nextCanBoost: boolean = this.isBoostOwnedOrDeletable(boost) ? true : base.canBoost;
+    this.replacePostInstance(this.buildPostWithBoosts(base, nextBoosts, nextCanBoost));
+    this.clearShortReplyDeleteAction();
+    this.boostUiVersion = this.boostUiVersion + 1;
+  }
+
+  private async submitBoost(): Promise<void> {
+    if (this.boostSubmitting) {
+      return;
+    }
+    const post: Post | null = this.findPostById(this.boostComposerPostId);
+    if (post === null) {
+      ToastService.show('楼层不存在');
+      this.closeBoostComposer();
+      return;
+    }
+    const text: string = this.normalizeShortReplyRaw(this.buildBoostRawInput());
+    if (text.length === 0) {
+      ToastService.show('简短回复不能为空');
+      return;
+    }
+    if (this.getBoostInputVisualLength(text) > SHORT_REPLY_INPUT_MAX_LENGTH) {
+      ToastService.show(`最多 ${SHORT_REPLY_INPUT_MAX_LENGTH} 字`);
+      return;
+    }
+    if (!this.shouldShowBoostRocket(post as Post)) {
+      ToastService.show('当前无法发送简短回复');
+      return;
+    }
+
+    this.boostSubmitting = true;
+    try {
+      const created: PostBoost = await ApiClient.getInstance().createBoost((post as Post).id, text);
+      this.applyCreatedBoost(post as Post, created, text);
+      this.boostComposerVisible = false;
+      this.boostComposerPostId = 0;
+      this.resetBoostInput();
+      this.boostEmojiPanelVisible = false;
+      ToastService.show('已发送');
+    } catch (err) {
+      const message: string = err !== undefined && err !== null ? err.toString().replace('Error: ', '') : '发送失败';
+      ToastService.show(message.length > 0 ? message : '发送失败');
+    } finally {
+      this.boostSubmitting = false;
+    }
+  }
+
+  private async deleteBoost(postId: number, boost: PostBoost): Promise<void> {
+    if (this.boostDeletingId > 0 || boost.id <= 0) {
+      return;
+    }
+    if (!this.isBoostOwnedOrDeletable(boost)) {
+      ToastService.show('只能删除自己的简短回复');
+      return;
+    }
+    this.boostDeletingId = boost.id;
+    try {
+      await ApiClient.getInstance().deleteBoost(boost.id);
+      this.applyDeletedBoost(postId, boost);
+      ToastService.show('已删除');
+    } catch (err) {
+      const message: string = err !== undefined && err !== null ? err.toString().replace('Error: ', '') : '删除失败';
+      ToastService.show(message.length > 0 ? message : '删除失败');
+    } finally {
+      this.boostDeletingId = 0;
+    }
+  }
   private getPostLikeButtonScale(postId: number): number {
     return this.animatedLikePostId === postId ? this.likeButtonScale : 1;
   }
@@ -1602,6 +2881,8 @@ export struct TopicDetailPage {
     cloned.liked = source.liked;
     cloned.reactions = PostReaction.cloneList(source.reactions);
     cloned.currentUserReaction = PostReaction.cloneValue(source.currentUserReaction);
+    cloned.boosts = PostBoost.cloneList(source.boosts);
+    cloned.canBoost = source.canBoost;
     cloned.linkCounts = source.linkCounts;
     cloned.polls = source.polls;
     cloned.pollsVotes = source.pollsVotes;
@@ -1959,9 +3240,6 @@ export struct TopicDetailPage {
   private handleTopicChannelMessage(message: MessageBusMessage): void {
     if (message === null || message === undefined) return;
 
-    // 过滤模式/搜索模式：不做实时追加
-    if (this.isSummaryMode || this.isAuthorOnlyMode || this.isSearchMode) return;
-
     const dataObj: Object | null = message.data;
     if (dataObj === null || dataObj === undefined || typeof dataObj !== 'object') return;
     const data: Record<string, Object> = dataObj as Record<string, Object>;
@@ -1979,6 +3257,19 @@ export struct TopicDetailPage {
     const typeVal: Object | undefined = data['type'];
     const type: string = typeVal !== undefined && typeVal !== null ? typeVal.toString() : '';
     if (type.length === 0) return;
+
+    if (type === 'boost_added') {
+      this.handleRealtimeBoostAdded(data);
+      return;
+    }
+
+    if (type === 'boost_removed') {
+      this.handleRealtimeBoostRemoved(data);
+      return;
+    }
+
+    // 过滤模式/搜索模式：不做实时追加普通回复，但上面的 boost 仍可更新当前已加载楼层。
+    if (this.isSummaryMode || this.isAuthorOnlyMode || this.isSearchMode) return;
 
     if (type === 'created') {
       const idVal: Object | undefined = data['id'];
@@ -2066,7 +3357,7 @@ export struct TopicDetailPage {
 
   private applyPendingTopicCreatedPostIds(): void {
     if (this.pendingTopicCreatedPostIds.length === 0) return;
-    if (this.isSummaryMode || this.isAuthorOnlyMode || this.isSearchMode) {
+    if (this.isSummaryMode || this.isAuthorOnlyMode || this.isTopLevelMode || this.isNestedView || this.isSearchMode) {
       this.pendingTopicCreatedPostIds = [];
       return;
     }
@@ -2224,7 +3515,8 @@ export struct TopicDetailPage {
         requestedPostNumber,
         requestedFilter,
         requestedUsernameFilters,
-        trackVisit && !this.isGuestMode
+        trackVisit && !this.isGuestMode,
+        this.isTopLevelMode
       );
       const json: Record<string, Object> = JSON.parse(result) as Record<string, Object>;
 
@@ -2409,9 +3701,352 @@ export struct TopicDetailPage {
   }
 
   private refreshTopicDetail(): void {
-    if (this.isLoading) return;
+    if (this.isLoading || this.nestedLoading || this.nestedLoadingMore) return;
     this.targetPostNumber = 0;
-    this.loadTopicDetail();
+    if (this.isNestedView) {
+      this.loadNestedRoots(true);
+    } else {
+      this.loadTopicDetail();
+    }
+  }
+
+  private resetNestedState(clearSort: boolean = false): void {
+    this.nestedRoots = [];
+    this.nestedOpPost = null;
+    this.nestedLoading = false;
+    this.nestedLoadingMore = false;
+    this.nestedErrorMessage = '';
+    this.nestedHasMoreRoots = false;
+    this.nestedPage = 0;
+    this.nestedChildrenMap = new Map<number, NestedNode[]>();
+    this.nestedChildrenHasMoreMap = new Map<number, boolean>();
+    this.nestedChildrenPageMap = new Map<number, number>();
+    this.nestedExpandedPostNumbers = [];
+    this.nestedLoadingChildrenPostNumber = 0;
+    this.nestedChildrenErrorPostNumber = 0;
+    this.nestedUiVersion = this.nestedUiVersion + 1;
+    if (clearSort) {
+      this.nestedSort = 'old';
+    }
+  }
+
+  private async applyNestedTopicMeta(topicJson: Record<string, Object> | null): Promise<void> {
+    if (topicJson === null) {
+      return;
+    }
+
+    const titleVal = topicJson['title'];
+    this.topicTitle = titleVal !== undefined && titleVal !== null ? titleVal.toString() : this.topicTitle;
+
+    const slugVal = topicJson['slug'];
+    this.topicSlug = slugVal !== undefined && slugVal !== null ? slugVal.toString() : this.topicSlug;
+
+    const viewsVal = topicJson['views'];
+    this.topicViews = viewsVal !== undefined && viewsVal !== null ? Number(viewsVal.toString()) : this.topicViews;
+
+    const createdVal = topicJson['created_at'];
+    this.topicCreatedAt = createdVal !== undefined && createdVal !== null
+      ? TimeUtils.parseUtcTime(createdVal.toString()) : this.topicCreatedAt;
+
+    const lastPostedVal = topicJson['last_posted_at'];
+    this.topicLastPostedAt = lastPostedVal !== undefined && lastPostedVal !== null
+      ? TimeUtils.parseUtcTime(lastPostedVal.toString()) : this.topicLastPostedAt;
+
+    const postsCountVal = topicJson['posts_count'];
+    if (postsCountVal !== undefined && postsCountVal !== null) {
+      const parsedPostsCount: number = Number(postsCountVal.toString());
+      if (!isNaN(parsedPostsCount) && parsedPostsCount > 0) {
+        this.topicTotalPostsCount = parsedPostsCount;
+        this.postsCount = parsedPostsCount;
+        this.replyCount = Math.max(0, parsedPostsCount - 1);
+      }
+    }
+
+    const tagsVal = topicJson['tags'];
+    if (tagsVal !== undefined && tagsVal !== null && Array.isArray(tagsVal)) {
+      const arr: Object[] = tagsVal as Object[];
+      const parsedTags: string[] = [];
+      for (let i = 0; i < arr.length; i++) {
+        const item: Object = arr[i];
+        const tag: string = item !== undefined && item !== null ? item.toString().trim() : '';
+        if (tag.length > 0) {
+          parsedTags.push(tag);
+        }
+      }
+      this.topicTags = parsedTags;
+    }
+
+    const catVal = topicJson['category_id'];
+    if (catVal !== undefined && catVal !== null) {
+      this.topicCategoryId = Number(catVal.toString());
+      if (isNaN(this.topicCategoryId)) {
+        this.topicCategoryId = 0;
+      }
+      await this.loadTopicCategory();
+    }
+
+    const hasSummaryVal = topicJson['has_summary'];
+    this.hasSummary = hasSummaryVal !== undefined && hasSummaryVal !== null ? hasSummaryVal as boolean : this.hasSummary;
+
+    const closedVal = topicJson['closed'];
+    this.isClosed = closedVal !== undefined && closedVal !== null ? closedVal as boolean : this.isClosed;
+
+    const nlVal = topicJson['notification_level'];
+    if (nlVal !== undefined && nlVal !== null) {
+      this.notificationLevel = Number(nlVal.toString());
+      if (isNaN(this.notificationLevel)) {
+        this.notificationLevel = 1;
+      }
+      this.notificationLevelLabel = this.getNotificationLevelLabel(this.notificationLevel);
+    }
+
+    const detailsVal = topicJson['details'];
+    if (detailsVal !== undefined && detailsVal !== null && typeof detailsVal === 'object') {
+      const detailsObj: Record<string, Object> = detailsVal as Record<string, Object>;
+      const createdByVal = detailsObj['created_by'];
+      if (createdByVal !== undefined && createdByVal !== null && typeof createdByVal === 'object') {
+        const createdByObj: Record<string, Object> = createdByVal as Record<string, Object>;
+        const ownerVal = createdByObj['username'];
+        if (ownerVal !== undefined && ownerVal !== null) {
+          this.topicOwnerUsername = ownerVal.toString();
+        }
+      }
+    }
+  }
+
+  private async loadNestedRoots(reset: boolean = true): Promise<void> {
+    if (this.topicId <= 0) {
+      this.nestedErrorMessage = '无效的话题ID';
+      return;
+    }
+    if (this.nestedLoading || this.nestedLoadingMore) {
+      return;
+    }
+    if (!reset && !this.nestedHasMoreRoots) {
+      return;
+    }
+
+    const page: number = reset ? 0 : (this.nestedPage + 1);
+    if (reset) {
+      this.nestedLoading = true;
+      this.nestedErrorMessage = '';
+      this.nestedRoots = [];
+      this.nestedOpPost = null;
+      this.nestedHasMoreRoots = false;
+      this.nestedPage = 0;
+      this.nestedChildrenMap = new Map<number, NestedNode[]>();
+      this.nestedChildrenHasMoreMap = new Map<number, boolean>();
+      this.nestedChildrenPageMap = new Map<number, number>();
+      this.nestedExpandedPostNumbers = [];
+      this.nestedChildrenErrorPostNumber = 0;
+    } else {
+      this.nestedLoadingMore = true;
+    }
+
+    try {
+      const apiClient: ApiClient = ApiClient.getInstance();
+      const response: NestedRootsResponse = await apiClient.getNestedRoots(
+        this.topicId,
+        this.nestedSort,
+        page,
+        reset && !this.isGuestMode
+      );
+      await this.applyNestedTopicMeta(response.topicJson);
+      if (response.opPost !== null) {
+        this.nestedOpPost = response.opPost;
+        if (this.topicOwnerUsername.trim().length === 0) {
+          this.topicOwnerUsername = (response.opPost as Post).username;
+        }
+      }
+
+      if (reset) {
+        this.nestedRoots = response.roots;
+      } else {
+        const nextRoots: NestedNode[] = [];
+        for (let i = 0; i < this.nestedRoots.length; i++) {
+          nextRoots.push(this.nestedRoots[i]);
+        }
+        for (let i = 0; i < response.roots.length; i++) {
+          nextRoots.push(response.roots[i]);
+        }
+        this.nestedRoots = nextRoots;
+      }
+      this.nestedHasMoreRoots = response.hasMoreRoots;
+      this.nestedPage = response.page;
+      this.nestedErrorMessage = '';
+      this.nestedUiVersion = this.nestedUiVersion + 1;
+    } catch (err) {
+      hilog.error(0x0000, TAG, 'Load nested roots failed: %{public}s', ApiClient.formatError(err));
+      this.nestedErrorMessage = '加载树形视图失败';
+    } finally {
+      this.nestedLoading = false;
+      this.nestedLoadingMore = false;
+    }
+  }
+
+  private isNestedNodeExpanded(postNumber: number): boolean {
+    for (let i = 0; i < this.nestedExpandedPostNumbers.length; i++) {
+      if (this.nestedExpandedPostNumbers[i] === postNumber) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private setNestedNodeExpanded(postNumber: number, expanded: boolean): void {
+    const next: number[] = [];
+    let exists: boolean = false;
+    for (let i = 0; i < this.nestedExpandedPostNumbers.length; i++) {
+      const current: number = this.nestedExpandedPostNumbers[i];
+      if (current === postNumber) {
+        exists = true;
+        if (expanded) {
+          next.push(current);
+        }
+      } else {
+        next.push(current);
+      }
+    }
+    if (expanded && !exists) {
+      next.push(postNumber);
+    }
+    this.nestedExpandedPostNumbers = next;
+    this.nestedUiVersion = this.nestedUiVersion + 1;
+  }
+
+  private getNestedVisibleChildren(node: NestedNode): NestedNode[] {
+    const postNumber: number = node.post.postNumber;
+    if (this.nestedChildrenMap.has(postNumber)) {
+      return this.nestedChildrenMap.get(postNumber) as NestedNode[];
+    }
+    return node.children;
+  }
+
+  private getNestedChildrenHasMore(node: NestedNode): boolean {
+    const postNumber: number = node.post.postNumber;
+    if (this.nestedChildrenHasMoreMap.has(postNumber)) {
+      return this.nestedChildrenHasMoreMap.get(postNumber) as boolean;
+    }
+    return node.directReplyCount > node.children.length;
+  }
+
+  private getNestedReplyCount(node: NestedNode): number {
+    if (node.directReplyCount > 0) {
+      return node.directReplyCount;
+    }
+    if (node.totalDescendantCount > 0) {
+      return node.totalDescendantCount;
+    }
+    return node.children.length;
+  }
+
+  private getNestedRailWidth(depth: number): number {
+    if (depth <= 0) {
+      return 0;
+    }
+    return Math.min(56, 10 + depth * 14);
+  }
+
+  private getNestedRailLineHeight(depth: number): number {
+    return depth > 0 ? 42 : 0;
+  }
+
+  private getNestedAvatarSize(depth: number): number {
+    return depth > 0 ? 28 : 34;
+  }
+
+  private getNestedAvatarFlairSize(depth: number): number {
+    return depth > 0 ? 13 : 15;
+  }
+
+  private getNestedCardRadius(depth: number): number {
+    return depth > 0 ? 14 : 0;
+  }
+
+  private getNestedCardSideMargin(depth: number): number {
+    return depth > 0 ? 8 : 0;
+  }
+
+  private getNestedReplyTargetText(post: Post): string {
+    const username: string = this.getReplyTargetUsername(post).trim();
+    if (username.length > 0) {
+      return `↳ ${username}`;
+    }
+    if (post.replyToPostNumber > 0) {
+      return `↳ #${post.replyToPostNumber}`;
+    }
+    return '';
+  }
+
+  private async toggleNestedChildren(node: NestedNode): Promise<void> {
+    const postNumber: number = node.post.postNumber;
+    if (postNumber <= 0) {
+      return;
+    }
+    if (this.isNestedNodeExpanded(postNumber)) {
+      this.setNestedNodeExpanded(postNumber, false);
+      return;
+    }
+    this.setNestedNodeExpanded(postNumber, true);
+    if (!this.nestedChildrenMap.has(postNumber) && node.children.length === 0 && this.getNestedReplyCount(node) > 0) {
+      await this.loadNestedChildren(node, false);
+    }
+  }
+
+  private async loadNestedChildren(node: NestedNode, loadMore: boolean = false): Promise<void> {
+    const postNumber: number = node.post.postNumber;
+    if (postNumber <= 0 || this.nestedLoadingChildrenPostNumber === postNumber) {
+      return;
+    }
+    const currentPage: number = this.nestedChildrenPageMap.has(postNumber)
+      ? this.nestedChildrenPageMap.get(postNumber) as number
+      : 0;
+    const page: number = loadMore ? currentPage + 1 : 0;
+    this.nestedLoadingChildrenPostNumber = postNumber;
+    this.nestedChildrenErrorPostNumber = 0;
+
+    try {
+      const apiClient: ApiClient = ApiClient.getInstance();
+      const response: NestedChildrenResponse = await apiClient.getNestedChildren(
+        this.topicId,
+        postNumber,
+        this.nestedSort,
+        page,
+        1
+      );
+
+      const nextChildrenMap: Map<number, NestedNode[]> = new Map<number, NestedNode[]>(this.nestedChildrenMap);
+      const currentChildren: NestedNode[] = loadMore
+        ? (nextChildrenMap.has(postNumber) ? nextChildrenMap.get(postNumber) as NestedNode[] : node.children)
+        : [];
+      const merged: NestedNode[] = [];
+      for (let i = 0; i < currentChildren.length; i++) {
+        merged.push(currentChildren[i]);
+      }
+      for (let i = 0; i < response.children.length; i++) {
+        merged.push(response.children[i]);
+      }
+      nextChildrenMap.set(postNumber, merged);
+      this.nestedChildrenMap = nextChildrenMap;
+
+      const nextHasMoreMap: Map<number, boolean> = new Map<number, boolean>(this.nestedChildrenHasMoreMap);
+      nextHasMoreMap.set(postNumber, response.hasMore);
+      this.nestedChildrenHasMoreMap = nextHasMoreMap;
+
+      const nextPageMap: Map<number, number> = new Map<number, number>(this.nestedChildrenPageMap);
+      nextPageMap.set(postNumber, response.page);
+      this.nestedChildrenPageMap = nextPageMap;
+
+      this.nestedUiVersion = this.nestedUiVersion + 1;
+    } catch (err) {
+      hilog.error(0x0000, TAG, 'Load nested children failed: %{public}s', ApiClient.formatError(err));
+      this.nestedChildrenErrorPostNumber = postNumber;
+      ToastService.show('加载子回复失败');
+    } finally {
+      if (this.nestedLoadingChildrenPostNumber === postNumber) {
+        this.nestedLoadingChildrenPostNumber = 0;
+      }
+    }
   }
 
   private resolveAcceptedAnswerPostNumber(topicJson: Record<string, Object>, parsedPosts: Post[]): number {
@@ -2697,6 +4332,25 @@ export struct TopicDetailPage {
     this.copyQuoteText(quote);
   }
 
+
+  private cloneNestedNodeWithPostReplaced(node: NestedNode, updatedPost: Post): NestedNode {
+    const cloned: NestedNode = new NestedNode();
+    cloned.post = node.post.id === updatedPost.id ? updatedPost : node.post;
+    cloned.directReplyCount = node.directReplyCount;
+    cloned.totalDescendantCount = node.totalDescendantCount;
+    cloned.isDeletedPlaceholder = node.isDeletedPlaceholder;
+    cloned.children = this.cloneNestedNodeListWithPostReplaced(node.children, updatedPost);
+    return cloned;
+  }
+
+  private cloneNestedNodeListWithPostReplaced(nodes: NestedNode[], updatedPost: Post): NestedNode[] {
+    const out: NestedNode[] = [];
+    for (let i = 0; i < nodes.length; i++) {
+      out.push(this.cloneNestedNodeWithPostReplaced(nodes[i], updatedPost));
+    }
+    return out;
+  }
+
   private replacePostInstance(updatedPost: Post): void {
     if (updatedPost.id <= 0) {
       return;
@@ -2738,6 +4392,28 @@ export struct TopicDetailPage {
       if (replyChanged) {
         this.expandedReplies = replies;
       }
+    }
+
+    if (this.nestedOpPost !== null && (this.nestedOpPost as Post).id === updatedPost.id) {
+      this.nestedOpPost = updatedPost;
+      this.nestedUiVersion = this.nestedUiVersion + 1;
+    }
+
+    if (this.nestedRoots.length > 0) {
+      this.nestedRoots = this.cloneNestedNodeListWithPostReplaced(this.nestedRoots, updatedPost);
+      this.nestedUiVersion = this.nestedUiVersion + 1;
+    }
+
+    if (this.nestedChildrenMap.size > 0) {
+      const nextMap: Map<number, NestedNode[]> = new Map<number, NestedNode[]>();
+      const keys: number[] = Array.from(this.nestedChildrenMap.keys());
+      for (let i = 0; i < keys.length; i++) {
+        const key: number = keys[i];
+        const nodes: NestedNode[] = this.nestedChildrenMap.get(key) as NestedNode[];
+        nextMap.set(key, this.cloneNestedNodeListWithPostReplaced(nodes, updatedPost));
+      }
+      this.nestedChildrenMap = nextMap;
+      this.nestedUiVersion = this.nestedUiVersion + 1;
     }
   }
 
@@ -3581,6 +5257,9 @@ export struct TopicDetailPage {
 
     this.isSummaryMode = true;
     this.isAuthorOnlyMode = false;
+    this.isTopLevelMode = false;
+    this.isNestedView = false;
+    this.resetNestedState(false);
     this.targetPostNumber = 0;
     this.loadTopicDetail();
   }
@@ -3600,8 +5279,77 @@ export struct TopicDetailPage {
 
     this.isAuthorOnlyMode = true;
     this.isSummaryMode = false;
+    this.isTopLevelMode = false;
+    this.isNestedView = false;
+    this.resetNestedState(false);
     this.targetPostNumber = 0;
     this.loadTopicDetail();
+  }
+
+  private toggleTopLevelMode(): void {
+    if (this.isTopLevelMode) {
+      this.isTopLevelMode = false;
+      this.targetPostNumber = 0;
+      this.loadTopicDetail();
+      return;
+    }
+
+    this.isTopLevelMode = true;
+    this.isSummaryMode = false;
+    this.isAuthorOnlyMode = false;
+    this.isNestedView = false;
+    this.resetNestedState(false);
+    this.targetPostNumber = 0;
+    this.loadTopicDetail();
+  }
+
+  private enterNestedView(): void {
+    if (this.isNestedView && this.nestedRoots.length > 0 && !this.nestedLoading) {
+      return;
+    }
+    this.isNestedView = true;
+    this.isSummaryMode = false;
+    this.isAuthorOnlyMode = false;
+    this.isTopLevelMode = false;
+    this.targetPostNumber = 0;
+    this.collapseReplies();
+    this.loadNestedRoots(true);
+  }
+
+  private cancelDetailFilter(): void {
+    if (!this.isSummaryMode && !this.isAuthorOnlyMode && !this.isTopLevelMode && !this.isNestedView) {
+      return;
+    }
+    this.isSummaryMode = false;
+    this.isAuthorOnlyMode = false;
+    this.isTopLevelMode = false;
+    this.isNestedView = false;
+    this.resetNestedState(false);
+    this.targetPostNumber = 0;
+    this.loadTopicDetail();
+  }
+
+  private isDetailFilterActive(): boolean {
+    return this.isSummaryMode || this.isAuthorOnlyMode || this.isTopLevelMode || this.isNestedView;
+  }
+
+  private openDetailFilterSheet(): void {
+    this.isDetailFilterSheetVisible = true;
+  }
+
+  private closeDetailFilterSheet(): void {
+    this.isDetailFilterSheetVisible = false;
+  }
+
+  private selectNestedSort(sort: string): void {
+    const nextSort: string = sort.length > 0 ? sort : 'old';
+    if (this.nestedSort === nextSort && this.nestedRoots.length > 0 && this.nestedErrorMessage.length === 0) {
+      return;
+    }
+    this.nestedSort = nextSort;
+    if (this.isNestedView) {
+      this.loadNestedRoots(true);
+    }
   }
 
   private getTopicSharePath(postNumber: number = 0): string {
@@ -3987,7 +5735,7 @@ export struct TopicDetailPage {
   }
 
   private getDetailActionBarButtonCount(): number {
-    return this.hasSummary ? 5 : 4;
+    return 4;
   }
 
   private getDetailActionBarInnerSpaceVp(): number {
@@ -4014,14 +5762,16 @@ export struct TopicDetailPage {
 
   private getDetailActionBarIconColor(selected: boolean): ColorMetrics {
     if (selected) {
-      return this.createColorMetrics($r('app.color.detail_action_selected_icon'), 0xFF0088CC);
+      return ColorMetrics.numeric(ThemeManager.hexToColor(this.accentColorHex));
     }
     return this.createColorMetrics($r('app.color.detail_action_icon'), 0xE64A5562);
   }
 
   private getDetailActionBarButtonBackgroundColor(selected: boolean): ColorMetrics {
     if (selected) {
-      return this.createColorMetrics($r('app.color.detail_action_button_selected_background'), 0x220088CC);
+      return ColorMetrics.numeric(ThemeManager.hexToColor(
+        ThemeManager.hexWithAlpha(this.accentColorHex, WindowManager.isDarkMode() ? 0.24 : 0.16)
+      ));
     }
     return this.createColorMetrics($r('app.color.detail_action_button_background'), 0x0FFFFFFF);
   }
@@ -4095,6 +5845,24 @@ export struct TopicDetailPage {
     });
   }
 
+  private createDetailFilterActionButton(): ActionBarButton {
+    const active: boolean = this.isDetailFilterActive();
+    return new ActionBarButton({
+      id: 'detail_action_filter',
+      width: LengthMetrics.vp(this.getDetailActionBarButtonSizeVp()),
+      backgroundColor: this.getDetailActionBarButtonBackgroundColor(active),
+      shadowStyle: { radius: 0, color: '#00000000', offsetX: 0, offsetY: 0 },
+      baseIcon: $r('sys.symbol.line_3_horizontal'),
+      iconFillColor: this.getDetailActionBarIconColor(active),
+      iconSize: LengthMetrics.vp(20),
+      accessibilityText: '筛选回复',
+      hoverTips: '筛选回复',
+      onClick: () => {
+        this.openDetailFilterSheet();
+      }
+    });
+  }
+
   private createOpenBrowserActionButton(): ActionBarButton {
     return new ActionBarButton({
       id: 'detail_action_browser',
@@ -4132,10 +5900,7 @@ export struct TopicDetailPage {
   private getDetailActionBarStartButtons(): Array<ActionBarButton> {
     const buttons: Array<ActionBarButton> = [];
     buttons.push(this.createBackTopActionButton());
-    if (this.hasSummary) {
-      buttons.push(this.createSummaryActionButton());
-    }
-    buttons.push(this.createAuthorOnlyActionButton());
+    buttons.push(this.createDetailFilterActionButton());
     return buttons;
   }
 
@@ -4349,14 +6114,14 @@ export struct TopicDetailPage {
     Row() {
       SymbolGlyph($r('sys.symbol.bell'))
         .fontSize(16)
-        .fontColor([$r('app.color.primary')])
+        .fontColor([this.accentColorHex])
       Text(` ${this.notificationLevelLabel}`)
         .fontSize(13)
-        .fontColor($r('app.color.primary'))
+        .fontColor(this.accentColorHex)
         .fontWeight(FontWeight.Medium)
     }
     .padding({ left: 12, right: 12, top: 8, bottom: 8 })
-    .backgroundColor($r('app.color.badge_background_light'))
+    .backgroundColor(this.accentSelectedBackgroundColorHex)
     .borderRadius(8)
     .alignItems(VerticalAlign.Center)
     .onClick(() => {
@@ -4424,7 +6189,7 @@ export struct TopicDetailPage {
       }
       .width('100%')
       .padding({ left: 16, right: 16, top: 20, bottom: 16 })
-      .backgroundColor($r('app.color.surface'))
+      .backgroundColor(this.accentSurfaceColorHex)
       .alignItems(HorizontalAlign.Start)
 
       Divider()
@@ -4496,7 +6261,7 @@ export struct TopicDetailPage {
       top: this.getPostReactionPickerPanelPadding(),
       bottom: Math.max(2, this.getPostReactionPickerPanelPadding() - this.getPostReactionPickerItemGap())
     })
-    .backgroundColor($r('app.color.surface_variant'))
+    .backgroundColor(this.accentSurfaceVariantColorHex)
     .borderRadius(POST_REACTION_PICKER_PANEL_RADIUS)
     .border({ width: 0.5, color: $r('app.color.divider_light') })
     .shadow({ radius: 18, color: '#26000000', offsetX: 0, offsetY: 8 })
@@ -4555,14 +6320,14 @@ export struct TopicDetailPage {
     .height(36)
     .padding({ left: this.shouldShowPostReactionSummary(post) ? 0 : 4, right: 4 })
     .borderRadius(18)
-    .backgroundColor($r('app.color.surface_variant'))
+    .backgroundColor(this.accentSurfaceVariantColorHex)
     .border({
       width: this.getResolvedCurrentUserReaction(post) !== null ? 1 : 0,
       color: this.isHeartReactionId(
         this.getResolvedCurrentUserReaction(post) !== null ? (this.getResolvedCurrentUserReaction(post) as PostReaction).id : ''
       )
         ? $r('app.color.like_color')
-        : $r('app.color.primary')
+        : this.accentColorHex
     })
     .justifyContent(FlexAlign.Center)
     .alignItems(VerticalAlign.Center)
@@ -4594,6 +6359,397 @@ export struct TopicDetailPage {
     })
   }
 
+
+
+  @Builder
+  private BoostRocketButton(post: Post, compact: boolean = false) {
+    Row() {
+      Image($r('app.media.boost_rocket_outline'))
+        .width(compact ? 17 : 21)
+        .height(compact ? 17 : 21)
+        .objectFit(ImageFit.Contain)
+    }
+    .width(compact ? 30 : 36)
+    .height(compact ? 28 : 36)
+    .borderRadius(compact ? 14 : 18)
+    .backgroundColor(this.accentSurfaceVariantColorHex)
+    .border({ width: 0.5, color: $r('app.color.divider_light') })
+    .justifyContent(FlexAlign.Center)
+    .alignItems(VerticalAlign.Center)
+    .margin({ right: compact ? 6 : 10 })
+    .opacity(this.boostSubmitting && this.boostComposerPostId === post.id ? 0.6 : 1)
+    .onClick(() => {
+      this.openBoostComposer(post);
+    })
+  }
+
+  @Builder
+  private ShortReplyText(raw: string, fontSize: number = 12) {
+    Text() {
+      ForEach(this.tokenizeShortReplyInline(raw), (token: ShortReplyInlineToken) => {
+        if (token.emojiUrl.length > 0) {
+          ImageSpan(token.emojiUrl)
+            .width(fontSize + 5)
+            .height(fontSize + 5)
+            .margin({ left: 1, right: 1 })
+            .verticalAlign(ImageSpanAlignment.CENTER)
+        } else {
+          Span(token.text)
+        }
+      }, (token: ShortReplyInlineToken) => token.key)
+    }
+    .fontSize(fontSize)
+    .fontColor($r('app.color.on_surface'))
+    .maxLines(1)
+    .textOverflow({ overflow: TextOverflow.Ellipsis })
+  }
+
+  @Builder
+  private ShortReplyAvatar(boost: PostBoost, size: number = 18) {
+    SmartAvatar({
+      avatarUrl: this.getBoostUserAvatarUrl(boost, size * 2),
+      avatarSize: size,
+      avatarRadius: size / 2,
+      fallbackText: this.getBoostUserName(boost),
+      bgColor: '#E8EAF0'
+    })
+    .opacity(this.isBoostOwnedOrDeletable(boost) ? 1 : 0.96)
+  }
+
+  @Builder
+  private ShortReplyDeleteActionButton(postId: number, raw: string, boost: PostBoost) {
+    Row() {
+      if (this.boostDeletingId > 0 && boost.id === this.boostDeletingId) {
+        LoadingProgress()
+          .width(13)
+          .height(13)
+      } else {
+        SymbolGlyph($r('sys.symbol.trash'))
+          .fontSize(13)
+          .fontColor([$r('app.color.error')])
+      }
+    }
+    .width(22)
+    .height(22)
+    .borderRadius(11)
+    .margin({ left: 5 })
+    .backgroundColor($r('app.color.error_background_soft'))
+    .justifyContent(FlexAlign.Center)
+    .alignItems(VerticalAlign.Center)
+    .onClick(() => {
+      if (this.boostDeletingId > 0) {
+        return;
+      }
+      if (this.isBoostOwnedOrDeletable(boost)) {
+        this.deleteBoost(postId, boost).catch((_: Object) => {
+        });
+      }
+    })
+  }
+
+  @Builder
+  private ShortReplyGroupChip(post: Post, group: ShortReplyGroup) {
+    Column() {
+      Row() {
+        Row() {
+          ForEach(this.getShortReplyPreviewBoosts(group), (boost: PostBoost) => {
+            this.ShortReplyAvatar(boost, 18)
+          }, (boost: PostBoost) => boost.id > 0 ? boost.id.toString() : `${this.getBoostUserName(boost)}_${group.raw}`)
+        }
+        .margin({ right: 6 })
+        .alignItems(VerticalAlign.Center)
+
+        this.ShortReplyText(group.raw, 12)
+
+        if (group.boosts.length > 1) {
+          Text(` ${group.boosts.length}`)
+            .fontSize(11)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(this.accentColorHex)
+            .margin({ left: 3 })
+        }
+
+        if (group.boosts.length > 1) {
+          SymbolGlyph($r('sys.symbol.chevron_right'))
+            .fontSize(12)
+            .fontColor([$r('app.color.on_surface_tertiary')])
+            .rotate({ angle: this.isBoostGroupExpanded(post.id, group.raw) ? -90 : 90 })
+            .margin({ left: 3 })
+        }
+
+        if (this.isShortReplyGroupDeleteActionVisible(post.id, group)) {
+          this.ShortReplyDeleteActionButton(post.id, group.raw, this.getDeletableBoostInGroup(group) as PostBoost)
+        }
+      }
+      .height(30)
+      .padding({ left: 7, right: 9 })
+      .borderRadius(15)
+      .backgroundColor(this.accentSurfaceVariantColorHex)
+      .border({ width: this.getDeletableBoostInGroup(group) !== null ? 1 : 0, color: this.accentSelectedBackgroundColorHex })
+      .alignItems(VerticalAlign.Center)
+      .onClick(() => {
+        const deletable: PostBoost | null = this.getDeletableBoostInGroup(group);
+        if (deletable !== null) {
+          this.toggleShortReplyDeleteAction(post.id, group.raw, deletable as PostBoost);
+          return;
+        }
+        if (group.boosts.length > 1) {
+          this.clearShortReplyDeleteAction();
+          this.toggleBoostGroupExpanded(post.id, group.raw);
+        }
+      })
+
+      if (this.isBoostGroupExpanded(post.id, group.raw)) {
+        this.ShortReplyExpandedGroup(post, group)
+      }
+    }
+    .alignItems(HorizontalAlign.Start)
+    .margin({ right: 6, bottom: 6 })
+  }
+
+  @Builder
+  private ShortReplyExpandedGroup(post: Post, group: ShortReplyGroup) {
+    Column() {
+      Rect()
+        .width(14)
+        .height(14)
+        .radius(3)
+        .fill($r('app.color.surface'))
+        .rotate({ angle: 45 })
+        .margin({ left: 28, top: -1, bottom: -8 })
+
+      Flex({ wrap: FlexWrap.Wrap, justifyContent: FlexAlign.Start, alignItems: ItemAlign.Center }) {
+        ForEach(group.boosts, (boost: PostBoost) => {
+          Row() {
+            this.ShortReplyAvatar(boost, 22)
+            this.ShortReplyText(group.raw, 13)
+
+            if (this.isShortReplyDeleteActionVisible(post.id, group.raw, boost)) {
+              this.ShortReplyDeleteActionButton(post.id, group.raw, boost)
+            }
+          }
+          .height(32)
+          .padding({ left: 5, right: this.isShortReplyDeleteActionVisible(post.id, group.raw, boost) ? 5 : 10 })
+          .margin({ right: 8, top: 6 })
+          .borderRadius(16)
+          .backgroundColor(this.accentSurfaceVariantColorHex)
+          .onClick(() => {
+            if (this.isBoostOwnedOrDeletable(boost)) {
+              this.toggleShortReplyDeleteAction(post.id, group.raw, boost);
+            }
+          })
+        }, (boost: PostBoost) => boost.id > 0 ? boost.id.toString() : `${this.getBoostUserName(boost)}_${group.raw}`)
+      }
+      .width('100%')
+      .padding({ top: 2, bottom: 8 })
+    }
+    .width(310)
+    .padding({ left: 10, right: 8, top: 0, bottom: 0 })
+    .margin({ top: 1, bottom: 4 })
+    .borderRadius(18)
+    .backgroundColor(this.accentSurfaceColorHex)
+    .shadow({ radius: 14, color: '#1F000000', offsetX: 0, offsetY: 4 })
+  }
+
+  @Builder
+  private PostBoostsSection(post: Post) {
+    if (this.getPostBoostCount(post) > 0) {
+      Column() {
+        Flex({ wrap: FlexWrap.Wrap, justifyContent: FlexAlign.Start, alignItems: ItemAlign.Center }) {
+          ForEach(this.getVisibleShortReplyGroups(post), (group: ShortReplyGroup) => {
+            this.ShortReplyGroupChip(post, group)
+          }, (group: ShortReplyGroup) => `${post.id}_${group.raw}_${group.boosts.length}`)
+
+          if (this.hasHiddenShortReplyGroups(post)) {
+            Row() {
+              SymbolGlyph($r('sys.symbol.chevron_right'))
+                .fontSize(13)
+                .fontColor([$r('app.color.on_surface_secondary')])
+                .rotate({ angle: this.isBoostPostExpanded(post.id) ? 90 : 0 })
+            }
+            .width(30)
+            .height(28)
+            .borderRadius(14)
+            .margin({ right: 6, bottom: 6 })
+            .backgroundColor(this.accentSurfaceVariantColorHex)
+            .border({ width: 0.5, color: $r('app.color.divider_light') })
+            .justifyContent(FlexAlign.Center)
+            .alignItems(VerticalAlign.Center)
+            .onClick(() => {
+              this.toggleBoostPostExpanded(post.id);
+            })
+          }
+
+          if (this.shouldShowBoostRocket(post)) {
+            this.BoostRocketButton(post, true)
+          }
+        }
+        .width('100%')
+
+      }
+      .width('100%')
+      .margin({ top: 10 })
+      .alignItems(HorizontalAlign.Start)
+    }
+  }
+
+  @Builder
+  private BoostInputRichText() {
+    if (this.normalizeShortReplyRaw(this.boostInput).length === 0) {
+      Text('说点什么...')
+        .fontSize(15)
+        .fontColor($r('app.color.on_surface_tertiary'))
+        .maxLines(1)
+    } else {
+      Text() {
+        ForEach(this.tokenizeShortReplyInline(this.buildBoostDisplayText()), (token: ShortReplyInlineToken) => {
+          if (token.emojiUrl.length > 0) {
+            ImageSpan(token.emojiUrl)
+              .width(15)
+              .height(15)
+              .verticalAlign(ImageSpanAlignment.CENTER)
+          } else {
+            Span(token.text)
+          }
+        }, (token: ShortReplyInlineToken) => token.key)
+      }
+      .fontSize(15)
+      .fontColor($r('app.color.on_surface'))
+      .maxLines(1)
+      .textOverflow({ overflow: TextOverflow.Ellipsis })
+    }
+  }
+
+  @Builder
+  private BoostInputField() {
+    Stack({ alignContent: Alignment.TopStart }) {
+      if (this.shouldUseBoostInputRichOverlay()) {
+        Row() {
+          this.BoostInputRichText()
+        }
+        .width('100%')
+        .height(44)
+        .padding({ left: 12, right: 12 })
+        .alignItems(VerticalAlign.Center)
+      }
+
+      TextInput({
+        text: this.boostInput,
+        placeholder: this.shouldUseBoostInputRichOverlay() ? '' : '说点什么...',
+        controller: this.boostInputController
+      })
+        .width('100%')
+        .height(44)
+        .padding({ left: 12, right: 12 })
+        .backgroundColor(Color.Transparent)
+        .fontSize(15)
+        .fontColor(this.shouldUseBoostInputRichOverlay() ? Color.Transparent : $r('app.color.on_surface'))
+        .placeholderColor(this.shouldUseBoostInputRichOverlay() ? Color.Transparent : $r('app.color.on_surface_tertiary'))
+        .onChange((value: string) => {
+          this.boostInput = this.trimBoostInput(value);
+          this.syncBoostInputSelection(this.boostInputSelectionStart, this.boostInputSelectionEnd);
+        })
+        .onFocus(() => {
+          this.boostEmojiPanelSwitchToken = this.boostEmojiPanelSwitchToken + 1;
+          this.boostEmojiPanelVisible = false;
+        })
+        .onTextSelectionChange((selectionStart: number, selectionEnd: number) => {
+          this.syncBoostInputSelection(selectionStart, selectionEnd);
+        })
+    }
+    .layoutWeight(1)
+    .height(44)
+    .backgroundColor(this.accentSurfaceVariantColorHex)
+    .borderRadius(16)
+  }
+
+  @Builder
+  private BoostSubmitButton() {
+    Button() {
+      if (this.boostSubmitting) {
+        LoadingProgress()
+          .width(16)
+          .height(16)
+
+      } else {
+        SymbolGlyph($r('sys.symbol.arrow_up'))
+          .fontSize(18)
+          .fontColor([Color.White])
+      }
+    }
+    .width(38)
+    .height(38)
+    .borderRadius(19)
+    .margin({ left: 8 })
+    .backgroundColor(this.accentColorHex)
+    .enabled(this.isBoostSubmitEnabled())
+    .opacity(this.isBoostSubmitEnabled() ? 1 : 0.55)
+    .onClick(() => {
+      this.submitBoost().catch((_: Object) => {
+      });
+    })
+  }
+
+  @Builder
+  private BoostInputCounter() {
+    Row() {
+      Text(`${this.getBoostInputVisualLength(this.boostInput)}/${SHORT_REPLY_INPUT_MAX_LENGTH}`)
+        .fontSize(11)
+        .fontColor(this.getBoostInputVisualLength(this.boostInput) >= SHORT_REPLY_INPUT_MAX_LENGTH ? this.accentColorHex : $r('app.color.on_surface_secondary'))
+        .maxLines(1)
+    }
+    .width(38)
+    .height(42)
+    .margin({ left: 6 })
+    .justifyContent(FlexAlign.Center)
+    .alignItems(VerticalAlign.Center)
+  }
+
+  @Builder
+  private BoostComposerSheetBuilder() {
+    Column() {
+      Row() {
+        Row() {
+          SymbolGlyph($r('sys.symbol.face_smiling'))
+            .fontSize(20)
+            .fontColor([this.boostEmojiPanelVisible ? this.accentColorHex : $r('app.color.on_surface_secondary')])
+        }
+        .width(42)
+        .height(42)
+        .borderRadius(21)
+        .margin({ right: 8 })
+        .backgroundColor(this.boostEmojiPanelVisible ? this.accentSelectedBackgroundColorHex : this.accentSurfaceVariantColorHex)
+        .justifyContent(FlexAlign.Center)
+        .alignItems(VerticalAlign.Center)
+        .onClick(() => {
+          this.toggleBoostEmojiPanel();
+        })
+
+        this.BoostInputField()
+
+        this.BoostInputCounter()
+
+        this.BoostSubmitButton()
+      }
+      .width('100%')
+      .padding({ left: 18, right: 18, top: 14 })
+      .alignItems(VerticalAlign.Center)
+
+      if (this.boostEmojiPanelVisible) {
+        ComposerEmojiPanel({
+          panelHeight: SHORT_REPLY_EMOJI_PANEL_HEIGHT,
+          showHandle: false,
+          onSelectEmoji: (emoji: Emoji) => {
+            this.insertBoostEmoji(emoji);
+          }
+        })
+      }
+
+      Blank().height(12 + WindowManager.getSystemAvoidAreaBottomVp())
+    }
+    .width('100%')
+    .backgroundColor(this.accentSurfaceColorHex)
+  }
   @Builder
   private ReactionPickerOverlayLayer() {
     if (this.reactionPickerPostId > 0) {
@@ -4622,6 +6778,573 @@ export struct TopicDetailPage {
       .height('100%')
       .clip(false)
     }
+  }
+
+  @Builder
+  private NestedTopicBody() {
+    Refresh({ refreshing: false }) {
+      List({ scroller: this.listScroller }) {
+        ListItem() {
+          Row() {
+          }
+          .width('100%')
+          .height(TopicDetailChromeHelper.getContentTopSpacerHeightVp())
+        }
+
+        ListItem() {
+          this.TopicHeader()
+        }
+
+        ListItem() {
+          this.NestedSortBar()
+        }
+
+        if (this.nestedLoading && this.nestedRoots.length === 0 && this.nestedOpPost === null) {
+          ListItem() {
+            Column() {
+              LoadingSpinner({ message: '加载树形视图...' })
+            }
+            .width('100%')
+            .height(180)
+            .justifyContent(FlexAlign.Center)
+            .alignItems(HorizontalAlign.Center)
+          }
+        } else if (this.nestedErrorMessage.length > 0 && this.nestedRoots.length === 0) {
+          ListItem() {
+            ErrorView({
+              title: '树形视图加载失败',
+              message: this.nestedErrorMessage,
+              showRetry: true,
+              onRetry: () => {
+                this.loadNestedRoots(true);
+              }
+            })
+          }
+        } else {
+          if (this.nestedOpPost !== null) {
+            ListItem() {
+              Column() {
+                Row() {
+                  Text('主帖')
+                    .fontSize(12)
+                    .fontWeight(FontWeight.Bold)
+                    .fontColor(this.accentColorHex)
+                    .padding({ left: 10, right: 10, top: 4, bottom: 4 })
+                    .backgroundColor(this.accentSelectedBackgroundColorHex)
+                    .borderRadius(12)
+                }
+                .width('100%')
+                .padding({ left: 16, right: 16, top: 8, bottom: 4 })
+                .justifyContent(FlexAlign.Start)
+
+                this.PostItem(this.nestedOpPost as Post)
+              }
+              .width('100%')
+            }
+          }
+
+          ForEach(this.nestedRoots, (node: NestedNode) => {
+            ListItem() {
+              this.NestedNodeItem(node, 0)
+            }
+          }, (node: NestedNode) => `${node.post.id}_${node.post.postNumber}`)
+
+          if (this.nestedHasMoreRoots || this.nestedLoadingMore) {
+            ListItem() {
+              this.NestedLoadMoreRoots()
+            }
+          }
+        }
+
+        ListItem() {
+          Row() {
+          }
+          .width('100%')
+          .height(this.getDetailBottomBarReservedBottomVp())
+        }
+      }
+      .width('100%')
+      .layoutWeight(1)
+      .backgroundColor(this.accentBackgroundColorHex)
+      .onReachStart(() => {
+        this.scrollOffset = 0;
+        this.showTitle = false;
+        this._bottomBarDelta = 0;
+        this.lastListScrollDelta = 0;
+        this.showBottomBarImmediate();
+      })
+      .onReachEnd(() => {
+        this.loadNestedRoots(false);
+      })
+      .onScrollFrameBegin((offset: number, state: ScrollState) => {
+        this.lastListScrollDelta = offset;
+        if (this.reactionPickerPostId > 0 && Math.abs(offset) > 0.1) {
+          this.closeReactionPicker();
+        }
+        const next: number = Math.max(0, this.scrollOffset + offset);
+        this.scrollOffset = next;
+        this.scheduleScrollOffsetSync();
+
+        if (next <= 0) {
+          this._bottomBarDelta = 0;
+          this.showBottomBarImmediate();
+        } else if (offset < -0.01) {
+          this._bottomBarDelta = 0;
+          this.showBottomBarImmediate();
+        } else {
+          this.clearBottomBarShowTimer();
+          if ((this._bottomBarDelta > 0 && offset <= 0) || (this._bottomBarDelta < 0 && offset > 0)) {
+            this._bottomBarDelta = offset;
+          } else {
+            this._bottomBarDelta = this._bottomBarDelta + offset;
+          }
+
+          if (this._bottomBarDelta > BOTTOM_BAR_HIDE_DELTA && this.showBottomBar) {
+            this._bottomBarDelta = 0;
+            this.hideBottomBar();
+          }
+        }
+
+        this.showTitle = next > TITLE_SHOW_OFFSET;
+        return { offsetRemain: offset };
+      })
+      .onScrollStop(() => {
+        this._bottomBarDelta = 0;
+        this.scheduleBottomBarShow();
+      })
+    }
+    .onRefreshing(() => {
+      this.loadNestedRoots(true);
+    })
+    .layoutWeight(1)
+  }
+
+  @Builder
+  private NestedSortBar() {
+    Column() {
+      Row() {
+        Row() {
+          SymbolGlyph($r('sys.symbol.line_3_horizontal'))
+            .fontSize(16)
+            .fontColor([this.accentColorHex])
+            .margin({ right: 6 })
+          Text('树形视图')
+            .fontSize(15)
+            .fontWeight(FontWeight.Bold)
+            .fontColor($r('app.color.on_surface'))
+        }
+        .alignItems(VerticalAlign.Center)
+
+        Blank().layoutWeight(1)
+
+        this.NestedSortChip('最旧', 'old')
+        this.NestedSortChip('最新', 'new')
+        this.NestedSortChip('热门', 'top')
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Center)
+
+      if (this.nestedErrorMessage.length > 0 && this.nestedRoots.length > 0) {
+        Text(this.nestedErrorMessage)
+          .fontSize(12)
+          .fontColor($r('app.color.on_surface_tertiary'))
+          .margin({ top: 8 })
+      }
+    }
+    .width('100%')
+    .padding({ left: 16, right: 16, top: 10, bottom: 10 })
+    .backgroundColor(this.accentSurfaceColorHex)
+  }
+
+  @Builder
+  private NestedSortChip(label: string, sort: string) {
+    Row() {
+      if (this.nestedSort === sort) {
+        SymbolGlyph($r('sys.symbol.checkmark'))
+          .fontSize(12)
+          .fontColor([this.accentColorHex])
+          .margin({ right: 4 })
+      }
+      Text(label)
+        .fontSize(12)
+        .fontWeight(this.nestedSort === sort ? FontWeight.Bold : FontWeight.Medium)
+        .fontColor(this.nestedSort === sort ? this.accentColorHex : $r('app.color.on_surface_secondary'))
+    }
+    .height(30)
+    .padding({ left: 10, right: 10 })
+    .margin({ left: 8 })
+    .borderRadius(15)
+    .backgroundColor(this.nestedSort === sort ? this.accentSelectedBackgroundColorHex : this.accentSurfaceVariantColorHex)
+    .alignItems(VerticalAlign.Center)
+    .onClick(() => {
+      this.selectNestedSort(sort);
+    })
+  }
+
+  @Builder
+  private NestedNodeItem(node: NestedNode, depth: number) {
+    Row() {
+      if (depth > 0) {
+        Row() {
+          Rect()
+            .width(2)
+            .height(this.getNestedRailLineHeight(depth))
+            .radius(1)
+            .fill($r('app.color.divider_light'))
+        }
+        .width(this.getNestedRailWidth(depth))
+        .alignItems(VerticalAlign.Top)
+        .justifyContent(FlexAlign.End)
+      }
+
+      Column() {
+        this.NestedPostCard(node.post, depth)
+        this.NestedNodeChildrenControls(node, depth)
+      }
+      .layoutWeight(1)
+      .alignItems(HorizontalAlign.Start)
+    }
+    .width('100%')
+    .alignItems(VerticalAlign.Top)
+  }
+
+  @Builder
+  private NestedPostCard(post: Post, depth: number) {
+    Column() {
+      Row() {
+        AvatarWithFlair({
+          avatarUrl: this.getPostAvatarUrl(post, 72),
+          avatarSize: this.getNestedAvatarSize(depth),
+          fallbackText: post.username,
+          flairUrl: post.flairUrl,
+          flairName: post.flairName,
+          flairBgColor: post.flairBgColor,
+          flairColor: post.flairColor,
+          flairSize: this.getNestedAvatarFlairSize(depth)
+        })
+        .onClick(() => {
+          RouterManager.pushUserProfile(post.username);
+        })
+
+        Column() {
+          Row() {
+            Text(post.name !== null && post.name.length > 0 ? post.name : post.username)
+              .fontSize(depth > 0 ? 13 : 14)
+              .fontWeight(FontWeight.Bold)
+              .fontColor((post.moderator || post.admin) ? this.accentColorHex : $r('app.color.on_surface'))
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+
+            if (this.topicOwnerUsername.length > 0 && post.postNumber > 1 && post.username === this.topicOwnerUsername) {
+              Text('主')
+                .fontSize(9)
+                .fontWeight(FontWeight.Medium)
+                .fontColor(this.accentColorHex)
+                .padding({ left: 5, right: 5, top: 1, bottom: 1 })
+                .backgroundColor(this.accentSelectedBackgroundColorHex)
+                .borderRadius(6)
+                .margin({ left: 5 })
+            }
+
+            if (
+              post.userStatus !== null
+              && (post.userStatus as UserStatus).emoji !== null
+              && ((post.userStatus as UserStatus).emoji as string).trim().length > 0
+            ) {
+              UserStatusEmoji({
+                rawEmoji: ((post.userStatus as UserStatus).emoji as string).trim(),
+                iconSize: depth > 0 ? 13 : 15,
+                marginLeft: 4
+              })
+            }
+          }
+          .alignItems(VerticalAlign.Center)
+
+          Row() {
+            Text(`@${post.username}`)
+              .fontSize(10)
+              .fontColor($r('app.color.on_surface_tertiary'))
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+
+            if (this.getNestedReplyTargetText(post).length > 0) {
+              Text(this.getNestedReplyTargetText(post))
+                .fontSize(10)
+                .fontColor(this.accentColorHex)
+                .maxLines(1)
+                .textOverflow({ overflow: TextOverflow.Ellipsis })
+                .margin({ left: 6 })
+            }
+          }
+          .margin({ top: 2 })
+          .alignItems(VerticalAlign.Center)
+        }
+        .layoutWeight(1)
+        .margin({ left: 10 })
+        .alignItems(HorizontalAlign.Start)
+        .onClick(() => {
+          RouterManager.pushUserProfile(post.username);
+        })
+
+        Column() {
+          Text(TimeUtils.formatRelativeTime(post.createdAt, this.timeTick))
+            .fontSize(10)
+            .fontColor($r('app.color.on_surface_tertiary'))
+          Text(`#${post.postNumber}`)
+            .fontSize(10)
+            .fontColor($r('app.color.on_surface_tertiary'))
+            .margin({ top: 2 })
+        }
+        .alignItems(HorizontalAlign.End)
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Center)
+
+      Column() {
+        PostRichContent({
+          cookedHtml: post.cooked,
+          post: post,
+          allowPollInteraction: !this.isGuestMode,
+          enableSelectionQuote: true,
+          enableCopyQuoteSelection: true,
+          onOpenLink: (url: string) => {
+            this.handlePostLinkClick(url);
+          },
+          onOpenImagePreview: (urls: string[], initialIndex: number) => {
+            this.openImagePreview(urls, initialIndex);
+          },
+          onQuoteSelection: (selectedText: string, sourceHtml: string) => {
+            if (this.isGuestMode) {
+              this.copySelectionQuote(post, selectedText, sourceHtml);
+            } else {
+              const quote: string = this.buildPostQuoteFromSelection(post, selectedText, sourceHtml);
+              if (quote.length > 0) {
+                this.openReplySheet(post, quote);
+              } else {
+                ToastService.show('没有可引用的内容');
+              }
+            }
+          },
+          onCopyQuoteSelection: (selectedText: string, sourceHtml: string) => {
+            this.copySelectionQuote(post, selectedText, sourceHtml);
+          },
+          onLongPressImage: (imageUrl: string, previewUrl: string, previewUrls: string[], initialIndex: number) => {
+            this.openImageContextSheet(post, imageUrl, previewUrl, previewUrls, initialIndex);
+          },
+          onPostUpdated: (updatedPost: Post) => {
+            this.replacePostInstance(updatedPost);
+          }
+        })
+      }
+      .width('100%')
+      .margin({ top: 8 })
+
+      if (post.linkCounts !== null) {
+        PostLinks({
+          linkCounts: post.linkCounts,
+          onOpenLink: (url: string) => {
+            this.handlePostLinkClick(url);
+          }
+        })
+      }
+
+      Row() {
+        if (!this.isGuestMode) {
+          this.PostReactionSection(post)
+        }
+
+        Blank().layoutWeight(1)
+
+        if (!this.isGuestMode) {
+          Row() {
+            SymbolGlyph($r('sys.symbol.arrowshape_turn_up_left'))
+              .fontSize(16)
+              .fontColor([$r('app.color.on_surface_secondary')])
+          }
+          .width(34)
+          .height(34)
+          .borderRadius(17)
+          .backgroundColor(this.accentSurfaceVariantColorHex)
+          .justifyContent(FlexAlign.Center)
+          .alignItems(VerticalAlign.Center)
+          .margin({ right: 8 })
+          .onClick(() => {
+            this.openReplySheet(post);
+          })
+        }
+
+        if (this.getPostBoostCount(post) === 0 && this.shouldShowBoostRocket(post)) {
+          this.BoostRocketButton(post, true)
+        }
+
+        Column() {
+          SymbolGlyph($r('sys.symbol.ellipsis_circle'))
+            .fontSize(17)
+            .fontColor([$r('app.color.on_surface_secondary')])
+        }
+        .width(34)
+        .height(34)
+        .borderRadius(17)
+        .backgroundColor(this.accentSurfaceVariantColorHex)
+        .justifyContent(FlexAlign.Center)
+        .alignItems(HorizontalAlign.Center)
+        .bindMenu(this.PostMoreMenuBuilder(post))
+      }
+      .width('100%')
+      .margin({ top: 10 })
+      .alignItems(VerticalAlign.Center)
+
+      this.PostBoostsSection(post)
+
+      if (post.acceptedAnswer) {
+        Row() {
+          this.AcceptedAnswerStamp()
+        }
+        .width('100%')
+        .justifyContent(FlexAlign.End)
+        .padding({ top: 6 })
+      }
+    }
+    .width('100%')
+    .padding({
+      left: depth > 0 ? 10 : 16,
+      right: depth > 0 ? 12 : 16,
+      top: depth > 0 ? 10 : 14,
+      bottom: depth > 0 ? 10 : 12
+    })
+    .margin({
+      left: 0,
+      right: this.getNestedCardSideMargin(depth),
+      top: depth > 0 ? 4 : 0,
+      bottom: depth > 0 ? 4 : 0
+    })
+    .backgroundColor(this.accentSurfaceColorHex)
+    .borderRadius(this.getNestedCardRadius(depth))
+    .shadow({ radius: depth > 0 ? 4 : 0, color: depth > 0 ? this.getMenuShadowColor() : '#00000000', offsetX: 0, offsetY: 1 })
+    .opacity((post.isDeleted || post.hidden) ? 0.6 : 1)
+  }
+
+  @Builder
+  private NestedNodeChildrenControls(node: NestedNode, depth: number) {
+    Column() {
+      if (this.getNestedReplyCount(node) > 0) {
+        Row() {
+          SymbolGlyph($r('sys.symbol.message'))
+            .fontSize(14)
+            .fontColor([this.isNestedNodeExpanded(node.post.postNumber) ? this.accentColorHex : $r('app.color.on_surface_secondary')])
+            .margin({ right: 6 })
+          Text(this.isNestedNodeExpanded(node.post.postNumber)
+            ? '收起回复'
+            : `展开 ${this.getNestedReplyCount(node)} 条回复`)
+            .fontSize(12)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(this.isNestedNodeExpanded(node.post.postNumber) ? this.accentColorHex : $r('app.color.on_surface_secondary'))
+          if (this.nestedLoadingChildrenPostNumber === node.post.postNumber) {
+            LoadingProgress()
+              .width(16)
+              .height(16)
+              .margin({ left: 8 })
+          } else {
+            SymbolGlyph($r('sys.symbol.chevron_down'))
+              .fontSize(16)
+              .fontColor([this.isNestedNodeExpanded(node.post.postNumber) ? this.accentColorHex : $r('app.color.on_surface_secondary')])
+              .rotate({ angle: this.isNestedNodeExpanded(node.post.postNumber) ? 180 : 0 })
+              .margin({ left: 4 })
+          }
+        }
+        .height(34)
+        .padding({ left: 12, right: 12 })
+        .margin({ left: depth > 0 ? 8 : 16, top: 4, bottom: 6 })
+        .borderRadius(17)
+        .backgroundColor(this.isNestedNodeExpanded(node.post.postNumber) ? this.accentSelectedBackgroundColorHex : this.accentSurfaceVariantColorHex)
+        .alignItems(VerticalAlign.Center)
+        .onClick(() => {
+          this.toggleNestedChildren(node).catch((_: Object) => {
+          });
+        })
+      }
+
+      if (this.nestedChildrenErrorPostNumber === node.post.postNumber) {
+        Row() {
+          Text('子回复加载失败，点击重试')
+            .fontSize(12)
+            .fontColor($r('app.color.on_surface_tertiary'))
+        }
+        .height(32)
+        .padding({ left: depth > 0 ? 8 : 16, right: 16 })
+        .onClick(() => {
+          this.loadNestedChildren(node, false);
+        })
+      }
+
+      if (this.isNestedNodeExpanded(node.post.postNumber)) {
+        ForEach(this.getNestedVisibleChildren(node), (child: NestedNode) => {
+          this.NestedNodeItem(child, depth + 1)
+        }, (child: NestedNode) => `${child.post.id}_${child.post.postNumber}`)
+
+        if (this.getNestedChildrenHasMore(node)) {
+          Row() {
+            if (this.nestedLoadingChildrenPostNumber === node.post.postNumber) {
+              LoadingProgress()
+                .width(16)
+                .height(16)
+                .margin({ right: 8 })
+            } else {
+              SymbolGlyph($r('sys.symbol.arrow_down'))
+                .fontSize(14)
+                .fontColor([this.accentColorHex])
+                .margin({ right: 6 })
+            }
+            Text('加载更多子回复')
+              .fontSize(12)
+              .fontColor(this.accentColorHex)
+              .fontWeight(FontWeight.Medium)
+          }
+          .height(34)
+          .margin({ left: depth > 0 ? 8 : 16, top: 4, bottom: 8 })
+          .padding({ left: 12, right: 12 })
+          .borderRadius(17)
+          .backgroundColor(this.accentSelectedBackgroundColorHex)
+          .alignItems(VerticalAlign.Center)
+          .onClick(() => {
+            this.loadNestedChildren(node, true);
+          })
+        }
+      }
+    }
+    .width('100%')
+    .alignItems(HorizontalAlign.Start)
+  }
+
+  @Builder
+  private NestedLoadMoreRoots() {
+    Row() {
+      if (this.nestedLoadingMore) {
+        LoadingProgress()
+          .width(18)
+          .height(18)
+          .margin({ right: 8 })
+        Text('加载中...')
+          .fontSize(13)
+          .fontColor($r('app.color.on_surface_secondary'))
+      } else {
+        SymbolGlyph($r('sys.symbol.arrow_down'))
+          .fontSize(14)
+          .fontColor([this.accentColorHex])
+          .margin({ right: 6 })
+        Text('加载更多顶层回复')
+          .fontSize(13)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(this.accentColorHex)
+      }
+    }
+    .width('100%')
+    .height(48)
+    .justifyContent(FlexAlign.Center)
+    .alignItems(VerticalAlign.Center)
+    .onClick(() => {
+      this.loadNestedRoots(false);
+    })
   }
 
   build() {
@@ -4653,6 +7376,8 @@ export struct TopicDetailPage {
           } else {
             if (this.isSearchMode) {
               this.TopicSearchBody()
+            } else if (this.isNestedView) {
+              this.NestedTopicBody()
             } else {
               Refresh({ refreshing: false }) {
                 // 帖子列表
@@ -4686,7 +7411,7 @@ export struct TopicDetailPage {
                         this.PostItem(post)
                       }
                     }
-                  }, (post: Post) => post.id.toString())
+                  }, (post: Post) => `${post.id}_${this.getPostBoostCount(post)}_${post.canBoost ? 1 : 0}`)
 
                   if (this.hasMoreAfter || this.isLoadingMore || this.isLoadMoreFailed) {
                     ListItem() {
@@ -4705,7 +7430,7 @@ export struct TopicDetailPage {
                 }
                 .width('100%')
                 .layoutWeight(1)
-                .backgroundColor($r('app.color.surface'))
+                .backgroundColor(this.accentSurfaceColorHex)
                 .onReachStart(() => {
                   this.scrollOffset = 0;
                   this.showTitle = false;
@@ -4779,7 +7504,7 @@ export struct TopicDetailPage {
         }
         .width('100%')
         .height('100%')
-        .backgroundColor($r('app.color.surface'))
+        .backgroundColor(this.accentSurfaceColorHex)
 
         // 顶部定制阅读栏覆盖在内容上方，保留阅读页操作密度，同时让内容滚入背后形成沉浸光感。
         if (this.isSearchMode) {
@@ -4791,24 +7516,26 @@ export struct TopicDetailPage {
         // 浮层：进度胶囊 + 底部工具栏 + FAB
         if (!this.isLoading && this.errorMessage.length === 0 && !this.isSearchMode) {
           // 进度胶囊（常驻）
-          Row() {
-            Text(`${this.currentPostIndex}`)
-              .fontSize(13)
-              .fontWeight(FontWeight.Bold)
-              .fontColor($r('app.color.on_surface'))
-            Text(`/${this.postsCount}`)
-              .fontSize(13)
-              .fontColor($r('app.color.on_surface_secondary'))
+          if (!this.isNestedView) {
+            Row() {
+              Text(`${this.currentPostIndex}`)
+                .fontSize(13)
+                .fontWeight(FontWeight.Bold)
+                .fontColor($r('app.color.on_surface'))
+              Text(`/${this.postsCount}`)
+                .fontSize(13)
+                .fontColor($r('app.color.on_surface_secondary'))
+            }
+            .padding({ left: 14, right: 14, top: 6, bottom: 6 })
+            .backgroundColor(this.accentSurfaceColorHex)
+            .borderRadius(20)
+            .shadow({ radius: 4, color: this.getProgressCapsuleShadowColor(), offsetX: 0, offsetY: 2 })
+            .position({ x: '50%', y: '100%' })
+            .translate({ x: '-50%', y: this.getProgressTranslateY() })
+            .onClick(() => {
+              this.openTimelineSheet();
+            })
           }
-          .padding({ left: 14, right: 14, top: 6, bottom: 6 })
-          .backgroundColor($r('app.color.surface'))
-          .borderRadius(20)
-          .shadow({ radius: 4, color: this.getProgressCapsuleShadowColor(), offsetX: 0, offsetY: 2 })
-          .position({ x: '50%', y: '100%' })
-          .translate({ x: '-50%', y: this.getProgressTranslateY() })
-          .onClick(() => {
-            this.openTimelineSheet();
-          })
 
           // 底部工具栏：使用 UIDesignKit 原生 HdsActionBar，复用 HDS 背板/按钮/模糊能力
           HdsActionBar({
@@ -4841,7 +7568,7 @@ export struct TopicDetailPage {
           Button() {
             SymbolGlyph($r('sys.symbol.message'))
               .fontSize(22)
-              .fontColor([$r('app.color.primary')])
+              .fontColor([this.accentColorHex])
           }
           .width(FloatingActionChromeHelper.getButtonSizeVp())
           .height(FloatingActionChromeHelper.getButtonSizeVp())
@@ -4901,7 +7628,22 @@ export struct TopicDetailPage {
           height: SheetSize.FIT_CONTENT,
           dragBar: true,
           showClose: false,
-          backgroundColor: $r('app.color.surface')
+          backgroundColor: ModalChromeHelper.getSheetBackgroundColor(),
+          maskColor: ModalChromeHelper.getMaskColor(),
+          blurStyle: ModalChromeHelper.getSheetBlurStyle()
+        })
+
+        Column() {
+        }
+        .width(0)
+        .height(0)
+        .bindSheet($$this.isDetailFilterSheetVisible, this.DetailFilterSheetBuilder, {
+          height: SheetSize.FIT_CONTENT,
+          dragBar: true,
+          showClose: false,
+          backgroundColor: ModalChromeHelper.getSheetBackgroundColor(),
+          maskColor: ModalChromeHelper.getMaskColor(),
+          blurStyle: ModalChromeHelper.getSheetBlurStyle()
         })
 
         // 分享图片 Sheet 宿主（避免与时间线 Sheet 冲突）
@@ -4913,7 +7655,9 @@ export struct TopicDetailPage {
           height: SheetSize.LARGE,
           dragBar: false,
           showClose: false,
-          backgroundColor: $r('app.color.surface')
+          backgroundColor: ModalChromeHelper.getSheetBackgroundColor(),
+          maskColor: ModalChromeHelper.getMaskColor(),
+          blurStyle: ModalChromeHelper.getSheetBlurStyle()
         })
 
         // 导出文章 Sheet 宿主（避免与时间线 Sheet 冲突）
@@ -4925,7 +7669,9 @@ export struct TopicDetailPage {
           height: SheetSize.MEDIUM,
           dragBar: false,
           showClose: false,
-          backgroundColor: $r('app.color.surface')
+          backgroundColor: ModalChromeHelper.getSheetBackgroundColor(),
+          maskColor: ModalChromeHelper.getMaskColor(),
+          blurStyle: ModalChromeHelper.getSheetBlurStyle()
         })
 
         // 图片长按上下文菜单 Sheet
@@ -4937,7 +7683,9 @@ export struct TopicDetailPage {
           height: SheetSize.FIT_CONTENT,
           dragBar: true,
           showClose: false,
-          backgroundColor: $r('app.color.surface')
+          backgroundColor: ModalChromeHelper.getSheetBackgroundColor(),
+          maskColor: ModalChromeHelper.getMaskColor(),
+          blurStyle: ModalChromeHelper.getSheetBlurStyle()
         })
 
         Column() {
@@ -4948,7 +7696,9 @@ export struct TopicDetailPage {
           height: SheetSize.MEDIUM,
           dragBar: false,
           showClose: false,
-          backgroundColor: $r('app.color.surface')
+          backgroundColor: ModalChromeHelper.getSheetBackgroundColor(),
+          maskColor: ModalChromeHelper.getMaskColor(),
+          blurStyle: ModalChromeHelper.getSheetBlurStyle()
         })
 
         Column() {
@@ -4959,7 +7709,9 @@ export struct TopicDetailPage {
           height: SheetSize.FIT_CONTENT,
           dragBar: true,
           showClose: false,
-          backgroundColor: $r('app.color.surface')
+          backgroundColor: ModalChromeHelper.getSheetBackgroundColor(),
+          maskColor: ModalChromeHelper.getMaskColor(),
+          blurStyle: ModalChromeHelper.getSheetBlurStyle()
         })
 
         Column() {
@@ -4970,7 +7722,9 @@ export struct TopicDetailPage {
           height: SheetSize.MEDIUM,
           dragBar: false,
           showClose: false,
-          backgroundColor: $r('app.color.surface'),
+          backgroundColor: ModalChromeHelper.getSheetBackgroundColor(),
+          maskColor: ModalChromeHelper.getMaskColor(),
+          blurStyle: ModalChromeHelper.getSheetBlurStyle(),
           onDisappear: () => {
             this.isPostBookmarkSheetVisible = false;
             this.editingPostBookmarkPost = null;
@@ -4985,7 +7739,33 @@ export struct TopicDetailPage {
           detents: [SheetSize.MEDIUM, SheetSize.LARGE],
           showClose: false,
           enableFloatingDragBar: true,
-          backgroundColor: $r('app.color.surface')
+          backgroundColor: ModalChromeHelper.getSheetBackgroundColor(),
+          maskColor: ModalChromeHelper.getMaskColor(),
+          blurStyle: ModalChromeHelper.getSheetBlurStyle()
+        })
+
+        Column() {
+        }
+        .width(0)
+        .height(0)
+        .bindSheet($$this.boostComposerVisible, this.BoostComposerSheetBuilder, {
+          height: SheetSize.FIT_CONTENT,
+          dragBar: true,
+          showClose: false,
+          keyboardAvoidMode: SheetKeyboardAvoidMode.TRANSLATE_AND_RESIZE,
+          backgroundColor: ModalChromeHelper.getSheetBackgroundColor(),
+          maskColor: ModalChromeHelper.getMaskColor(),
+          blurStyle: ModalChromeHelper.getSheetBlurStyle(),
+          onDisappear: () => {
+            this.boostEmojiPanelSwitchToken = this.boostEmojiPanelSwitchToken + 1;
+            this.restoreBoostKeyboardAvoidMode();
+            if (!this.boostSubmitting) {
+              this.boostComposerVisible = false;
+              this.boostComposerPostId = 0;
+              this.resetBoostInput();
+              this.boostEmojiPanelVisible = false;
+            }
+          }
         })
       }
       .width('100%')
@@ -4997,10 +7777,12 @@ export struct TopicDetailPage {
         height: SheetSize.MEDIUM,
         dragBar: false,
         showClose: false,
-        backgroundColor: $r('app.color.surface')
+        backgroundColor: ModalChromeHelper.getSheetBackgroundColor(),
+        maskColor: ModalChromeHelper.getMaskColor(),
+        blurStyle: ModalChromeHelper.getSheetBlurStyle()
       })
     }
-    .backgroundColor($r('app.color.surface'))
+    .backgroundColor(this.accentSurfaceColorHex)
     .hideTitleBar(true)
     .hideToolBar(true)
     .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
@@ -5332,7 +8114,7 @@ export struct TopicDetailPage {
         .width('100%')
         .layoutWeight(1)
         .padding({ left: 12, right: 12, top: 10 })
-        .backgroundColor($r('app.color.background'))
+        .backgroundColor(this.accentBackgroundColorHex)
         .onReachEnd(() => {
           this.loadMoreTopicSearch();
         })
@@ -5340,7 +8122,7 @@ export struct TopicDetailPage {
     }
     .width('100%')
     .layoutWeight(1)
-    .backgroundColor($r('app.color.background'))
+    .backgroundColor(this.accentBackgroundColorHex)
   }
 
   @Builder
@@ -5371,7 +8153,7 @@ export struct TopicDetailPage {
     }
     .width('100%')
     .padding({ left: 14, right: 14, top: 12, bottom: 12 })
-    .backgroundColor($r('app.color.surface'))
+    .backgroundColor(this.accentSurfaceColorHex)
     .borderRadius(14)
     .margin({ bottom: 10 })
     .alignItems(VerticalAlign.Center)
@@ -5463,11 +8245,11 @@ export struct TopicDetailPage {
         Row() {
           SymbolGlyph($r('sys.symbol.bookmark'))
             .fontSize(16)
-            .fontColor(this.isBookmarked ? [$r('app.color.primary')] : [$r('app.color.on_surface')])
+            .fontColor(this.isBookmarked ? [this.accentColorHex] : [$r('app.color.on_surface')])
             .margin({ right: 10 })
           Text(this.getTopicBookmarkMenuLabel())
             .fontSize(14)
-            .fontColor(this.isBookmarked ? $r('app.color.primary') : $r('app.color.on_surface'))
+            .fontColor(this.isBookmarked ? this.accentColorHex : $r('app.color.on_surface'))
         }
         .width('100%')
         .padding({ left: 12, right: 12 })
@@ -5488,11 +8270,11 @@ export struct TopicDetailPage {
         Row() {
           SymbolGlyph($r('sys.symbol.clock'))
             .fontSize(16)
-            .fontColor(this.isInReadLater ? [$r('app.color.primary')] : [$r('app.color.on_surface')])
+            .fontColor(this.isInReadLater ? [this.accentColorHex] : [$r('app.color.on_surface')])
             .margin({ right: 10 })
           Text(this.getReadLaterMenuLabel())
             .fontSize(14)
-            .fontColor(this.isInReadLater ? $r('app.color.primary') : $r('app.color.on_surface'))
+            .fontColor(this.isInReadLater ? this.accentColorHex : $r('app.color.on_surface'))
         }
         .width('100%')
         .padding({ left: 12, right: 12 })
@@ -5533,7 +8315,7 @@ export struct TopicDetailPage {
       })
     }
     .width(180)
-    .backgroundColor($r('app.color.search_bar_background'))
+    .backgroundColor(this.accentSurfaceVariantColorHex)
     .borderRadius(12)
     .shadow({ radius: 10, color: this.getMenuShadowColor(), offsetX: 0, offsetY: 6 })
   }
@@ -5885,6 +8667,136 @@ export struct TopicDetailPage {
   }
 
   @Builder
+  DetailFilterSheetBuilder() {
+    Column() {
+      Row() {
+        Text('回复筛选')
+          .fontSize(18)
+          .fontWeight(FontWeight.Bold)
+          .fontColor($r('app.color.on_surface'))
+
+        Blank()
+
+        Button() {
+          SymbolGlyph($r('sys.symbol.xmark'))
+            .fontSize(18)
+            .fontColor([$r('app.color.on_surface_secondary')])
+        }
+        .width(36)
+        .height(36)
+        .borderRadius(18)
+        .backgroundColor(this.accentSurfaceVariantColorHex)
+        .onClick(() => {
+          this.closeDetailFilterSheet();
+        })
+      }
+      .width('100%')
+      .padding({ left: 20, right: 16, top: 16, bottom: 8 })
+      .alignItems(VerticalAlign.Center)
+
+      this.DetailFilterRow('只看热门', '显示社区摘要/热门回复', $r('sys.symbol.flame'), this.isSummaryMode, this.hasSummary, () => {
+        this.closeDetailFilterSheet();
+        if (this.hasSummary) {
+          if (!this.isSummaryMode) {
+            this.toggleSummaryMode();
+          }
+        } else {
+          ToastService.show('当前话题暂无热门摘要');
+        }
+      })
+
+      this.DetailFilterRow('只看题主', '仅显示题主发布的楼层', $r('sys.symbol.person'), this.isAuthorOnlyMode, true, () => {
+        this.closeDetailFilterSheet();
+        if (!this.isAuthorOnlyMode) {
+          this.toggleAuthorOnlyMode();
+        }
+      })
+
+      this.DetailFilterRow('只看顶层', '保留主帖并过滤楼中楼回复', $r('sys.symbol.message'), this.isTopLevelMode, true, () => {
+        this.closeDetailFilterSheet();
+        if (!this.isTopLevelMode) {
+          this.toggleTopLevelMode();
+        }
+      })
+
+      this.DetailFilterRow('树形视图', '按回复关系展开，可切换最旧/最新/热门排序', $r('sys.symbol.line_3_horizontal'), this.isNestedView, true, () => {
+        this.closeDetailFilterSheet();
+        this.enterNestedView();
+      })
+
+      Divider()
+        .color($r('app.color.divider_light'))
+        .strokeWidth(0.5)
+        .margin({ left: 20, right: 20, top: 6, bottom: 6 })
+
+      this.DetailFilterRow('取消筛选', '恢复普通楼层流', $r('sys.symbol.xmark'), false, this.isDetailFilterActive(), () => {
+        this.closeDetailFilterSheet();
+        this.cancelDetailFilter();
+      })
+
+      Blank().height(12 + WindowManager.getSystemAvoidAreaBottomVp())
+    }
+    .width('100%')
+    .backgroundColor(this.accentSurfaceColorHex)
+  }
+
+  @Builder
+  private DetailFilterRow(
+    title: string,
+    subtitle: string,
+    icon: Resource,
+    selected: boolean,
+    enabled: boolean,
+    onSelect: () => void
+  ) {
+    Row() {
+      Row() {
+        SymbolGlyph(icon)
+          .fontSize(18)
+          .fontColor([selected ? this.accentColorHex : $r('app.color.on_surface')])
+      }
+      .width(36)
+      .height(36)
+      .borderRadius(18)
+      .backgroundColor(selected ? this.accentSelectedBackgroundColorHex : this.accentSurfaceVariantColorHex)
+      .justifyContent(FlexAlign.Center)
+      .alignItems(VerticalAlign.Center)
+      .margin({ right: 14 })
+
+      Column() {
+        Text(title)
+          .fontSize(15)
+          .fontWeight(selected ? FontWeight.Bold : FontWeight.Medium)
+          .fontColor(selected ? this.accentColorHex : $r('app.color.on_surface'))
+        Text(subtitle)
+          .fontSize(12)
+          .fontColor($r('app.color.on_surface_tertiary'))
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .margin({ top: 3 })
+      }
+      .layoutWeight(1)
+      .alignItems(HorizontalAlign.Start)
+
+      if (selected) {
+        SymbolGlyph($r('sys.symbol.checkmark'))
+          .fontSize(16)
+          .fontColor([this.accentColorHex])
+      }
+    }
+    .width('100%')
+    .height(58)
+    .padding({ left: 20, right: 20 })
+    .alignItems(VerticalAlign.Center)
+    .opacity(enabled ? 1 : 0.45)
+    .onClick(() => {
+      if (enabled) {
+        onSelect();
+      }
+    })
+  }
+
+  @Builder
   TopicShareActionSheetBuilder() {
     Column() {
       Row() {
@@ -5903,7 +8815,7 @@ export struct TopicDetailPage {
         .width(36)
         .height(36)
         .borderRadius(18)
-        .backgroundColor($r('app.color.surface_variant'))
+        .backgroundColor(this.accentSurfaceVariantColorHex)
         .onClick(() => {
           this.closeTopicShareActionSheet();
         })
@@ -5971,7 +8883,7 @@ export struct TopicDetailPage {
     }
     .width('100%')
     .padding({ bottom: WindowManager.getSystemAvoidAreaBottomVp() })
-    .backgroundColor($r('app.color.surface'))
+    .backgroundColor(this.accentSurfaceColorHex)
   }
 
   @Builder
@@ -6047,7 +8959,7 @@ export struct TopicDetailPage {
       })
     }
     .width(200)
-    .backgroundColor($r('app.color.search_bar_background'))
+    .backgroundColor(this.accentSurfaceVariantColorHex)
     .borderRadius(12)
     .shadow({ radius: 10, color: this.getMenuShadowColor(), offsetX: 0, offsetY: 6 })
   }
@@ -6108,11 +9020,11 @@ export struct TopicDetailPage {
           Row() {
             SymbolGlyph(post.bookmarked ? $r('sys.symbol.bookmark_fill') : $r('sys.symbol.bookmark'))
               .fontSize(16)
-              .fontColor([post.bookmarked ? $r('app.color.primary') : $r('app.color.on_surface')])
+              .fontColor([post.bookmarked ? this.accentColorHex : $r('app.color.on_surface')])
               .margin({ right: 10 })
             Text(this.getPostBookmarkActionLabel(post))
               .fontSize(14)
-              .fontColor(post.bookmarked ? $r('app.color.primary') : $r('app.color.on_surface'))
+              .fontColor(post.bookmarked ? this.accentColorHex : $r('app.color.on_surface'))
           }
           .width('100%')
           .padding({ left: 12, right: 12 })
@@ -6199,7 +9111,7 @@ export struct TopicDetailPage {
       })
     }
     .width(200)
-    .backgroundColor($r('app.color.search_bar_background'))
+    .backgroundColor(this.accentSurfaceVariantColorHex)
     .borderRadius(12)
     .shadow({ radius: 10, color: this.getMenuShadowColor(), offsetX: 0, offsetY: 6 })
   }
@@ -6268,7 +9180,7 @@ export struct TopicDetailPage {
               Text(`${this.timelineSelected}`)
                 .fontSize(48)
                 .fontWeight(FontWeight.Bold)
-                .fontColor($r('app.color.primary'))
+                .fontColor(this.accentColorHex)
               Text(` / ${this.postsCount}`)
                 .fontSize(20)
                 .fontColor($r('app.color.on_surface_tertiary'))
@@ -6282,7 +9194,7 @@ export struct TopicDetailPage {
               .width(32)
               .height(32)
               .borderRadius(16)
-              .backgroundColor($r('app.color.surface_variant'))
+              .backgroundColor(this.accentSurfaceVariantColorHex)
               .justifyContent(FlexAlign.Center)
               .alignItems(HorizontalAlign.Center)
               .margin({ left: 10, top: 18 })
@@ -6297,11 +9209,11 @@ export struct TopicDetailPage {
           Button() {
             Text('定位于此')
               .fontSize(13)
-              .fontColor($r('app.color.primary'))
+              .fontColor(this.accentColorHex)
           }
           .height(36)
           .padding({ left: 16, right: 16 })
-          .backgroundColor($r('app.color.badge_background_light'))
+          .backgroundColor(this.accentSelectedBackgroundColorHex)
           .borderRadius(18)
           .margin({ top: 18 })
           .onClick(() => {
@@ -6351,7 +9263,7 @@ export struct TopicDetailPage {
         }
         .height(40)
         .layoutWeight(1)
-        .backgroundColor($r('app.color.surface_variant'))
+        .backgroundColor(this.accentSurfaceVariantColorHex)
         .borderRadius(20)
         .onClick(() => {
           this.isTimelineSheetVisible = false;
@@ -6366,7 +9278,7 @@ export struct TopicDetailPage {
         }
         .height(40)
         .layoutWeight(1)
-        .backgroundColor($r('app.color.primary'))
+        .backgroundColor(this.accentColorHex)
         .borderRadius(20)
         .onClick(() => {
           this.confirmTimelineJump();
@@ -6377,7 +9289,7 @@ export struct TopicDetailPage {
       .alignItems(VerticalAlign.Center)
     }
     .width('100%')
-    .backgroundColor($r('app.color.surface'))
+    .backgroundColor(this.accentSurfaceColorHex)
   }
 
   @Builder
@@ -6433,7 +9345,7 @@ export struct TopicDetailPage {
           }
           .height(36)
           .padding({ left: 18, right: 18 })
-          .backgroundColor($r('app.color.primary'))
+          .backgroundColor(this.accentColorHex)
           .borderRadius(18)
           .margin({ top: 14 })
           .onClick(() => {
@@ -6452,14 +9364,14 @@ export struct TopicDetailPage {
               .height(420)
               .objectFit(ImageFit.Contain)
               .borderRadius(12)
-              .backgroundColor($r('app.color.surface_variant'))
+              .backgroundColor(this.accentSurfaceVariantColorHex)
           } else {
             Image(this.shareImageFileUri)
               .width('100%')
               .height(420)
               .objectFit(ImageFit.Contain)
               .borderRadius(12)
-              .backgroundColor($r('app.color.surface_variant'))
+              .backgroundColor(this.accentSurfaceVariantColorHex)
           }
         }
         .width('100%')
@@ -6479,7 +9391,7 @@ export struct TopicDetailPage {
               if (this.shareImageThemeIndex === idx) {
                 SymbolGlyph($r('sys.symbol.checkmark'))
                   .fontSize(16)
-                  .fontColor([idx === 3 ? Color.White : $r('app.color.primary')])
+                  .fontColor([idx === 3 ? Color.White : this.accentColorHex])
               }
             }
             .width(30)
@@ -6521,7 +9433,7 @@ export struct TopicDetailPage {
         }
         .height(44)
         .layoutWeight(1)
-        .backgroundColor($r('app.color.surface_variant'))
+        .backgroundColor(this.accentSurfaceVariantColorHex)
         .borderRadius(22)
         .enabled(!this.shareImageLoading && this.shareImageErrorMessage.length === 0)
         .onClick(() => {
@@ -6544,7 +9456,7 @@ export struct TopicDetailPage {
         }
         .height(44)
         .layoutWeight(1)
-        .backgroundColor($r('app.color.primary'))
+        .backgroundColor(this.accentColorHex)
         .borderRadius(22)
         .enabled(!this.shareImageLoading && this.shareImageErrorMessage.length === 0)
         .onClick(() => {
@@ -6560,7 +9472,7 @@ export struct TopicDetailPage {
       .alignItems(VerticalAlign.Center)
     }
     .width('100%')
-    .backgroundColor($r('app.color.surface'))
+    .backgroundColor(this.accentSurfaceColorHex)
   }
 
   @Builder
@@ -6569,19 +9481,19 @@ export struct TopicDetailPage {
       if (selected) {
         SymbolGlyph($r('sys.symbol.checkmark'))
           .fontSize(14)
-          .fontColor([$r('app.color.primary')])
+          .fontColor([this.accentColorHex])
           .margin({ right: 6 })
       }
       Text(title)
         .fontSize(14)
         .fontWeight(selected ? FontWeight.Bold : FontWeight.Medium)
-        .fontColor(selected ? $r('app.color.primary') : $r('app.color.on_surface_secondary'))
+        .fontColor(selected ? this.accentColorHex : $r('app.color.on_surface_secondary'))
     }
     .layoutWeight(1)
     .height(36)
     .justifyContent(FlexAlign.Center)
     .alignItems(VerticalAlign.Center)
-    .backgroundColor(selected ? $r('app.color.badge_background_light') : Color.Transparent)
+    .backgroundColor(selected ? this.accentSelectedBackgroundColorHex : Color.Transparent)
     .borderRadius(18)
     .onClick(() => {
       onSelect();
@@ -6655,7 +9567,7 @@ export struct TopicDetailPage {
         Text(this.getNotificationLevelLabel(level))
           .fontSize(16)
           .fontWeight(this.notificationLevel === level ? FontWeight.Bold : FontWeight.Medium)
-          .fontColor(this.notificationLevel === level ? $r('app.color.primary') : $r('app.color.on_surface'))
+          .fontColor(this.notificationLevel === level ? this.accentColorHex : $r('app.color.on_surface'))
 
         Text(this.getTopicNotificationLevelDescription(level))
           .fontSize(12)
@@ -6668,12 +9580,12 @@ export struct TopicDetailPage {
       if (this.notificationLevel === level) {
         SymbolGlyph($r('sys.symbol.checkmark'))
           .fontSize(18)
-          .fontColor([$r('app.color.primary')])
+          .fontColor([this.accentColorHex])
       }
     }
     .width('100%')
     .padding({ left: 18, right: 18, top: 14, bottom: 14 })
-    .backgroundColor(this.notificationLevel === level ? $r('app.color.badge_background_light') : $r('app.color.surface'))
+    .backgroundColor(this.notificationLevel === level ? this.accentSelectedBackgroundColorHex : $r('app.color.surface'))
     .borderRadius(14)
     .alignItems(VerticalAlign.Center)
     .enabled(!this.isTopicNotificationMutating)
@@ -6823,7 +9735,7 @@ export struct TopicDetailPage {
     }
     .width('100%')
     .padding({ top: 8 })
-    .backgroundColor($r('app.color.surface'))
+    .backgroundColor(this.accentSurfaceColorHex)
   }
 
   @Builder
@@ -6891,7 +9803,7 @@ export struct TopicDetailPage {
         }
         .width('100%')
         .padding(2)
-        .backgroundColor($r('app.color.surface_variant'))
+        .backgroundColor(this.accentSurfaceVariantColorHex)
         .borderRadius(20)
       }
       .width('100%')
@@ -6914,7 +9826,7 @@ export struct TopicDetailPage {
         }
         .width('100%')
         .padding(2)
-        .backgroundColor($r('app.color.surface_variant'))
+        .backgroundColor(this.accentSurfaceVariantColorHex)
         .borderRadius(20)
       }
       .width('100%')
@@ -6944,7 +9856,7 @@ export struct TopicDetailPage {
       .height(52)
       .margin({ top: 18 })
       .padding({ left: 16, right: 16 })
-      .backgroundColor($r('app.color.primary'))
+      .backgroundColor(this.accentColorHex)
       .borderRadius(26)
       .enabled(!this.exportLoading)
       .onClick(() => {
@@ -6954,7 +9866,7 @@ export struct TopicDetailPage {
       Blank().height(16 + WindowManager.getSystemAvoidAreaBottomVp())
     }
     .width('100%')
-    .backgroundColor($r('app.color.surface'))
+    .backgroundColor(this.accentSurfaceColorHex)
   }
 
   @Builder
@@ -6967,7 +9879,7 @@ export struct TopicDetailPage {
           }
           .width('100%')
           .height('100%')
-          .backgroundColor($r('app.color.badge_background_light'))
+          .backgroundColor(this.accentSelectedBackgroundColorHex)
           .opacity(this.highlightOpacity)
         }
 
@@ -6993,7 +9905,7 @@ export struct TopicDetailPage {
               Text(post.name !== null && post.name.length > 0 ? post.name : post.username)
                 .fontSize(14)
                 .fontWeight(FontWeight.Bold)
-                .fontColor((post.moderator || post.admin) ? $r('app.color.primary') : $r('app.color.on_surface'))
+                .fontColor((post.moderator || post.admin) ? this.accentColorHex : $r('app.color.on_surface'))
                 .maxLines(1)
                 .textOverflow({ overflow: TextOverflow.Ellipsis })
 
@@ -7013,9 +9925,9 @@ export struct TopicDetailPage {
                 Text('主')
                   .fontSize(10)
                   .fontWeight(FontWeight.Medium)
-                  .fontColor($r('app.color.primary'))
+                  .fontColor(this.accentColorHex)
                   .padding({ left: 6, right: 6, top: 2, bottom: 2 })
-                  .backgroundColor($r('app.color.badge_background_light'))
+                  .backgroundColor(this.accentSelectedBackgroundColorHex)
                   .borderRadius(6)
                   .margin({ left: 6 })
               }
@@ -7023,7 +9935,7 @@ export struct TopicDetailPage {
               if (post.moderator || post.admin || post.groupModerator) {
                 SymbolGlyph($r('sys.symbol.security_shield'))
                   .fontSize(12)
-                  .fontColor([$r('app.color.primary')])
+                  .fontColor([this.accentColorHex])
                   .margin({ left: 4 })
               }
             }
@@ -7054,7 +9966,7 @@ export struct TopicDetailPage {
                 } else {
                   Text(`${post.userTitle as string}`)
                     .fontSize(11)
-                    .fontColor($r('app.color.primary'))
+                    .fontColor(this.accentColorHex)
                     .maxLines(1)
                     .textOverflow({ overflow: TextOverflow.Ellipsis })
                     .margin({ left: 6 })
@@ -7092,7 +10004,7 @@ export struct TopicDetailPage {
               Row() {
                 SymbolGlyph($r('sys.symbol.arrowshape_turn_up_left'))
                   .fontSize(14)
-                  .fontColor([$r('app.color.primary')])
+                  .fontColor([this.accentColorHex])
                   .margin({ right: 6 })
 
                 if (this.getReplyTargetAvatarUrl(post, 40).length > 0 || this.getReplyTargetUsername(post).length > 0) {
@@ -7107,13 +10019,13 @@ export struct TopicDetailPage {
                   Text(`#${post.replyToPostNumber}`)
                     .fontSize(11)
                     .fontWeight(FontWeight.Medium)
-                    .fontColor($r('app.color.primary'))
+                    .fontColor(this.accentColorHex)
                 }
               }
               .padding({ left: 10, right: 10, top: 6, bottom: 6 })
-              .backgroundColor($r('app.color.badge_background_light'))
+              .backgroundColor(this.accentSelectedBackgroundColorHex)
               .borderRadius(20)
-              .border({ width: 1, color: $r('app.color.primary') })
+              .border({ width: 1, color: this.accentColorHex })
               .onClick(() => {
                 this.jumpToPostNumber(post.replyToPostNumber);
               })
@@ -7130,7 +10042,7 @@ export struct TopicDetailPage {
                   Circle()
                     .width(6)
                     .height(6)
-                    .fill($r('app.color.primary'))
+                    .fill(this.accentColorHex)
                     .border({ width: 1, color: $r('app.color.surface') })
                     .margin({ top: -2, right: -6 })
                     .opacity(this.unreadDotBlinkOpacity)
@@ -7207,26 +10119,26 @@ export struct TopicDetailPage {
         // 底部操作行
         Row() {
           // 左侧：楼层回复数，只要 reply_count>0 就显示；首贴也可能存在真正的定向回复
-          if (post.replyCount > 0) {
+          if (post.replyCount > 0 && !this.isNestedView) {
             Row() {
               SymbolGlyph($r('sys.symbol.message'))
                 .fontSize(15)
-                .fontColor([(this.expandedRepliesPostNumber === post.postNumber) ? $r('app.color.primary') : $r('app.color.on_surface_secondary')])
+                .fontColor([(this.expandedRepliesPostNumber === post.postNumber) ? this.accentColorHex : $r('app.color.on_surface_secondary')])
               Text(` ${post.replyCount}`)
                 .fontSize(12)
                 .fontWeight(FontWeight.Bold)
-                .fontColor((this.expandedRepliesPostNumber === post.postNumber) ? $r('app.color.primary') : $r('app.color.on_surface_secondary'))
+                .fontColor((this.expandedRepliesPostNumber === post.postNumber) ? this.accentColorHex : $r('app.color.on_surface_secondary'))
               SymbolGlyph($r('sys.symbol.chevron_down'))
                 .fontSize(18)
-                .fontColor([(this.expandedRepliesPostNumber === post.postNumber) ? $r('app.color.primary') : $r('app.color.on_surface_secondary')])
+                .fontColor([(this.expandedRepliesPostNumber === post.postNumber) ? this.accentColorHex : $r('app.color.on_surface_secondary')])
                 .rotate({ angle: (this.expandedRepliesPostNumber === post.postNumber) ? 180 : 0 })
                 .margin({ left: 2 })
             }
             .height(36)
             .padding({ left: 12, right: 12 })
-            .backgroundColor((this.expandedRepliesPostNumber === post.postNumber) ? $r('app.color.badge_background_light') : $r('app.color.surface_variant'))
+            .backgroundColor((this.expandedRepliesPostNumber === post.postNumber) ? this.accentSelectedBackgroundColorHex : this.accentSurfaceVariantColorHex)
             .borderRadius(18)
-            .border({ width: (this.expandedRepliesPostNumber === post.postNumber) ? 1 : 0, color: $r('app.color.primary') })
+            .border({ width: (this.expandedRepliesPostNumber === post.postNumber) ? 1 : 0, color: this.accentColorHex })
             .onClick(() => {
               this.toggleReplies(post);
             })
@@ -7238,6 +10150,10 @@ export struct TopicDetailPage {
             this.PostReactionSection(post)
           }
 
+          if (this.getPostBoostCount(post) === 0 && this.shouldShowBoostRocket(post)) {
+            this.BoostRocketButton(post, false)
+          }
+
           // 右侧：更多
           Column() {
             SymbolGlyph($r('sys.symbol.ellipsis_circle'))
@@ -7247,7 +10163,7 @@ export struct TopicDetailPage {
           .width(36)
           .height(36)
           .borderRadius(18)
-          .backgroundColor($r('app.color.surface_variant'))
+          .backgroundColor(this.accentSurfaceVariantColorHex)
           .justifyContent(FlexAlign.Center)
           .alignItems(HorizontalAlign.Center)
           .bindMenu(this.PostMoreMenuBuilder(post))
@@ -7256,15 +10172,17 @@ export struct TopicDetailPage {
         .margin({ top: 12 })
         .alignItems(VerticalAlign.Center)
 
+        this.PostBoostsSection(post)
+
         // 折叠回复列表（从帖子流中找 reply_to_post_number 指向当前楼层的帖子）
-        if (post.replyCount > 0 && this.expandedRepliesPostNumber === post.postNumber) {
+        if (post.replyCount > 0 && !this.isNestedView && this.expandedRepliesPostNumber === post.postNumber) {
             Column() {
               Row() {
                 Rect()
                   .width(3)
                   .height(16)
                   .radius(2)
-                  .fill($r('app.color.primary'))
+                  .fill(this.accentColorHex)
                   .margin({ right: 8 })
                 Text(`${post.replyCount} 条回复`)
                   .fontSize(14)
@@ -7295,7 +10213,7 @@ export struct TopicDetailPage {
                 }
                 .height(32)
                 .padding({ left: 12, right: 12 })
-                .backgroundColor($r('app.color.primary'))
+                .backgroundColor(this.accentColorHex)
                 .borderRadius(16)
                 .margin({ top: 10 })
                 .onClick(() => {
@@ -7367,7 +10285,7 @@ export struct TopicDetailPage {
                 }
                 .width('100%')
                 .padding(12)
-                .backgroundColor($r('app.color.surface_variant'))
+                .backgroundColor(this.accentSurfaceVariantColorHex)
                 .borderRadius(12)
                 .margin({ top: 10 })
                 .onClick(() => {
@@ -7413,7 +10331,7 @@ export struct TopicDetailPage {
         }
       }
       .width('100%')
-      .backgroundColor($r('app.color.surface'))
+      .backgroundColor(this.accentSurfaceColorHex)
 
       Divider()
         .color($r('app.color.divider_light'))
@@ -7465,12 +10383,12 @@ export struct TopicDetailPage {
         Column() {
           SymbolGlyph(this.getActionSymbol(post.actionCode))
             .fontSize(16)
-            .fontColor([$r('app.color.primary')])
+            .fontColor([this.accentColorHex])
         }
         .width(32)
         .height(32)
         .borderRadius(16)
-        .backgroundColor($r('app.color.badge_background_light'))
+        .backgroundColor(this.accentSelectedBackgroundColorHex)
         .justifyContent(FlexAlign.Center)
         .alignItems(HorizontalAlign.Center)
         .margin({ right: 12 })
@@ -7508,7 +10426,7 @@ export struct TopicDetailPage {
         .strokeWidth(0.5)
     }
     .width('100%')
-    .backgroundColor($r('app.color.surface'))
+    .backgroundColor(this.accentSurfaceColorHex)
   }
 
   @Builder

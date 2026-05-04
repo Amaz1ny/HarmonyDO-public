@@ -28,7 +28,7 @@ export function buildOpenSourceSections(): OpenSourceInfoSection[] {
         },
         {
           title: '致谢',
-          subtitle: '灵感来自 FluxDO，感谢 Linux.do 社区与开源作者',
+          subtitle: '感谢 Linux.do 社区与开源生态',
           actionType: OpenSourceItemActionType.None,
           url: ''
         }

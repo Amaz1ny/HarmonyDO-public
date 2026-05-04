@@ -17,6 +17,7 @@ import { PostRichContent } from './PostRichContent';
 import { Emoji } from '../../models/Emoji';
 import { ComposerImageUploadService } from '../../common/utils/ComposerImageUploadService';
 import { FeatureSettingsService } from '../../services/storage/FeatureSettingsService';
+import { ModalChromeHelper } from './ModalChromeHelper';
 
 @ComponentV2
 export struct ReplyComposerSheet {
@@ -659,7 +660,8 @@ export struct ReplyComposerSheet {
         }
         .width('100%')
         .height('100%')
-        .backgroundColor('#66000000')
+        .backgroundColor(ModalChromeHelper.getMaskColor())
+        .backgroundBlurStyle(ModalChromeHelper.getDialogBlurStyle())
         .onClick(() => {
           this.cancelDiscardDraft();
         })
@@ -682,7 +684,7 @@ export struct ReplyComposerSheet {
               .type(ButtonType.Capsule)
               .layoutWeight(1)
               .height(44)
-              .backgroundColor($r('app.color.surface_variant'))
+              .backgroundColor(ThemeManager.getCurrentAccentSurfaceVariantColorHex())
               .fontColor($r('app.color.on_surface_secondary'))
               .onClick(() => {
                 this.cancelDiscardDraft();
@@ -706,7 +708,8 @@ export struct ReplyComposerSheet {
         }
         .width('88%')
         .padding({ left: 20, right: 20, top: 22, bottom: 20 })
-        .backgroundColor($r('app.color.surface'))
+        .backgroundColor(ModalChromeHelper.getDialogBackgroundColor())
+        .backgroundBlurStyle(ModalChromeHelper.getDialogBlurStyle())
         .borderRadius(24)
       }
       .width('100%')
@@ -763,7 +766,7 @@ export struct ReplyComposerSheet {
             .type(ButtonType.Capsule)
             .height(40)
             .enabled(!this.isSubmitting)
-            .backgroundColor($r('app.color.primary'))
+            .backgroundColor(ThemeManager.getCurrentAccentColorHex())
             .fontColor(Color.White)
             .margin({ left: 8 })
             .onClick(() => {
@@ -798,7 +801,7 @@ export struct ReplyComposerSheet {
       }
       .width('100%')
       .height('100%')
-      .backgroundColor($r('app.color.surface'))
+      .backgroundColor(ThemeManager.getCurrentAccentSurfaceColorHex())
 
       if (this.isEmojiPanelVisible && !this.isPreview) {
         Column() {
@@ -814,7 +817,7 @@ export struct ReplyComposerSheet {
         }
         .width('100%')
         .margin({ bottom: this.getToolbarHeight() })
-        .backgroundColor($r('app.color.surface'))
+        .backgroundColor(ThemeManager.getCurrentAccentSurfaceColorHex())
       }
 
       Column() {
@@ -858,7 +861,7 @@ export struct ReplyComposerSheet {
       }
       .width('100%')
       .padding({ bottom: WindowManager.getSystemAvoidAreaBottomVp() })
-      .backgroundColor($r('app.color.surface'))
+      .backgroundColor(ThemeManager.getCurrentAccentSurfaceColorHex())
 
       if (this.isLoadingDraft) {
         Column() {
@@ -879,6 +882,6 @@ export struct ReplyComposerSheet {
     }
     .width('100%')
     .height('100%')
-    .backgroundColor($r('app.color.surface'))
+    .backgroundColor(ThemeManager.getCurrentAccentSurfaceColorHex())
   }
 }

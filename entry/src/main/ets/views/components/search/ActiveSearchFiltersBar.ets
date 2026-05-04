@@ -1,4 +1,5 @@
 import { SearchFilter, SearchStatus } from '../../../models/SearchFilter';
+import { ThemeManager } from '../../../common/theme/ThemeManager';
 
 const CHIP_HEIGHT: number = 30;
 
@@ -83,7 +84,7 @@ export struct ActiveSearchFiltersBar {
     }
     .height(CHIP_HEIGHT)
     .padding({ left: 10, right: 10 })
-    .backgroundColor($r('app.color.search_bar_background'))
+    .backgroundColor(ThemeManager.getCurrentAccentSurfaceVariantColorHex())
     .borderRadius(8)
     .margin({ right: 8 })
     .alignItems(VerticalAlign.Center)

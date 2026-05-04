@@ -1,4 +1,5 @@
 import { LinkCount } from '../../models/Post';
+import { ThemeManager } from '../../common/theme/ThemeManager';
 
 const MAX_COLLAPSED_LINKS: number = 5;
 
@@ -67,13 +68,13 @@ export struct PostLinks {
           Row() {
             SymbolGlyph($r('sys.symbol.link'))
               .fontSize(16)
-              .fontColor([$r('app.color.primary')])
+              .fontColor([ThemeManager.getCurrentAccentColorHex()])
               .margin({ right: 8 })
 
             Text('相关链接')
               .fontSize(13)
               .fontWeight(FontWeight.Bold)
-              .fontColor($r('app.color.primary'))
+              .fontColor(ThemeManager.getCurrentAccentColorHex())
 
             Blank().width(6)
 
@@ -81,10 +82,10 @@ export struct PostLinks {
               Text(`${this.getInternalLinks().length}`)
                 .fontSize(11)
                 .fontWeight(FontWeight.Bold)
-                .fontColor($r('app.color.primary'))
+                .fontColor(ThemeManager.getCurrentAccentColorHex())
             }
             .padding({ left: 6, right: 6, top: 1, bottom: 1 })
-            .backgroundColor($r('app.color.badge_background_light'))
+            .backgroundColor(ThemeManager.getCurrentAccentSelectedBackgroundColorHex())
             .borderRadius(8)
 
             Blank().layoutWeight(1)
@@ -119,7 +120,7 @@ export struct PostLinks {
 
                   Text(l.title !== null && (l.title as string).trim().length > 0 ? (l.title as string) : l.url)
                     .fontSize(13)
-                    .fontColor($r('app.color.primary'))
+                    .fontColor(ThemeManager.getCurrentAccentColorHex())
                     .maxLines(2)
                     .textOverflow({ overflow: TextOverflow.Ellipsis })
                     .layoutWeight(1)
@@ -131,7 +132,7 @@ export struct PostLinks {
                         .fontColor($r('app.color.on_surface_secondary'))
                     }
                     .padding({ left: 6, right: 6, top: 2, bottom: 2 })
-                    .backgroundColor($r('app.color.surface'))
+                    .backgroundColor(ThemeManager.getCurrentAccentSurfaceColorHex())
                     .borderRadius(8)
                     .margin({ left: 8 })
                   }
@@ -156,11 +157,11 @@ export struct PostLinks {
                 Row() {
                   SymbolGlyph($r('sys.symbol.ellipsis_circle'))
                     .fontSize(16)
-                    .fontColor([$r('app.color.primary')])
+                    .fontColor([ThemeManager.getCurrentAccentColorHex()])
                     .margin({ right: 6 })
                   Text(`还有 ${this.remainingCount(this.getInternalLinks())} 条`)
                     .fontSize(13)
-                    .fontColor($r('app.color.primary'))
+                    .fontColor(ThemeManager.getCurrentAccentColorHex())
                 }
                 .width('100%')
                 .justifyContent(FlexAlign.Center)
@@ -175,7 +176,7 @@ export struct PostLinks {
           }
         }
         .width('100%')
-        .backgroundColor($r('app.color.surface_variant'))
+        .backgroundColor(ThemeManager.getCurrentAccentSurfaceVariantColorHex())
         .border({ width: 0.5, color: $r('app.color.divider_light') })
         .borderRadius(12)
         .margin({ top: 16 })

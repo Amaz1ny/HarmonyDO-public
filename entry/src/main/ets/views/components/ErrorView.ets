@@ -1,3 +1,4 @@
+import { ThemeManager } from '../../common/theme/ThemeManager';
 /**
  * 错误视图组件
  *
@@ -53,7 +54,7 @@ export struct ErrorView {
                 .fontColor(Color.White)
             }
           }
-          .backgroundColor($r('app.color.primary'))
+          .backgroundColor(ThemeManager.getCurrentAccentColorHex())
           .borderRadius(20)
           .height(40)
           .padding({ left: 20, right: 20 })

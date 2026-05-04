@@ -1,6 +1,7 @@
 import { Emoji } from '../../models/Emoji';
 import { ComposerEmojiPanel } from './ComposerEmojiPanel';
 import { ComposerStickerPanel } from './ComposerStickerPanel';
+import { ThemeManager } from '../../common/theme/ThemeManager';
 
 type ComposerPanelTabKey = 'emoji' | 'sticker';
 
@@ -39,12 +40,12 @@ export struct ComposerEmojiStickerPanel {
       Text(label)
         .fontSize(13)
         .fontWeight(this.selectedTabKey === key ? FontWeight.Medium : FontWeight.Regular)
-        .fontColor(this.selectedTabKey === key ? $r('app.color.primary') : $r('app.color.on_surface_secondary'))
+        .fontColor(this.selectedTabKey === key ? ThemeManager.getCurrentAccentColorHex() : $r('app.color.on_surface_secondary'))
     }
     .padding({ left: 16, right: 16, top: 9, bottom: 9 })
     .backgroundColor(this.selectedTabKey === key
-      ? $r('app.color.badge_background_light')
-      : $r('app.color.surface_variant'))
+      ? ThemeManager.getCurrentAccentSelectedBackgroundColorHex()
+      : ThemeManager.getCurrentAccentSurfaceVariantColorHex())
     .borderRadius(18)
     .onClick(() => {
       this.selectedTabKey = key;
@@ -84,6 +85,6 @@ export struct ComposerEmojiStickerPanel {
     }
     .width('100%')
     .height(this.panelHeight)
-    .backgroundColor($r('app.color.surface'))
+    .backgroundColor(ThemeManager.getCurrentAccentSurfaceColorHex())
   }
 }

@@ -1,4 +1,5 @@
 import { Category } from '../../models/Category';
+import { ThemeManager } from '../../common/theme/ThemeManager';
 
 /**
  * 话题/分类/标签的徽章与图标映射
@@ -201,16 +202,16 @@ export class BadgeIconUtils {
   }
 
   /**
-   * 标签名 -> 颜色（尽量用资源色；未知退回 on_surface_secondary）
+   * 标签名 -> 颜色（主题类标签跟随外观主题色；未知退回 on_surface_secondary）
    */
-  static getTagColor(tagName: string): Resource {
+  static getTagColor(tagName: string): ResourceColor {
     const key: string = tagName.trim();
     switch (key) {
       case '公告':
       case '精华神帖':
       case '碎碎碎念':
       case '优质博文':
-        return $r('app.color.primary');
+        return ThemeManager.getCurrentAccentColorHex();
       case '快问快答':
       case '软件开发':
       case '配置优化':
@@ -256,7 +257,7 @@ export struct TagBadge {
   @Param radius: number | Resource = $r('app.float.tag_radius');
   @Param paddingH: number = 6;
   @Param paddingV: number = 3;
-  @Param bgColor: Resource | Color = $r('app.color.tag_background');
+  @Param bgColor: ResourceColor = $r('app.color.tag_background');
 
   build() {
     Row() {

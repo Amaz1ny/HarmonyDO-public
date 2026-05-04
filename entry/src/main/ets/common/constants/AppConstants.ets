@@ -43,10 +43,10 @@ export class AppConstants {
   static readonly APP_NAME: string = 'LDO社区';
 
   /** 源代码仓库 */
-  static readonly SOURCE_CODE_URL: string = 'https://github.com/Amaz1ny/HarmonyDO-public';
+  static readonly SOURCE_CODE_URL: string = 'https://github.com/Amaz1ny/HarmonyDo';
 
   /** 问题反馈地址 */
-  static readonly ISSUES_URL: string = 'https://github.com/Amaz1ny/HarmonyDO-public/issues';
+  static readonly ISSUES_URL: string = 'https://github.com/Amaz1ny/HarmonyDo/issues';
 
   /** User-Agent */
   static readonly USER_AGENT: string =

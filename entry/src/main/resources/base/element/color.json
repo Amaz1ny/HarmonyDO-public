@@ -2,7 +2,7 @@
   "color": [
     {
       "name": "start_window_background",
-      "value": "#FFFFFF"
+      "value": "#F5F5F5"
     },
     {
       "name": "primary",
@@ -307,6 +307,18 @@
     {
       "name": "panel_background",
       "value": "#F0F0F5"
+    },
+    {
+      "name": "modal_glass_surface",
+      "value": "#99FFFFFF"
+    },
+    {
+      "name": "modal_glass_mask",
+      "value": "#22000000"
+    },
+    {
+      "name": "modal_plain_mask",
+      "value": "#00000000"
     },
     {
       "name": "surface_variant",

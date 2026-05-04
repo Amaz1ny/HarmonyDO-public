@@ -7,6 +7,7 @@ import { CfClearanceRefreshService } from '../services/network/CfClearanceRefres
 import { AppContext } from '../common/utils/AppContext';
 import { AppLogService } from '../common/utils/AppLogService';
 import { FeatureSettingsService } from '../services/storage/FeatureSettingsService';
+import { AppearanceSettingsService } from '../services/storage/AppearanceSettingsService';
 import { fileIo } from '@kit.CoreFileKit';
 
 const DOMAIN = 0x0000;
@@ -29,6 +30,9 @@ export default class EntryAbility extends UIAbility {
       AppContext.setUIAbilityContext(this.context as common.UIAbilityContext);
     } catch (_) {
     }
+    AppearanceSettingsService.getInstance().replayThemeModePreference().catch((err: Object) => {
+      hilog.error(DOMAIN, 'testTag', 'Replay appearance theme mode failed. Cause: %{public}s', JSON.stringify(err));
+    });
     AppLogService.getInstance().info('lifecycle', 'ability onCreate', 'EntryAbility');
     this.clearCacheOnExitIfNeeded();
   }

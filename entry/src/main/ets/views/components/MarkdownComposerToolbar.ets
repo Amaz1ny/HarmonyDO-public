@@ -1,3 +1,5 @@
+import { ThemeManager } from '../../common/theme/ThemeManager';
+
 @ComponentV2
 export struct MarkdownComposerToolbar {
   @Param isPreview: boolean = false;
@@ -39,13 +41,14 @@ export struct MarkdownComposerToolbar {
     Row() {
       SymbolGlyph(symbol)
         .fontSize(20)
-        .fontColor([active ? $r('app.color.primary') : $r('app.color.on_surface_secondary')])
+        .fontColor([active ? ThemeManager.getCurrentAccentColorHex() : $r('app.color.on_surface_secondary')])
     }
     .width(44)
     .height(44)
     .justifyContent(FlexAlign.Center)
     .alignItems(VerticalAlign.Center)
     .borderRadius(12)
+    .backgroundColor(active ? ThemeManager.getCurrentAccentSelectedBackgroundColorHex() : Color.Transparent)
     .onClick(() => {
       onTap();
     })
@@ -58,7 +61,7 @@ export struct MarkdownComposerToolbar {
         Text(this.imageUploadProgressLabel)
           .fontSize(11)
           .fontWeight(FontWeight.Medium)
-          .fontColor($r('app.color.primary'))
+          .fontColor(ThemeManager.getCurrentAccentColorHex())
       } else if (this.isImageUploading) {
         LoadingProgress()
           .width(18)
@@ -130,7 +133,7 @@ export struct MarkdownComposerToolbar {
     .height(56)
     .padding({ left: 8, right: 8 })
     .alignItems(VerticalAlign.Center)
-    .backgroundColor($r('app.color.surface'))
+    .backgroundColor(ThemeManager.getCurrentAccentSurfaceColorHex())
     .border({ width: { top: 0.5 }, color: $r('app.color.divider_light') })
   }
 }

@@ -7,6 +7,8 @@ import { PreferencesUtil } from '../../services/storage/PreferencesUtil';
 import { CookieStore, CookieRecord } from '../../services/network/CookieStore';
 import { AuthService } from '../../services/auth/AuthService';
 import { ImmersiveHdsTitleBarHelper } from '../components/ImmersiveHdsTitleBarHelper';
+import { ModalChromeHelper } from '../components/ModalChromeHelper';
+import { ThemeManager } from '../../common/theme/ThemeManager';
 
 const TAG: string = 'DataManagementPage';
 const PAGE_HORIZONTAL_PADDING: number = 16;
@@ -176,6 +178,8 @@ export struct DataManagementPage {
     AlertDialog.show({
       title: title,
       message: message,
+      backgroundColor: ModalChromeHelper.getDialogBackgroundColor(),
+      backgroundBlurStyle: ModalChromeHelper.getDialogBlurStyle(),
       primaryButton: {
         value: $r('app.string.dm_confirm_cancel'),
         action: () => {}
@@ -373,7 +377,7 @@ export struct DataManagementPage {
               );
             }
             .width('100%')
-            .backgroundColor($r('app.color.card_background'))
+            .backgroundColor(ThemeManager.getCurrentAccentSurfaceColorHex())
             .borderRadius(CARD_CORNER_RADIUS)
             .border({ width: 1, color: $r('app.color.divider_light') });
 
@@ -392,7 +396,7 @@ export struct DataManagementPage {
               );
             }
             .width('100%')
-            .backgroundColor($r('app.color.card_background'))
+            .backgroundColor(ThemeManager.getCurrentAccentSurfaceColorHex())
             .borderRadius(CARD_CORNER_RADIUS)
             .border({ width: 1, color: $r('app.color.divider_light') });
 
@@ -408,7 +412,7 @@ export struct DataManagementPage {
             .margin({ top: 24 })
             .justifyContent(FlexAlign.Center)
             .alignItems(VerticalAlign.Center)
-            .backgroundColor($r('app.color.card_background'))
+            .backgroundColor(ThemeManager.getCurrentAccentSurfaceColorHex())
             .borderRadius(CARD_CORNER_RADIUS)
             .border({ width: 1, color: $r('app.color.divider_light') })
             .onClick(() => {
@@ -429,7 +433,9 @@ export struct DataManagementPage {
               .width('100%');
           }
           .width('100%')
+          .constraintSize({ minHeight: '100%' })
           .padding({ left: PAGE_HORIZONTAL_PADDING, right: PAGE_HORIZONTAL_PADDING, top: 4, bottom: 40 })
+          .justifyContent(FlexAlign.Start)
           .alignItems(HorizontalAlign.Start);
         }
         .width('100%')
@@ -437,7 +443,8 @@ export struct DataManagementPage {
       }
       .width('100%')
       .height('100%')
-      .backgroundColor($r('app.color.background'));
+      .justifyContent(FlexAlign.Start)
+      .backgroundColor(ThemeManager.getCurrentAccentBackgroundColorHex());
     }
     .titleMode(HdsNavDestinationTitleMode.MINI)
     .titleBar(ImmersiveHdsTitleBarHelper.buildImmersiveTitleBar($r('app.string.dm_page_title')))
@@ -450,6 +457,6 @@ export struct DataManagementPage {
       { statusBarContentColor: ImmersiveHdsTitleBarHelper.getStatusBarContentColor() },
       { statusBarContentColor: ImmersiveHdsTitleBarHelper.getStatusBarContentColor() }
     )
-    .backgroundColor($r('app.color.background'));
+    .backgroundColor(ThemeManager.getCurrentAccentBackgroundColorHex());
   }
 }

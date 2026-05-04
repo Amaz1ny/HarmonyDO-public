@@ -4,12 +4,16 @@ import { SmartAvatar } from '../SmartAvatar';
 import { TimeUtils } from '../../../common/utils/TimeUtils';
 import { CategoryIcon } from '../CategoryIcon';
 import { TagBadge } from '../TopicBadges';
+import { ThemeManager } from '../../../common/theme/ThemeManager';
 
 @ComponentV2
 export struct SearchPostCard {
   @Param post: SearchPost = new SearchPost();
   @Param category: Category | null = null;
   @Param parentCategory: Category | null = null;
+  @Param accentSurfaceColorHex: string = ThemeManager.getCurrentAccentSurfaceColorHex();
+  @Param accentSurfaceVariantColorHex: string = ThemeManager.getCurrentAccentSurfaceVariantColorHex();
+  @Param themeRevision: number = 0;
   @Event onTap: () => void = () => {};
 
   build() {
@@ -60,7 +64,7 @@ export struct SearchPostCard {
                 .fontWeight(FontWeight.Medium)
             }
             .padding({ left: 6, right: 6, top: 3, bottom: 3 })
-            .backgroundColor($r('app.color.surface_variant'))
+            .backgroundColor(this.accentSurfaceVariantColorHex)
             .borderRadius($r('app.float.border_radius_large'))
             .margin({ left: 8, top: 2 })
           }
@@ -93,7 +97,7 @@ export struct SearchPostCard {
                   paddingH: 7,
                   paddingV: 4,
                   radius: $r('app.float.border_radius_small'),
-                  bgColor: $r('app.color.surface_variant')
+                  bgColor: this.accentSurfaceVariantColorHex
                 })
                   .margin({ right: 6, bottom: 6 })
               }, (tag: string) => tag)
@@ -131,7 +135,7 @@ export struct SearchPostCard {
     .width('100%')
     .padding({ left: 14, right: 14, top: 14, bottom: 14 })
     .alignItems(VerticalAlign.Top)
-    .backgroundColor($r('app.color.card_background'))
+    .backgroundColor(this.accentSurfaceColorHex)
     .borderRadius(18)
     .shadow({ radius: 10, color: '#0A000000', offsetX: 0, offsetY: 4 })
     .onClick(() => {

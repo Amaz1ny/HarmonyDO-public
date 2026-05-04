@@ -2,6 +2,8 @@ import { ApiClient } from '../../services/network/ApiClient';
 import { TimeUtils } from '../../common/utils/TimeUtils';
 import { ToastService } from '../../common/utils/ToastService';
 import { WindowManager } from '../../common/utils/WindowManager';
+import { ModalChromeHelper } from './ModalChromeHelper';
+import { ThemeManager } from '../../common/theme/ThemeManager';
 
 class BookmarkReminderPreset {
   readonly key: number;
@@ -323,7 +325,7 @@ export struct BookmarkEditSheet {
         Row() {
           SymbolGlyph($r('sys.symbol.bookmark_fill'))
             .fontSize(18)
-            .fontColor([$r('app.color.primary')])
+            .fontColor([ThemeManager.getCurrentAccentColorHex()])
 
           Text('编辑书签')
             .fontSize(17)
@@ -362,7 +364,7 @@ export struct BookmarkEditSheet {
         .height(56)
         .padding({ left: 14, right: 14 })
         .margin({ left: 16, right: 16, top: 8 })
-        .backgroundColor($r('app.color.surface_variant'))
+        .backgroundColor(ThemeManager.getCurrentAccentSurfaceVariantColorHex())
         .borderRadius(18)
         .border({ width: 1, color: $r('app.color.input_border') })
         .fontSize(16)
@@ -393,7 +395,7 @@ export struct BookmarkEditSheet {
         Row() {
           SymbolGlyph($r('sys.symbol.alarm'))
             .fontSize(14)
-            .fontColor([$r('app.color.primary')])
+            .fontColor([ThemeManager.getCurrentAccentColorHex()])
 
           Text(TimeUtils.formatDetailTime(this.reminderAt))
             .fontSize(13)
@@ -427,11 +429,11 @@ export struct BookmarkEditSheet {
           Text(preset.label)
             .fontSize(12)
             .fontWeight(this.selectedPresetKey === preset.key ? FontWeight.Medium : FontWeight.Normal)
-            .fontColor(this.selectedPresetKey === preset.key ? $r('app.color.primary') : $r('app.color.on_surface_secondary'))
+            .fontColor(this.selectedPresetKey === preset.key ? ThemeManager.getCurrentAccentColorHex() : $r('app.color.on_surface_secondary'))
             .padding({ left: 12, right: 12, top: 7, bottom: 7 })
             .backgroundColor(this.selectedPresetKey === preset.key
-              ? $r('app.color.badge_background_light')
-              : $r('app.color.surface_variant'))
+              ? ThemeManager.getCurrentAccentSelectedBackgroundColorHex()
+              : ThemeManager.getCurrentAccentSurfaceVariantColorHex())
             .borderRadius(12)
             .margin({ right: 8, bottom: 8 })
             .onClick(() => {
@@ -443,12 +445,12 @@ export struct BookmarkEditSheet {
           .fontSize(12)
           .fontWeight(this.selectedPresetKey === BookmarkReminderPreset.CUSTOM.key ? FontWeight.Medium : FontWeight.Normal)
           .fontColor(this.selectedPresetKey === BookmarkReminderPreset.CUSTOM.key
-            ? $r('app.color.primary')
+            ? ThemeManager.getCurrentAccentColorHex()
             : $r('app.color.on_surface_secondary'))
           .padding({ left: 12, right: 12, top: 7, bottom: 7 })
           .backgroundColor(this.selectedPresetKey === BookmarkReminderPreset.CUSTOM.key
-            ? $r('app.color.badge_background_light')
-            : $r('app.color.surface_variant'))
+            ? ThemeManager.getCurrentAccentSelectedBackgroundColorHex()
+            : ThemeManager.getCurrentAccentSurfaceVariantColorHex())
           .borderRadius(12)
           .margin({ right: 8, bottom: 8 })
           .onClick(() => {
@@ -470,7 +472,7 @@ export struct BookmarkEditSheet {
             Text(`${this.formatPickerDateLabel()} ${this.formatPickerTimeLabel()}`)
               .fontSize(13)
               .fontWeight(FontWeight.Medium)
-              .fontColor($r('app.color.primary'))
+              .fontColor(ThemeManager.getCurrentAccentColorHex())
           }
           .width('100%')
 
@@ -479,8 +481,8 @@ export struct BookmarkEditSheet {
               .type(ButtonType.Capsule)
               .layoutWeight(1)
               .height(40)
-              .backgroundColor($r('app.color.badge_background_light'))
-              .fontColor($r('app.color.primary'))
+              .backgroundColor(ThemeManager.getCurrentAccentSelectedBackgroundColorHex())
+              .fontColor(ThemeManager.getCurrentAccentColorHex())
               .onClick(() => {
                 this.openCustomDateSheet();
               })
@@ -491,8 +493,8 @@ export struct BookmarkEditSheet {
               .type(ButtonType.Capsule)
               .layoutWeight(1)
               .height(40)
-              .backgroundColor($r('app.color.badge_background_light'))
-              .fontColor($r('app.color.primary'))
+              .backgroundColor(ThemeManager.getCurrentAccentSelectedBackgroundColorHex())
+              .fontColor(ThemeManager.getCurrentAccentColorHex())
               .onClick(() => {
                 this.openCustomTimeSheet();
               })
@@ -518,7 +520,7 @@ export struct BookmarkEditSheet {
               .type(ButtonType.Capsule)
               .layoutWeight(1)
               .height(40)
-              .backgroundColor($r('app.color.primary'))
+              .backgroundColor(ThemeManager.getCurrentAccentColorHex())
               .fontColor(Color.White)
               .onClick(() => {
                 this.confirmCustomPicker();
@@ -530,7 +532,7 @@ export struct BookmarkEditSheet {
         .width('100%')
         .margin({ left: 16, right: 16, top: 8 })
         .padding({ left: 14, right: 14, top: 12, bottom: 12 })
-        .backgroundColor($r('app.color.surface_variant'))
+        .backgroundColor(ThemeManager.getCurrentAccentSurfaceVariantColorHex())
         .borderRadius(16)
       }
 
@@ -556,7 +558,7 @@ export struct BookmarkEditSheet {
           .height(44)
           .enabled(!this.isSaving && !this.isDeleting)
           .backgroundColor(Color.Transparent)
-          .fontColor($r('app.color.primary'))
+          .fontColor(ThemeManager.getCurrentAccentColorHex())
           .border({ width: 0 })
           .onClick(() => {
             this.onDismiss();
@@ -569,7 +571,7 @@ export struct BookmarkEditSheet {
           .layoutWeight(1)
           .height(44)
           .enabled(!this.isSaving && !this.isDeleting)
-          .backgroundColor($r('app.color.primary'))
+          .backgroundColor(ThemeManager.getCurrentAccentColorHex())
           .fontColor(Color.White)
           .onClick(() => {
             this.save().catch((_: Object) => {
@@ -589,7 +591,9 @@ export struct BookmarkEditSheet {
         height: SheetSize.FIT_CONTENT,
         dragBar: false,
         showClose: false,
-        backgroundColor: $r('app.color.surface')
+        backgroundColor: ModalChromeHelper.getSheetBackgroundColor(),
+        maskColor: ModalChromeHelper.getMaskColor(),
+        blurStyle: ModalChromeHelper.getSheetBlurStyle()
       })
 
       Column() {
@@ -600,11 +604,13 @@ export struct BookmarkEditSheet {
         height: SheetSize.FIT_CONTENT,
         dragBar: false,
         showClose: false,
-        backgroundColor: $r('app.color.surface')
+        backgroundColor: ModalChromeHelper.getSheetBackgroundColor(),
+        maskColor: ModalChromeHelper.getMaskColor(),
+        blurStyle: ModalChromeHelper.getSheetBlurStyle()
       })
     }
     .width('100%')
-    .backgroundColor($r('app.color.surface'))
+    .backgroundColor(ThemeManager.getCurrentAccentSurfaceColorHex())
   }
 
   @Builder
@@ -644,7 +650,7 @@ export struct BookmarkEditSheet {
         Text('确定')
           .fontSize(16)
           .fontWeight(FontWeight.Medium)
-          .fontColor($r('app.color.primary'))
+          .fontColor(ThemeManager.getCurrentAccentColorHex())
           .onClick(() => {
             this.isCustomDateSheetVisible = false;
           })
@@ -653,7 +659,7 @@ export struct BookmarkEditSheet {
       .padding({ left: 18, right: 18, top: 12, bottom: 18 + WindowManager.getSystemAvoidAreaBottomVp() })
     }
     .width('100%')
-    .backgroundColor($r('app.color.surface'))
+    .backgroundColor(ThemeManager.getCurrentAccentSurfaceColorHex())
   }
 
   @Builder
@@ -694,7 +700,7 @@ export struct BookmarkEditSheet {
         Text('确定')
           .fontSize(16)
           .fontWeight(FontWeight.Medium)
-          .fontColor($r('app.color.primary'))
+          .fontColor(ThemeManager.getCurrentAccentColorHex())
           .onClick(() => {
             this.isCustomTimeSheetVisible = false;
           })
@@ -703,6 +709,6 @@ export struct BookmarkEditSheet {
       .padding({ left: 18, right: 18, top: 12, bottom: 18 + WindowManager.getSystemAvoidAreaBottomVp() })
     }
     .width('100%')
-    .backgroundColor($r('app.color.surface'))
+    .backgroundColor(ThemeManager.getCurrentAccentSurfaceColorHex())
   }
 }

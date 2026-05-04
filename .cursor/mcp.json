@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "Cursor Messenger": {
+      "command": "node",
+      "args": [
+        "c:\\Users\\zx\\.cursor\\extensions\\local.cursor-mcp-messenger-1.1.2\\dist\\mcp-server.mjs"
+      ],
+      "env": {
+        "MESSENGER_DATA_DIR": "C:\\Users\\zx\\.cursor-mcp-messenger\\b6bc80d26c03"
+      }
+    }
+  }
+}

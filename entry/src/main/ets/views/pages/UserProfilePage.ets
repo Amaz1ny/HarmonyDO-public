@@ -34,6 +34,7 @@ import { ExternalLinkService } from '../../common/utils/ExternalLinkService';
 import { ClipboardService } from '../../common/utils/ClipboardService';
 import { ToastService } from '../../common/utils/ToastService';
 import { FeatureSettingsService } from '../../services/storage/FeatureSettingsService';
+import { ModalChromeHelper } from '../components/ModalChromeHelper';
 
 const HEADER_AVATAR_SIZE: number = 72;
 const TAG: string = 'UserProfilePage';
@@ -860,7 +861,7 @@ export struct UserProfilePage {
           }
           .width('100%')
           .height('100%')
-          .backgroundColor($r('app.color.background'))
+          .backgroundColor(ThemeManager.getCurrentAccentBackgroundColorHex())
           .scrollBar(BarState.Off)
           .onScrollFrameBegin((offset: number, state: ScrollState) => {
             // 先按 offset 预测更新，保证折叠跟手；再异步用 scroller.currentOffset() 同步一次，避免到顶/到底回弹导致的“偏移漂移”。
@@ -884,7 +885,9 @@ export struct UserProfilePage {
           height: SheetSize.LARGE,
           dragBar: false,
           showClose: false,
-          backgroundColor: $r('app.color.surface')
+          backgroundColor: ModalChromeHelper.getSheetBackgroundColor(),
+          maskColor: ModalChromeHelper.getMaskColor(),
+          blurStyle: ModalChromeHelper.getSheetBlurStyle()
         })
 
         Column() {
@@ -895,7 +898,9 @@ export struct UserProfilePage {
           height: SheetSize.MEDIUM,
           dragBar: false,
           showClose: false,
-          backgroundColor: $r('app.color.surface')
+          backgroundColor: ModalChromeHelper.getSheetBackgroundColor(),
+          maskColor: ModalChromeHelper.getMaskColor(),
+          blurStyle: ModalChromeHelper.getSheetBlurStyle()
         })
 
         // 顶部折叠头图 + pinned Tabs + pinned TopBar（ScrollOffset 驱动）
@@ -904,7 +909,7 @@ export struct UserProfilePage {
       .width('100%')
       .height('100%')
     }
-    .backgroundColor($r('app.color.background'))
+    .backgroundColor(ThemeManager.getCurrentAccentBackgroundColorHex())
     .hideTitleBar(true)
     .hideToolBar(true)
     .systemBarStyle(
@@ -949,43 +954,45 @@ export struct UserProfilePage {
         .opacity(this.getContentOpacity())
 
         // 收起态标题（淡入；点击回到顶部）
-        Column() {
-          Row() {
-            AvatarWithFlair({
-              avatarUrl: this.getProfileAvatarUrl(64),
-              avatarSize: 32,
-              avatarRadius: 16,
-              fallbackText: this.getTargetUsername().length > 0 ? this.getTargetUsername() : 'U',
-              bgColor: this.getHeaderAvatarBackground(),
-              flairUrl: this.getProfileFlairUrl(),
-              flairName: this.getProfileFlairName(),
-              flairBgColor: this.getProfileFlairBgColor(),
-              flairColor: this.getProfileFlairColor(),
-              flairSize: 14
-            })
+        // 注意：透明组件在 ArkUI 中仍可能参与命中测试；展开态不渲染该全屏层，
+        // 避免盖住下方“关注 / 粉丝”统计按钮，导致点击没有反应。
+        if (this.shouldShowCollapsedTitleOverlay()) {
+          Column() {
+            Row() {
+              AvatarWithFlair({
+                avatarUrl: this.getProfileAvatarUrl(64),
+                avatarSize: 32,
+                avatarRadius: 16,
+                fallbackText: this.getTargetUsername().length > 0 ? this.getTargetUsername() : 'U',
+                bgColor: this.getHeaderAvatarBackground(),
+                flairUrl: this.getProfileFlairUrl(),
+                flairName: this.getProfileFlairName(),
+                flairBgColor: this.getProfileFlairBgColor(),
+                flairColor: this.getProfileFlairColor(),
+                flairSize: 14
+              })
 
-            Text(this.getProfileDisplayName())
-              .fontSize(16)
-              .fontWeight(FontWeight.Bold)
-              .fontColor(Color.White)
-              .margin({ left: 12 })
-              .maxLines(1)
-              .textOverflow({ overflow: TextOverflow.Ellipsis })
-              .layoutWeight(1)
+              Text(this.getProfileDisplayName())
+                .fontSize(16)
+                .fontWeight(FontWeight.Bold)
+                .fontColor(Color.White)
+                .margin({ left: 12 })
+                .maxLines(1)
+                .textOverflow({ overflow: TextOverflow.Ellipsis })
+                .layoutWeight(1)
+            }
+            .width('100%')
+            .alignItems(VerticalAlign.Center)
           }
           .width('100%')
-          .alignItems(VerticalAlign.Center)
-        }
-        .width('100%')
-        .height('100%')
-        .padding({ left: 60, right: 48, bottom: 14 })
-        .justifyContent(FlexAlign.End)
-        .opacity(this.getTitleOpacity())
-        .onClick(() => {
-          if (this.getTitleOpacity() > 0.5) {
+          .height('100%')
+          .padding({ left: 60, right: 48, bottom: 14 })
+          .justifyContent(FlexAlign.End)
+          .opacity(this.getTitleOpacity())
+          .onClick(() => {
             this.scroller.scrollTo({ xOffset: 0, yOffset: 0, animation: { duration: 220, curve: Curve.EaseOut } });
-          }
-        })
+          })
+        }
 
         // pinned TopBar（透明，白色图标）
         this.TopBarOverlay()
@@ -1055,6 +1062,10 @@ export struct UserProfilePage {
 
   private getTitleOpacity(): number {
     return this.computeTitleOpacity(this.computeCollapseT());
+  }
+
+  private shouldShowCollapsedTitleOverlay(): boolean {
+    return this.getTitleOpacity() > 0.5;
   }
 
   private getContentOpacity(): number {
@@ -1232,7 +1243,7 @@ export struct UserProfilePage {
       }
     }
     .width(220)
-    .backgroundColor($r('app.color.surface'))
+    .backgroundColor(ThemeManager.getCurrentAccentSurfaceColorHex())
     .borderRadius(12)
     .shadow({ radius: 10, color: WindowManager.isDarkMode() ? '#00000000' : '#22000000', offsetX: 0, offsetY: 6 })
   }
@@ -1461,7 +1472,9 @@ export struct UserProfilePage {
         .fontSize(13)
         .fontColor('#B7BBC4')
     }
-    .margin({ right: 18 })
+    .padding({ right: 12, top: 6, bottom: 6 })
+    .margin({ right: 6 })
+    .borderRadius(12)
     .onClick(() => {
       onClick();
     })
@@ -1561,7 +1574,7 @@ export struct UserProfilePage {
               .width(18)
               .height(3)
               .radius(2)
-              .fill(this.currentTabIndex === index ? $r('app.color.primary') : Color.Transparent)
+              .fill(this.currentTabIndex === index ? ThemeManager.getCurrentAccentColorHex() : Color.Transparent)
           }
           .layoutWeight(1)
           .height(ProfileHeroChromeHelper.getTabHeightVp())
@@ -2017,7 +2030,7 @@ export struct UserProfilePage {
       .height(220)
       .justifyContent(FlexAlign.Center)
       .alignItems(HorizontalAlign.Center)
-      .backgroundColor($r('app.color.background'))
+      .backgroundColor(ThemeManager.getCurrentAccentBackgroundColorHex())
     } else if (this.errorMessage.length > 0) {
       Column() {
         ErrorView({
@@ -2033,7 +2046,7 @@ export struct UserProfilePage {
       .height(220)
       .justifyContent(FlexAlign.Center)
       .alignItems(HorizontalAlign.Center)
-      .backgroundColor($r('app.color.background'))
+      .backgroundColor(ThemeManager.getCurrentAccentBackgroundColorHex())
     } else if (this.summary === null) {
       Column() {
         SymbolGlyph($r('sys.symbol.info_circle'))
@@ -2048,7 +2061,7 @@ export struct UserProfilePage {
       .height(220)
       .justifyContent(FlexAlign.Center)
       .alignItems(HorizontalAlign.Center)
-      .backgroundColor($r('app.color.background'))
+      .backgroundColor(ThemeManager.getCurrentAccentBackgroundColorHex())
     } else {
       Column() {
         if (!this.hasSummaryContent()) {
@@ -2122,7 +2135,7 @@ export struct UserProfilePage {
         Blank().height(24)
       }
       .width('100%')
-      .backgroundColor($r('app.color.background'))
+      .backgroundColor(ThemeManager.getCurrentAccentBackgroundColorHex())
     }
   }
 
@@ -2136,7 +2149,7 @@ export struct UserProfilePage {
       .height(220)
       .justifyContent(FlexAlign.Center)
       .alignItems(HorizontalAlign.Center)
-      .backgroundColor($r('app.color.background'))
+      .backgroundColor(ThemeManager.getCurrentAccentBackgroundColorHex())
     } else if (this.getActionsError(filter).length > 0 && this.getActionsList(filter).length === 0) {
       Column() {
         ErrorView({
@@ -2152,7 +2165,7 @@ export struct UserProfilePage {
       .height(220)
       .justifyContent(FlexAlign.Center)
       .alignItems(HorizontalAlign.Center)
-      .backgroundColor($r('app.color.background'))
+      .backgroundColor(ThemeManager.getCurrentAccentBackgroundColorHex())
     } else {
     Column() {
       if (!this.getActionsLoading(filter) && this.getActionsList(filter).length === 0) {
@@ -2226,7 +2239,7 @@ export struct UserProfilePage {
       Blank().height(24)
     }
     .width('100%')
-    .backgroundColor($r('app.color.background'))
+    .backgroundColor(ThemeManager.getCurrentAccentBackgroundColorHex())
     }
   }
 
@@ -2240,7 +2253,7 @@ export struct UserProfilePage {
       .height(220)
       .justifyContent(FlexAlign.Center)
       .alignItems(HorizontalAlign.Center)
-      .backgroundColor($r('app.color.background'))
+      .backgroundColor(ThemeManager.getCurrentAccentBackgroundColorHex())
     } else if (this.reactionsError.length > 0 && this.reactions.length === 0) {
       Column() {
         ErrorView({
@@ -2256,7 +2269,7 @@ export struct UserProfilePage {
       .height(220)
       .justifyContent(FlexAlign.Center)
       .alignItems(HorizontalAlign.Center)
-      .backgroundColor($r('app.color.background'))
+      .backgroundColor(ThemeManager.getCurrentAccentBackgroundColorHex())
     } else {
     Column() {
       if (this.reactionsRequiresLogin && !this.isLoggedIn) {
@@ -2348,7 +2361,7 @@ export struct UserProfilePage {
       Blank().height(24)
     }
     .width('100%')
-    .backgroundColor($r('app.color.background'))
+    .backgroundColor(ThemeManager.getCurrentAccentBackgroundColorHex())
     }
   }
 
@@ -2367,7 +2380,7 @@ export struct UserProfilePage {
     .height(220)
     .justifyContent(FlexAlign.Center)
     .alignItems(HorizontalAlign.Center)
-    .backgroundColor($r('app.color.background'))
+    .backgroundColor(ThemeManager.getCurrentAccentBackgroundColorHex())
   }
 
   @Builder
@@ -2375,12 +2388,12 @@ export struct UserProfilePage {
     Row() {
       SymbolGlyph(icon)
         .fontSize(18)
-        .fontColor([$r('app.color.primary')])
+        .fontColor([ThemeManager.getCurrentAccentColorHex()])
         .margin({ right: 8 })
       Text(title)
         .fontSize(16)
         .fontWeight(FontWeight.Bold)
-        .fontColor($r('app.color.primary'))
+        .fontColor(ThemeManager.getCurrentAccentColorHex())
         .layoutWeight(1)
     }
     .width('100%')
@@ -2435,7 +2448,7 @@ export struct UserProfilePage {
         Text(this.getSummaryLinkTitle(link))
           .fontSize(14)
           .fontWeight(FontWeight.Medium)
-          .fontColor($r('app.color.primary'))
+          .fontColor(ThemeManager.getCurrentAccentColorHex())
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
 
@@ -2476,11 +2489,11 @@ export struct UserProfilePage {
       Row() {
         SymbolGlyph(this.getUserActionIcon(action.actionType))
           .fontSize(16)
-          .fontColor([$r('app.color.primary')])
+          .fontColor([ThemeManager.getCurrentAccentColorHex()])
         Text(` ${this.getUserActionLabel(action.actionType)}`)
           .fontSize(12)
           .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.primary'))
+          .fontColor(ThemeManager.getCurrentAccentColorHex())
 
         Blank().layoutWeight(1)
 
@@ -2534,11 +2547,11 @@ export struct UserProfilePage {
       Row() {
         SymbolGlyph($r('sys.symbol.star'))
           .fontSize(16)
-          .fontColor([$r('app.color.primary')])
+          .fontColor([ThemeManager.getCurrentAccentColorHex()])
         Text(` 回应了${reaction.reactionValue !== null && (reaction.reactionValue as string).length > 0 ? ' ' + (reaction.reactionValue as string) : ''}`)
           .fontSize(12)
           .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.primary'))
+          .fontColor(ThemeManager.getCurrentAccentColorHex())
 
         Blank().layoutWeight(1)
 
@@ -2810,7 +2823,7 @@ export struct UserProfilePage {
     }
     .width('100%')
     .height('100%')
-    .backgroundColor($r('app.color.surface'))
+    .backgroundColor(ThemeManager.getCurrentAccentSurfaceColorHex())
     .alignItems(HorizontalAlign.Center)
   }
 
@@ -2819,7 +2832,7 @@ export struct UserProfilePage {
     Text(title)
       .fontSize(15)
       .fontWeight(FontWeight.Bold)
-      .fontColor($r('app.color.primary'))
+      .fontColor(ThemeManager.getCurrentAccentColorHex())
       .width('100%')
       .margin({ top: 28, bottom: 14 })
   }

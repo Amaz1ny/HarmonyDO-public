@@ -8,6 +8,8 @@ import { ErrorView } from '../components/ErrorView';
 import { SmartAvatar } from '../components/SmartAvatar';
 import { RouterManager } from '../../common/utils/RouterManager';
 import { PreferencesUtil } from '../../services/storage/PreferencesUtil';
+import { AuthService } from '../../services/auth/AuthService';
+import { AppearanceSettingsService, AppearanceSettingsState } from '../../services/storage/AppearanceSettingsService';
 import { SearchFilter, SearchInType, SearchStatus } from '../../models/SearchFilter';
 import { SearchSortOrder } from '../../models/SearchSort';
 import { TagInfo } from '../../models/TagSearchResult';
@@ -18,6 +20,8 @@ import { TagSelectionSheet } from '../components/TagControls';
 import { HdsNavDestination } from '@kit.UIDesignKit';
 import { ImmersiveHdsTitleBarHelper } from '../components/ImmersiveHdsTitleBarHelper';
 import { WindowManager } from '../../common/utils/WindowManager';
+import { ModalChromeHelper } from '../components/ModalChromeHelper';
+import { ThemeManager } from '../../common/theme/ThemeManager';
 
 const TAG: string = 'SearchPage';
 const SEARCH_TOP_BAR_HEIGHT: number = 56;
@@ -28,8 +32,6 @@ const SHEET_NONE: number = 0;
 const SHEET_FILTER: number = 1;
 const SHEET_TAG_MORE: number = 2;
 const SHEET_DATE_RANGE: number = 3;
-const RECENT_SEARCH_KEY: string = 'search_recent_queries';
-const RECENT_SEARCH_LIMIT: number = 20;
 const SEARCH_SORT_ORDER_KEY: string = 'search_sort_order';
 const HOT_TAG_LIMIT: number = 30;
 const HOT_TAG_TOPIC_SAMPLE_PAGES: number = 2;
@@ -86,8 +88,16 @@ export struct SearchPage {
   @Local isAfterDateSheetVisible: boolean = false;
   @Local isBeforeDateSheetVisible: boolean = false;
 
+  @Local accentColorHex: string = ThemeManager.getCurrentAccentColorHex();
+  @Local accentBackgroundColorHex: string = ThemeManager.getCurrentAccentBackgroundColorHex();
+  @Local accentSurfaceColorHex: string = ThemeManager.getCurrentAccentSurfaceColorHex();
+  @Local accentSurfaceVariantColorHex: string = ThemeManager.getCurrentAccentSurfaceVariantColorHex();
+  @Local accentSelectedBackgroundColorHex: string = ThemeManager.getCurrentAccentSelectedBackgroundColorHex();
+  @Local appearanceThemeRevision: number = 0;
+
   private contentScroller: Scroller = new Scroller();
   private hotTagsLoadVersion: number = 0;
+  private appearanceSettingsListener: ((state: AppearanceSettingsState) => void) | null = null;
 
   private getSearchTopSafeHeightVp(): number {
     const topSafeHeight: number = WindowManager.getSystemAvoidAreaTopVp();
@@ -102,7 +112,41 @@ export struct SearchPage {
   }
 
   aboutToAppear(): void {
+    this.attachAppearanceSettingsListener();
     this.initializePage();
+  }
+
+  aboutToDisappear(): void {
+    this.detachAppearanceSettingsListener();
+  }
+
+  private applyAppearanceSettingsState(state: AppearanceSettingsState): void {
+    this.accentColorHex = ThemeManager.getAccentColorHex(state.accentColor);
+    this.accentBackgroundColorHex = ThemeManager.getAccentBackgroundColorHex(state.accentColor);
+    this.accentSurfaceColorHex = ThemeManager.getAccentSurfaceColorHex(state.accentColor);
+    this.accentSurfaceVariantColorHex = ThemeManager.getAccentSurfaceVariantColorHex(state.accentColor);
+    this.accentSelectedBackgroundColorHex = ThemeManager.getAccentSelectedBackgroundColorHex(state.accentColor);
+    this.appearanceThemeRevision = this.appearanceThemeRevision + 1;
+  }
+
+  private attachAppearanceSettingsListener(): void {
+    if (this.appearanceSettingsListener !== null) {
+      return;
+    }
+    const service: AppearanceSettingsService = AppearanceSettingsService.getInstance();
+    this.applyAppearanceSettingsState(service.getSnapshot());
+    this.appearanceSettingsListener = (state: AppearanceSettingsState) => {
+      this.applyAppearanceSettingsState(state);
+    };
+    service.addListener(this.appearanceSettingsListener);
+  }
+
+  private detachAppearanceSettingsListener(): void {
+    if (this.appearanceSettingsListener === null) {
+      return;
+    }
+    AppearanceSettingsService.getInstance().removeListener(this.appearanceSettingsListener);
+    this.appearanceSettingsListener = null;
   }
 
   private async initializePage(): Promise<void> {
@@ -186,7 +230,7 @@ export struct SearchPage {
   }
 
   private hasAppliedSearchCriteria(): boolean {
-    return this.hasRunnableSearchCriteria(this.query, this.filter);
+    return this.lastSearchQuery.trim().length > 0;
   }
 
   private shouldRenderRecentSearchesDirectly(): boolean {
@@ -369,8 +413,6 @@ export struct SearchPage {
     }
     hilog.info(0x0000, TAG, 'Perform search: %{public}s', searchQuery);
 
-    this.saveRecentQuery(q);
-
     this.lastSearchQuery = searchQuery;
     this.currentPage = 1;
     this.topicResults = [];
@@ -409,6 +451,7 @@ export struct SearchPage {
         this.topicResults = resp.topics;
         this.postResults = resp.posts;
         this.userResults = resp.users;
+        this.refreshRecentSearchesAfterSearch();
       } else {
         this.topicResults = this.mergeTopics(this.topicResults, resp.topics);
         this.postResults = this.mergePosts(this.postResults, resp.posts);
@@ -774,19 +817,14 @@ export struct SearchPage {
   private async loadRecentSearches(): Promise<void> {
     this.isLoadingRecent = true;
     try {
-      const raw: string = await PreferencesUtil.getString(RECENT_SEARCH_KEY, '[]');
-      const parsed: Object = JSON.parse(raw) as Object;
-      const list: string[] = [];
-      if (Array.isArray(parsed)) {
-        const arr: Object[] = parsed as Object[];
-        for (let i = 0; i < arr.length; i++) {
-          const item = arr[i];
-          if (typeof item === 'string' && (item as string).trim().length > 0) {
-            list.push((item as string).trim());
-          }
-        }
+      const auth: AuthService = AuthService.getInstance();
+      await auth.init();
+      if (!auth.getIsLoggedIn()) {
+        this.recentSearches = [];
+        return;
       }
-      this.recentSearches = list;
+      const apiClient: ApiClient = ApiClient.getInstance();
+      this.recentSearches = await apiClient.getRecentSearches();
     } catch (err) {
       hilog.error(0x0000, TAG, 'Load recent searches failed: %{public}s', JSON.stringify(err));
       this.recentSearches = [];
@@ -795,35 +833,34 @@ export struct SearchPage {
     }
   }
 
-  private async persistRecentSearches(list: string[]): Promise<void> {
-    try {
-      await PreferencesUtil.putString(RECENT_SEARCH_KEY, JSON.stringify(list));
-    } catch (err) {
-      hilog.error(0x0000, TAG, 'Persist recent searches failed: %{public}s', JSON.stringify(err));
-    }
-  }
-
-  private saveRecentQuery(query: string): void {
-    const q: string = query.trim();
-    if (q.length === 0) return;
-    const next: string[] = [];
-    next.push(q);
-    for (let i = 0; i < this.recentSearches.length; i++) {
-      const item: string = this.recentSearches[i];
-      if (item !== q) next.push(item);
-      if (next.length >= RECENT_SEARCH_LIMIT) break;
-    }
-    this.recentSearches = next;
-    this.persistRecentSearches(next);
+  private refreshRecentSearchesAfterSearch(): void {
+    this.loadRecentSearches().catch((err: Object) => {
+      hilog.error(0x0000, TAG, 'Refresh recent searches failed: %{public}s', JSON.stringify(err));
+    });
   }
 
   private clearRecentSearches(): void {
     if (this.isClearingRecent) return;
+    const previous: string[] = this.recentSearches.slice();
     this.isClearingRecent = true;
     this.recentSearches = [];
-    this.persistRecentSearches([]).finally(() => {
+    this.clearRecentSearchesRemote(previous).finally(() => {
       this.isClearingRecent = false;
     });
+  }
+
+  private async clearRecentSearchesRemote(previous: string[]): Promise<void> {
+    try {
+      const auth: AuthService = AuthService.getInstance();
+      await auth.init();
+      if (!auth.getIsLoggedIn()) {
+        return;
+      }
+      await ApiClient.getInstance().clearRecentSearches();
+    } catch (err) {
+      hilog.error(0x0000, TAG, 'Clear recent searches failed: %{public}s', JSON.stringify(err));
+      this.recentSearches = previous;
+    }
   }
 
   private onRecentQueryClick(q: string): void {
@@ -843,7 +880,7 @@ export struct SearchPage {
             Blank()
               .width('100%')
               .layoutWeight(1)
-              .backgroundColor($r('app.color.background'))
+              .backgroundColor(this.accentBackgroundColorHex)
           } else {
             Scroll(this.contentScroller) {
               Column() {
@@ -932,13 +969,13 @@ export struct SearchPage {
                 }
               }
               .width('100%')
-              .backgroundColor($r('app.color.background'))
+              .backgroundColor(this.accentBackgroundColorHex)
             }
             .width('100%')
             .layoutWeight(1)
             .scrollBar(BarState.Off)
             .edgeEffect(EdgeEffect.Spring)
-            .backgroundColor($r('app.color.background'))
+            .backgroundColor(this.accentBackgroundColorHex)
             .onReachEnd(() => {
               this.loadMore();
             })
@@ -946,7 +983,7 @@ export struct SearchPage {
         }
         .width('100%')
         .height('100%')
-        .backgroundColor($r('app.color.background'))
+        .backgroundColor(this.accentBackgroundColorHex)
       }
       .width('100%')
       .height('100%')
@@ -954,7 +991,9 @@ export struct SearchPage {
         height: SheetSize.LARGE,
         dragBar: false,
         showClose: false,
-        backgroundColor: $r('app.color.surface')
+        backgroundColor: ModalChromeHelper.getSheetBackgroundColor(),
+        maskColor: ModalChromeHelper.getMaskColor(),
+        blurStyle: ModalChromeHelper.getSheetBlurStyle()
       })
 
       Column() {
@@ -965,10 +1004,12 @@ export struct SearchPage {
         height: SheetSize.MEDIUM,
         dragBar: false,
         showClose: false,
-        backgroundColor: $r('app.color.surface')
+        backgroundColor: ModalChromeHelper.getSheetBackgroundColor(),
+        maskColor: ModalChromeHelper.getMaskColor(),
+        blurStyle: ModalChromeHelper.getSheetBlurStyle()
       })
     }
-    .backgroundColor($r('app.color.background'))
+    .backgroundColor(this.accentBackgroundColorHex)
     .hideTitleBar(true)
     .hideToolBar(true)
     .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
@@ -986,6 +1027,9 @@ export struct SearchPage {
           Column() {
             SearchPostCard({
               post: p,
+              accentSurfaceColorHex: this.accentSurfaceColorHex,
+              accentSurfaceVariantColorHex: this.accentSurfaceVariantColorHex,
+              themeRevision: this.appearanceThemeRevision,
               category: this.getCategoryById(p.topic !== null ? (p.topic as SearchTopic).categoryId : null),
               parentCategory: this.getParentCategory(this.getCategoryById(
                 p.topic !== null ? (p.topic as SearchTopic).categoryId : null
@@ -1027,7 +1071,7 @@ export struct SearchPage {
     }
     .width('100%')
     .padding({ left: 16, right: 16, top: 8, bottom: 24 })
-    .backgroundColor($r('app.color.background'))
+    .backgroundColor(this.accentBackgroundColorHex)
   }
 
   @Builder
@@ -1123,7 +1167,7 @@ export struct SearchPage {
             Circle()
               .width(8)
               .height(8)
-              .fill($r('app.color.primary'))
+              .fill(this.accentColorHex)
               .position({ x: 28, y: 12 })
           }
         }
@@ -1164,7 +1208,7 @@ export struct SearchPage {
             if (this.sortOrder.key === order.key) {
               SymbolGlyph($r('sys.symbol.checkmark'))
                 .fontSize(16)
-                .fontColor([$r('app.color.primary')])
+                .fontColor([this.accentColorHex])
             } else {
               Blank()
                 .width(16)
@@ -1192,7 +1236,7 @@ export struct SearchPage {
       }, (order: SearchSortOrder) => order.key)
     }
     .width(180)
-    .backgroundColor($r('app.color.search_bar_background'))
+    .backgroundColor(this.accentSurfaceVariantColorHex)
     .borderRadius(12)
     .shadow({ radius: 10, color: '#22000000', offsetX: 0, offsetY: 6 })
   }
@@ -1272,7 +1316,7 @@ export struct SearchPage {
     }
     .width('100%')
     .padding({ left: 14, right: 14, top: 14, bottom: 14 })
-    .backgroundColor($r('app.color.card_background'))
+    .backgroundColor(this.accentSurfaceColorHex)
     .borderRadius(18)
     .shadow({ radius: 10, color: '#0A000000', offsetX: 0, offsetY: 4 })
     .alignItems(VerticalAlign.Center)
@@ -1298,7 +1342,7 @@ export struct SearchPage {
         } else {
           Text($r('app.string.clear'))
             .fontSize(13)
-            .fontColor($r('app.color.primary'))
+            .fontColor(this.accentColorHex)
             .onClick(() => {
               this.clearRecentSearches();
             })
@@ -1335,7 +1379,7 @@ export struct SearchPage {
         }, (q: string) => q)
       }
       .width('100%')
-      .backgroundColor($r('app.color.background'))
+      .backgroundColor(this.accentBackgroundColorHex)
     }
     .width('100%')
     .padding({ bottom: 24 })
@@ -1346,6 +1390,12 @@ export struct SearchPage {
     if (this.sheetMode === SHEET_FILTER) {
       SearchFilterPanel({
         filter: this.draftFilter,
+        accentColorHex: this.accentColorHex,
+        accentSurfaceColorHex: this.accentSurfaceColorHex,
+        accentSurfaceVariantColorHex: this.accentSurfaceVariantColorHex,
+        accentSelectedBackgroundColorHex: this.accentSelectedBackgroundColorHex,
+        themeRevision: this.appearanceThemeRevision,
+
         categories: this.categories,
         hotTags: this.hotTags,
         onReset: () => {
@@ -1382,6 +1432,12 @@ export struct SearchPage {
   TagMoreSheetBuilder() {
     TagSelectionSheet({
       title: $r('app.string.search_more_tags'),
+      accentColorHex: this.accentColorHex,
+      accentSurfaceColorHex: this.accentSurfaceColorHex,
+      accentSurfaceVariantColorHex: this.accentSurfaceVariantColorHex,
+      accentSelectedBackgroundColorHex: this.accentSelectedBackgroundColorHex,
+      themeRevision: this.appearanceThemeRevision,
+
       doneText: $r('app.string.done'),
       availableTags: this.buildAvailableTags(),
       selectedTags: this.draftFilter.tags,
@@ -1441,7 +1497,7 @@ export struct SearchPage {
 
         Text($r('app.string.done'))
           .fontSize(14)
-          .fontColor($r('app.color.primary'))
+          .fontColor(this.accentColorHex)
           .onClick(() => {
             this.applyDateRangeDraft();
           })
@@ -1483,7 +1539,9 @@ export struct SearchPage {
         height: SheetSize.FIT_CONTENT,
         dragBar: false,
         showClose: false,
-        backgroundColor: $r('app.color.surface')
+        backgroundColor: ModalChromeHelper.getSheetBackgroundColor(),
+        maskColor: ModalChromeHelper.getMaskColor(),
+        blurStyle: ModalChromeHelper.getSheetBlurStyle()
       })
 
       Column() {
@@ -1494,12 +1552,14 @@ export struct SearchPage {
         height: SheetSize.FIT_CONTENT,
         dragBar: false,
         showClose: false,
-        backgroundColor: $r('app.color.surface')
+        backgroundColor: ModalChromeHelper.getSheetBackgroundColor(),
+        maskColor: ModalChromeHelper.getMaskColor(),
+        blurStyle: ModalChromeHelper.getSheetBlurStyle()
       })
     }
     .width('100%')
     .height('100%')
-    .backgroundColor($r('app.color.surface'))
+    .backgroundColor(this.accentSurfaceColorHex)
   }
 
   @Builder
@@ -1541,7 +1601,7 @@ export struct SearchPage {
       if (value !== null) {
         Text('清空')
           .fontSize(12)
-          .fontColor($r('app.color.primary'))
+          .fontColor(this.accentColorHex)
           .margin({ top: 8 })
           .onClick(() => {
             onClear();
@@ -1589,7 +1649,7 @@ export struct SearchPage {
         Text('确定')
           .fontSize(16)
           .fontWeight(FontWeight.Medium)
-          .fontColor($r('app.color.primary'))
+          .fontColor(this.accentColorHex)
           .onClick(() => {
             this.applyAfterDatePicker();
           })
@@ -1598,7 +1658,7 @@ export struct SearchPage {
       .padding({ left: 18, right: 18, top: 12, bottom: 18 + WindowManager.getSystemAvoidAreaBottomVp() })
     }
     .width('100%')
-    .backgroundColor($r('app.color.surface'))
+    .backgroundColor(this.accentSurfaceColorHex)
   }
 
   @Builder
@@ -1638,7 +1698,7 @@ export struct SearchPage {
         Text('确定')
           .fontSize(16)
           .fontWeight(FontWeight.Medium)
-          .fontColor($r('app.color.primary'))
+          .fontColor(this.accentColorHex)
           .onClick(() => {
             this.applyBeforeDatePicker();
           })
@@ -1647,6 +1707,6 @@ export struct SearchPage {
       .padding({ left: 18, right: 18, top: 12, bottom: 18 + WindowManager.getSystemAvoidAreaBottomVp() })
     }
     .width('100%')
-    .backgroundColor($r('app.color.surface'))
+    .backgroundColor(this.accentSurfaceColorHex)
   }
 }

@@ -3,6 +3,7 @@ import { Emoji } from '../../models/Emoji';
 import { UrlUtils } from '../../common/utils/UrlUtils';
 import { CustomEmojiEntry, EmojiResolver } from '../../common/utils/EmojiResolver';
 import { ComposerEmojiPreferences } from '../../services/storage/ComposerEmojiPreferences';
+import { ThemeManager } from '../../common/theme/ThemeManager';
 
 class EmojiPanelGroup {
   key: string = '';
@@ -93,9 +94,20 @@ export struct ComposerEmojiPanel {
       group.key = key;
       group.title = this.formatGroupTitle(key);
       group.emojis = list;
+      this.registerEmojiUrls(list);
       out.push(group);
     }
     return out;
+  }
+
+  private registerEmojiUrls(emojis: Emoji[]): void {
+    for (let i = 0; i < emojis.length; i++) {
+      const emoji: Emoji = emojis[i];
+      const rawUrl: string = emoji.url !== undefined && emoji.url !== null ? emoji.url.trim() : '';
+      if (rawUrl.length > 0) {
+        EmojiResolver.registerEmojiUrl(emoji.name, rawUrl);
+      }
+    }
   }
 
   private buildFallbackGroups(): EmojiPanelGroup[] {
@@ -337,6 +349,7 @@ export struct ComposerEmojiPanel {
   private getEmojiUrl(emoji: Emoji): string {
     const rawUrl: string = emoji.url !== undefined && emoji.url !== null ? emoji.url.trim() : '';
     if (rawUrl.length > 0) {
+      EmojiResolver.registerEmojiUrl(emoji.name, rawUrl);
       return UrlUtils.resolveUrl(rawUrl);
     }
     return EmojiResolver.resolveEmojiUrl(`:${emoji.name}:`);
@@ -399,7 +412,7 @@ export struct ComposerEmojiPanel {
       }
       .height(40)
       .padding({ left: 14, right: 10 })
-      .backgroundColor($r('app.color.search_background'))
+      .backgroundColor(ThemeManager.getCurrentAccentSurfaceVariantColorHex())
       .borderRadius(20)
       .layoutWeight(1)
       .alignItems(VerticalAlign.Center)
@@ -418,12 +431,12 @@ export struct ComposerEmojiPanel {
             Text(tab.title)
               .fontSize(13)
               .fontWeight(this.selectedGroupKey === tab.key ? FontWeight.Medium : FontWeight.Regular)
-              .fontColor(this.selectedGroupKey === tab.key ? $r('app.color.primary') : $r('app.color.on_surface_secondary'))
+              .fontColor(this.selectedGroupKey === tab.key ? ThemeManager.getCurrentAccentColorHex() : $r('app.color.on_surface_secondary'))
           }
           .padding({ left: 14, right: 14, top: 9, bottom: 9 })
           .backgroundColor(this.selectedGroupKey === tab.key
-            ? $r('app.color.badge_background_light')
-            : $r('app.color.surface_variant'))
+            ? ThemeManager.getCurrentAccentSelectedBackgroundColorHex()
+            : ThemeManager.getCurrentAccentSurfaceVariantColorHex())
           .borderRadius(18)
           .margin({ right: 8 })
           .onClick(() => {
@@ -465,22 +478,24 @@ export struct ComposerEmojiPanel {
                   .maxLines(1)
               }
             }
-            .width(44)
-            .height(44)
+            .width('14.2857%')
+            .height(48)
             .justifyContent(FlexAlign.Center)
             .alignItems(HorizontalAlign.Center)
             .backgroundColor(Color.Transparent)
             .borderRadius(12)
-            .margin({ left: 4, right: 4, top: 4, bottom: 4 })
             .onClick(() => {
               this.handleEmojiTap(emoji);
             })
           }, (emoji: Emoji) => `${emoji.group}_${emoji.name}`)
         }
         .width('100%')
-        .padding({ left: 12, right: 12, top: 4, bottom: 12 })
+        .padding({ left: 10, right: 10, top: 4, bottom: 12 })
       }
       .width('100%')
+      .constraintSize({ minHeight: '100%' })
+      .justifyContent(FlexAlign.Start)
+      .alignItems(HorizontalAlign.Start)
     }
     .layoutWeight(1)
     .scrollBar(BarState.Off)
@@ -535,7 +550,7 @@ export struct ComposerEmojiPanel {
         .type(ButtonType.Capsule)
         .height(36)
         .margin({ top: 12 })
-        .backgroundColor($r('app.color.primary'))
+        .backgroundColor(ThemeManager.getCurrentAccentColorHex())
         .fontColor(Color.White)
         .onClick(() => {
           this.loadEmojiGroups().catch((_: Object) => {
@@ -582,6 +597,6 @@ export struct ComposerEmojiPanel {
     }
     .width('100%')
     .height(this.panelHeight)
-    .backgroundColor($r('app.color.surface'))
+    .backgroundColor(ThemeManager.getCurrentAccentSurfaceColorHex())
   }
 }

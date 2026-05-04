@@ -4,6 +4,7 @@ import { TimeUtils } from '../../common/utils/TimeUtils';
 import { UrlUtils } from '../../common/utils/UrlUtils';
 import { SmartAvatar } from './SmartAvatar';
 import { TagBadge } from './TopicBadges';
+import { ThemeManager } from '../../common/theme/ThemeManager';
 
 /**
  * 话题卡片 - 标准样式
@@ -19,6 +20,11 @@ export struct TopicCard {
   @Param category: Category | null = null;
   @Param opAvatarUrl: string = '';
   @Param isHighlighted: boolean = false;
+  @Param accentColorHex: string = ThemeManager.getCurrentAccentColorHex();
+  @Param accentSurfaceColorHex: string = ThemeManager.getCurrentAccentSurfaceColorHex();
+  @Param accentSurfaceVariantColorHex: string = ThemeManager.getCurrentAccentSurfaceVariantColorHex();
+  @Param accentSelectedBackgroundColorHex: string = ThemeManager.getCurrentAccentSelectedBackgroundColorHex();
+  @Param themeRevision: number = 0;
   @Event onCardClick: (topic: Topic) => void = () => {};
   @Event onCardLongPress: (topic: Topic) => void = () => {};
 
@@ -75,10 +81,10 @@ export struct TopicCard {
               Text(`${this.topic.unread}`)
                 .fontSize(10)
                 .fontWeight(FontWeight.Bold)
-                .fontColor($r('app.color.primary'))
+                .fontColor(this.accentColorHex)
             }
             .padding({ left: 8, right: 8, top: 3, bottom: 3 })
-            .backgroundColor($r('app.color.badge_background_light'))
+            .backgroundColor(this.accentSelectedBackgroundColorHex)
             .borderRadius(10)
             .margin({ left: 8, top: 2 })
           } else if (this.getEffectiveReplyCount() > 0) {
@@ -175,7 +181,9 @@ export struct TopicCard {
     .width('100%')
     .padding({ left: 12, right: 14, top: 10, bottom: 10 })
     .alignItems(VerticalAlign.Top)
-    .backgroundColor(this.isHighlighted ? $r('app.color.badge_background_light') : $r('app.color.card_background'))
+    .backgroundColor(this.isHighlighted
+      ? this.accentSelectedBackgroundColorHex
+      : this.accentSurfaceColorHex)
     .borderRadius($r('app.float.card_radius'))
     .margin({ bottom: 8 })
     .opacity(this.isFullyRead() ? 0.5 : 1)
@@ -285,6 +293,11 @@ export struct CompactTopicCard {
   @Param topic: Topic = new Topic();
   @Param category: Category | null = null;
   @Param isHighlighted: boolean = false;
+  @Param accentColorHex: string = ThemeManager.getCurrentAccentColorHex();
+  @Param accentSurfaceColorHex: string = ThemeManager.getCurrentAccentSurfaceColorHex();
+  @Param accentSurfaceVariantColorHex: string = ThemeManager.getCurrentAccentSurfaceVariantColorHex();
+  @Param accentSelectedBackgroundColorHex: string = ThemeManager.getCurrentAccentSelectedBackgroundColorHex();
+  @Param themeRevision: number = 0;
   @Event onCardClick: (topic: Topic) => void = () => {};
   @Event onCardLongPress: (topic: Topic) => void = () => {};
 
@@ -293,7 +306,7 @@ export struct CompactTopicCard {
       // 置顶图标
       SymbolGlyph($r('sys.symbol.pin'))
         .fontSize(14)
-        .fontColor([$r('app.color.primary')])
+        .fontColor([this.accentColorHex])
         .margin({ right: 8 })
 
       // 分类图标：logo → lock → dot，避免无图标时留空
@@ -355,10 +368,10 @@ export struct CompactTopicCard {
           Text(`${this.topic.unread}`)
             .fontSize(9)
             .fontWeight(FontWeight.Bold)
-            .fontColor($r('app.color.primary'))
+            .fontColor(this.accentColorHex)
         }
         .padding({ left: 6, right: 6, top: 2, bottom: 2 })
-        .backgroundColor($r('app.color.badge_background_light'))
+        .backgroundColor(this.accentSelectedBackgroundColorHex)
         .borderRadius(10)
         .margin({ left: 8 })
       } else if (this.getEffectiveReplyCount() > 0) {
@@ -376,7 +389,9 @@ export struct CompactTopicCard {
     .width('100%')
     .padding({ left: 12, right: 12, top: 10, bottom: 10 })
     .alignItems(VerticalAlign.Center)
-    .backgroundColor(this.isHighlighted ? $r('app.color.badge_background_light') : $r('app.color.search_bar_background'))
+    .backgroundColor(this.isHighlighted
+      ? this.accentSelectedBackgroundColorHex
+      : this.accentSurfaceVariantColorHex)
     .borderRadius($r('app.float.card_radius'))
     .margin({ bottom: 6 })
     .opacity(!this.topic.unseen && this.topic.unread === 0 && this.topic.lastReadPostNumber > 0 ? 0.5 : 1)

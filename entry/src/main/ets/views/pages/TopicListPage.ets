@@ -18,6 +18,7 @@ import { WindowManager } from '../../common/utils/WindowManager';
 import { TopicTrackingService, TopicReadProgress } from '../../services/messagebus/TopicTrackingService';
 import { NotificationTrackingService } from '../../services/messagebus/NotificationTrackingService';
 import { TopicListPreferences } from '../../services/storage/TopicListPreferences';
+import { AppearanceSettingsService, AppearanceSettingsState } from '../../services/storage/AppearanceSettingsService';
 import { HoldingHandService, HoldingHandState } from '../../services/device/HoldingHandService';
 import { CreateTopicComposerSheet } from '../components/CreateTopicComposerSheet';
 import { resolveTopicListFabRefreshModeByScroll } from '../../common/utils/TopicListFabModeUtils';
@@ -29,6 +30,8 @@ import {
   FLOATING_TAB_BAR_OFFSET_UP_VP,
   FLOATING_TAB_BAR_CONTENT_EXTRA_PADDING_VP
 } from '../../common/constants/LayoutConstants';
+import { ModalChromeHelper } from '../components/ModalChromeHelper';
+import { ThemeManager } from '../../common/theme/ThemeManager';
 
 const TAG: string = 'TopicListPage';
 const SEARCH_BAR_HEIGHT: number = TopicListChromeHelper.getSearchBarHeightVp();
@@ -81,6 +84,12 @@ export struct TopicListPage {
   @Local pullRefreshArmed: boolean = true;
   @Local isHomeFabExpanded: boolean = false;
   @Local isCreateTopicSheetVisible: boolean = false;
+  @Local accentColorHex: string = ThemeManager.getCurrentAccentColorHex();
+  @Local accentBackgroundColorHex: string = ThemeManager.getCurrentAccentBackgroundColorHex();
+  @Local accentSurfaceColorHex: string = ThemeManager.getCurrentAccentSurfaceColorHex();
+  @Local accentSurfaceVariantColorHex: string = ThemeManager.getCurrentAccentSurfaceVariantColorHex();
+  @Local accentSelectedBackgroundColorHex: string = ThemeManager.getCurrentAccentSelectedBackgroundColorHex();
+  @Local appearanceThemeRevision: number = 0;
   private listScroller: Scroller = new Scroller();
   private headerSnapTimerId: number = -1;
   private pullRefreshArmTimerId: number = -1;
@@ -104,6 +113,7 @@ export struct TopicListPage {
   private incomingPollBackoffMs: number = INCOMING_POLL_INTERVAL_ANON_MS;
   private trackingListener: (() => void) | null = null;
   private notificationStateListener: (() => void) | null = null;
+  private appearanceSettingsListener: ((state: AppearanceSettingsState) => void) | null = null;
   private hasBootstrapped: boolean = false;
   private lastNotificationBadgeForcedSyncAt: number = 0;
   private isResetLoading: boolean = false;
@@ -135,6 +145,7 @@ export struct TopicListPage {
     this.attachAuthStateListener();
     this.attachHoldingHandListener();
     this.attachNotificationTrackingListener();
+    this.attachAppearanceSettingsListener();
 
     // 避免切换页面/Tab 后重复全量 bootstrap（会重新拉取列表，导致 banner 延迟出现并“一口气跳很大”）
     if (this.hasBootstrapped) {
@@ -164,6 +175,36 @@ export struct TopicListPage {
     this.detachNotificationTrackingListener();
     this.detachAuthStateListener();
     this.detachHoldingHandListener();
+    this.detachAppearanceSettingsListener();
+  }
+
+  private applyAppearanceSettingsState(state: AppearanceSettingsState): void {
+    this.accentColorHex = ThemeManager.getAccentColorHex(state.accentColor);
+    this.accentBackgroundColorHex = ThemeManager.getAccentBackgroundColorHex(state.accentColor);
+    this.accentSurfaceColorHex = ThemeManager.getAccentSurfaceColorHex(state.accentColor);
+    this.accentSurfaceVariantColorHex = ThemeManager.getAccentSurfaceVariantColorHex(state.accentColor);
+    this.accentSelectedBackgroundColorHex = ThemeManager.getAccentSelectedBackgroundColorHex(state.accentColor);
+    this.appearanceThemeRevision = this.appearanceThemeRevision + 1;
+  }
+
+  private attachAppearanceSettingsListener(): void {
+    if (this.appearanceSettingsListener !== null) {
+      return;
+    }
+    const service: AppearanceSettingsService = AppearanceSettingsService.getInstance();
+    this.applyAppearanceSettingsState(service.getSnapshot());
+    this.appearanceSettingsListener = (state: AppearanceSettingsState) => {
+      this.applyAppearanceSettingsState(state);
+    };
+    service.addListener(this.appearanceSettingsListener);
+  }
+
+  private detachAppearanceSettingsListener(): void {
+    if (this.appearanceSettingsListener === null) {
+      return;
+    }
+    AppearanceSettingsService.getInstance().removeListener(this.appearanceSettingsListener);
+    this.appearanceSettingsListener = null;
   }
 
   private onPageResume(): void {
@@ -1190,11 +1231,11 @@ export struct TopicListPage {
         Row() {
           Text('↑')
             .fontSize(14)
-            .fontColor($r('app.color.primary'))
+            .fontColor(this.accentColorHex)
           Text(`查看 ${this.incomingTopicCount} 个新的或更新的话题`)
             .fontSize(13)
             .fontWeight(FontWeight.Medium)
-            .fontColor($r('app.color.primary'))
+            .fontColor(this.accentColorHex)
             .margin({ left: 8 })
         }
         .alignItems(VerticalAlign.Center)
@@ -1204,7 +1245,7 @@ export struct TopicListPage {
     .padding({ top: 8, bottom: 8 })
     .justifyContent(FlexAlign.Center)
     .alignItems(VerticalAlign.Center)
-    .backgroundColor($r('app.color.badge_background_light'))
+    .backgroundColor(this.accentSelectedBackgroundColorHex)
     .borderRadius(8)
     .margin({ bottom: 12 })
     .onClick(() => {
@@ -1307,7 +1348,7 @@ export struct TopicListPage {
         Row() {
           SymbolGlyph($r('sys.symbol.notepad'))
             .fontSize(16)
-            .fontColor([$r('app.color.primary')])
+            .fontColor([this.accentColorHex])
             .margin({ right: 8 })
 
           Text('我的草稿')
@@ -1347,7 +1388,7 @@ export struct TopicListPage {
         Row() {
           SymbolGlyph($r('sys.symbol.plus'))
             .fontSize(16)
-            .fontColor([$r('app.color.primary')])
+            .fontColor([this.accentColorHex])
             .margin({ right: 8 })
 
           Text('创建话题')
@@ -1414,7 +1455,7 @@ export struct TopicListPage {
     Button() {
       SymbolGlyph(this.fabRefreshMode ? $r('sys.symbol.arrow_clockwise') : $r('sys.symbol.plus'))
         .fontSize(22)
-        .fontColor([$r('app.color.primary')])
+        .fontColor([this.accentColorHex])
     }
     .width(FloatingActionChromeHelper.getButtonSizeVp())
     .height(FloatingActionChromeHelper.getButtonSizeVp())
@@ -1462,7 +1503,7 @@ export struct TopicListPage {
             if (this.currentFilter === opt) {
               SymbolGlyph($r('sys.symbol.checkmark'))
                 .fontSize(16)
-                .fontColor([$r('app.color.primary')])
+                .fontColor([this.accentColorHex])
             } else {
               Blank().width(16).height(16)
             }
@@ -1489,7 +1530,7 @@ export struct TopicListPage {
       }, (opt: string) => opt)
     }
     .width(160)
-    .backgroundColor($r('app.color.search_bar_background'))
+    .backgroundColor(this.accentSurfaceVariantColorHex)
     .borderRadius(12)
     .shadow({ radius: 10, color: '#22000000', offsetX: 0, offsetY: 6 })
   }
@@ -1762,7 +1803,8 @@ export struct TopicListPage {
         }
         .width('100%')
         .height('100%')
-        .backgroundColor('#66000000')
+        .backgroundColor(ModalChromeHelper.getMaskColor())
+        .backgroundBlurStyle(ModalChromeHelper.getDialogBlurStyle())
         .onClick(() => {
           this.closeTopicPreview();
         })
@@ -1791,7 +1833,7 @@ export struct TopicListPage {
       Text(title)
         .fontSize(16)
         .fontWeight(this.currentCategoryIndex === index ? FontWeight.Bold : FontWeight.Normal)
-        .fontColor(this.currentCategoryIndex === index ? $r('app.color.primary') : $r('app.color.on_surface_secondary'))
+        .fontColor(this.currentCategoryIndex === index ? this.accentColorHex : $r('app.color.on_surface_secondary'))
         .margin({ bottom: 4 })
       
       // 底部下划线指示器
@@ -1800,7 +1842,7 @@ export struct TopicListPage {
           .width(32)
           .height(3)
           .radius(2)
-          .fill($r('app.color.primary'))
+          .fill(this.accentColorHex)
       } else {
         Rect()
           .width(32)
@@ -1917,7 +1959,7 @@ export struct TopicListPage {
       }, (sub: Category) => sub.id.toString())
     }
     .width(220)
-    .backgroundColor($r('app.color.search_bar_background'))
+    .backgroundColor(this.accentSurfaceVariantColorHex)
     .borderRadius(16)
     .shadow({ radius: 10, color: '#22000000', offsetX: 0, offsetY: 6 })
   }
@@ -1969,11 +2011,11 @@ export struct TopicListPage {
           Row() {
             SymbolGlyph($r('sys.symbol.pencil_line'))
               .fontSize(14)
-              .fontColor([$r('app.color.primary')])
+              .fontColor([this.accentColorHex])
               .margin({ right: 4 })
             Text('编辑')
               .fontSize(13)
-              .fontColor($r('app.color.primary'))
+              .fontColor(this.accentColorHex)
           }
           .padding({ left: 8, right: 8, top: 4, bottom: 4 })
           .onClick(() => {
@@ -2044,7 +2086,7 @@ export struct TopicListPage {
 
                       Text('移除')
                         .fontSize(13)
-                        .fontColor($r('app.color.primary'))
+                        .fontColor(this.accentColorHex)
                         .onClick(() => {
                           this.removePinnedCategory(id);
                         })
@@ -2123,7 +2165,7 @@ export struct TopicListPage {
     }
     .width('100%')
     .height('100%')
-    .backgroundColor($r('app.color.surface'))
+    .backgroundColor(this.accentSurfaceColorHex)
   }
 
   @Builder
@@ -2173,7 +2215,7 @@ export struct TopicListPage {
               Circle()
                 .width(48)
                 .height(48)
-                .fill($r('app.color.search_bar_background'))
+                .fill(this.accentSurfaceVariantColorHex)
                
               this.CategoryGridIcon(cat)
             }
@@ -2201,7 +2243,7 @@ export struct TopicListPage {
               Circle()
                 .width(48)
                 .height(48)
-                .fill($r('app.color.search_bar_background'))
+                .fill(this.accentSurfaceVariantColorHex)
                
               this.CategoryGridIcon(cat)
             }
@@ -2284,6 +2326,11 @@ export struct TopicListPage {
       categoryId: this.getCurrentQueryCategoryId(),
       maxTags: 5,
       showDragHandle: false,
+      accentColorHex: this.accentColorHex,
+      accentSurfaceColorHex: this.accentSurfaceColorHex,
+      accentSurfaceVariantColorHex: this.accentSurfaceVariantColorHex,
+      accentSelectedBackgroundColorHex: this.accentSelectedBackgroundColorHex,
+      themeRevision: this.appearanceThemeRevision,
       onToggleTag: (t: string) => {
         this.toggleDraftTag(t);
       },
@@ -2491,6 +2538,10 @@ export struct TopicListPage {
       Row() {
         PillMenuButton({
           value: this.currentFilter,
+          accentColorHex: this.accentColorHex,
+          accentSurfaceColorHex: this.accentSurfaceColorHex,
+          accentSurfaceVariantColorHex: this.accentSurfaceVariantColorHex,
+          themeRevision: this.appearanceThemeRevision,
           valueLabel: this.getFilterLabel(this.currentFilter),
           options: this.getFilterOptions(),
           menuWidth: 160,
@@ -2503,6 +2554,10 @@ export struct TopicListPage {
 
         PillMenuButton({
           value: this.currentOrder,
+          accentColorHex: this.accentColorHex,
+          accentSurfaceColorHex: this.accentSurfaceColorHex,
+          accentSurfaceVariantColorHex: this.accentSurfaceVariantColorHex,
+          themeRevision: this.appearanceThemeRevision,
           valueLabel: this.getOrderLabel(this.currentOrder),
           options: SORT_ORDER_OPTIONS,
           menuWidth: 190,
@@ -2516,6 +2571,8 @@ export struct TopicListPage {
         if (this.selectedTags.length === 0) {
           PillIconButton({
             rightSymbol: $r('sys.symbol.label'),
+            accentSurfaceColorHex: this.accentSurfaceColorHex,
+            themeRevision: this.appearanceThemeRevision,
             onAction: () => {
               this.openTagSheet();
             }
@@ -2526,6 +2583,8 @@ export struct TopicListPage {
               ForEach(this.selectedTags, (t: string) => {
                 TagChip({
                   tagName: t,
+                  accentSurfaceVariantColorHex: this.accentSurfaceVariantColorHex,
+                  themeRevision: this.appearanceThemeRevision,
                   onRemove: () => {
                     this.removeTag(t);
                   }
@@ -2649,6 +2708,11 @@ export struct TopicListPage {
                   if (topic.pinned) {
                     CompactTopicCard({
                       topic: topic,
+                      accentColorHex: this.accentColorHex,
+                      accentSurfaceColorHex: this.accentSurfaceColorHex,
+                      accentSurfaceVariantColorHex: this.accentSurfaceVariantColorHex,
+                      accentSelectedBackgroundColorHex: this.accentSelectedBackgroundColorHex,
+                      themeRevision: this.appearanceThemeRevision,
                       category: this.getCategory(topic),
                       isHighlighted: this.isTopicHighlighted(topic.id),
                       onCardClick: (t: Topic) => {
@@ -2661,6 +2725,11 @@ export struct TopicListPage {
                   } else {
                     TopicCard({
                       topic: topic,
+                      accentColorHex: this.accentColorHex,
+                      accentSurfaceColorHex: this.accentSurfaceColorHex,
+                      accentSurfaceVariantColorHex: this.accentSurfaceVariantColorHex,
+                      accentSelectedBackgroundColorHex: this.accentSelectedBackgroundColorHex,
+                      themeRevision: this.appearanceThemeRevision,
                       category: this.getCategory(topic),
                       opAvatarUrl: this.getOpAvatarUrl(topic),
                       isHighlighted: this.isTopicHighlighted(topic.id),
@@ -2698,7 +2767,7 @@ export struct TopicListPage {
             .width('100%')
             .layoutWeight(1)
             .padding({ left: 12, right: 12 })
-            .backgroundColor($r('app.color.background'))
+            .backgroundColor(this.accentBackgroundColorHex)
             .onTouch((event: TouchEvent) => {
               this.handleListTouch(event);
             })
@@ -2824,7 +2893,9 @@ export struct TopicListPage {
         detents: [SheetSize.MEDIUM, SheetSize.LARGE],
         showClose: false,
         enableFloatingDragBar: true,
-        backgroundColor: $r('app.color.surface')
+        backgroundColor: ModalChromeHelper.getSheetBackgroundColor(),
+        maskColor: ModalChromeHelper.getMaskColor(),
+        blurStyle: ModalChromeHelper.getSheetBlurStyle()
       })
 
       Column() {
@@ -2835,17 +2906,22 @@ export struct TopicListPage {
         detents: [SheetSize.MEDIUM, SheetSize.LARGE],
         showClose: false,
         enableFloatingDragBar: true,
-        backgroundColor: $r('app.color.surface')
+        backgroundColor: ModalChromeHelper.getSheetBackgroundColor(),
+        maskColor: ModalChromeHelper.getMaskColor(),
+        blurStyle: ModalChromeHelper.getSheetBlurStyle()
       })
+
     }
     .width('100%')
     .height('100%')
-    .backgroundColor($r('app.color.background'))
+    .backgroundColor(this.accentBackgroundColorHex)
     .bindSheet($$this.isSheetVisible, this.BottomSheetBuilder, {
       detents: [SheetSize.MEDIUM, SheetSize.LARGE],
       showClose: false,
       enableFloatingDragBar: true,
-      backgroundColor: $r('app.color.surface')
+      backgroundColor: ModalChromeHelper.getSheetBackgroundColor(),
+      maskColor: ModalChromeHelper.getMaskColor(),
+      blurStyle: ModalChromeHelper.getSheetBlurStyle()
     })
   }
 

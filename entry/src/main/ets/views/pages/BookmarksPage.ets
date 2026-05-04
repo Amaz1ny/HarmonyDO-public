@@ -16,6 +16,7 @@ import { TopicCard } from '../components/TopicCard';
 import { TopicPreviewDialog } from '../components/TopicPreviewDialog';
 import { BookmarkEditSheet } from '../components/BookmarkEditSheet';
 import { ImmersiveHdsTitleBarHelper } from '../components/ImmersiveHdsTitleBarHelper';
+import { ModalChromeHelper } from '../components/ModalChromeHelper';
 
 @ComponentV2
 export struct BookmarksPage {
@@ -398,7 +399,7 @@ export struct BookmarksPage {
 
   build() {
     HdsNavDestination() {
-      Stack({ alignContent: Alignment.Center }) {
+      Stack({ alignContent: Alignment.TopStart }) {
         Column() {
           Refresh({ refreshing: this.isRefreshing }) {
             if (this.isLoading && this.topics.length === 0 && this.errorMessage.length === 0) {
@@ -452,7 +453,7 @@ export struct BookmarksPage {
                 if (this.loadMoreFailed) {
                   Text('加载更多失败，点击重试')
                     .fontSize(13)
-                    .fontColor($r('app.color.primary'))
+                    .fontColor(ThemeManager.getCurrentAccentColorHex())
                     .width('100%')
                     .textAlign(TextAlign.Center)
                     .padding({ top: 12, bottom: 12 })
@@ -481,12 +482,14 @@ export struct BookmarksPage {
                 }
                 }
                 .width('100%')
+                .constraintSize({ minHeight: '100%' })
                 .padding({ left: 12, right: 12, top: 12, bottom: 12 + WindowManager.getSystemAvoidAreaBottomVp() })
+                .justifyContent(FlexAlign.Start)
                 .alignItems(HorizontalAlign.Center)
               }
               .width('100%')
               .height('100%')
-              .backgroundColor($r('app.color.background'))
+              .backgroundColor(ThemeManager.getCurrentAccentBackgroundColorHex())
               .scrollBar(BarState.Off)
               .edgeEffect(EdgeEffect.Spring)
               .onReachEnd(() => {
@@ -503,7 +506,7 @@ export struct BookmarksPage {
         }
         .width('100%')
         .height('100%')
-        .backgroundColor($r('app.color.background'))
+        .backgroundColor(ThemeManager.getCurrentAccentBackgroundColorHex())
 
         this.TopicPreviewOverlay()
 
@@ -515,15 +518,19 @@ export struct BookmarksPage {
           height: SheetSize.MEDIUM,
           dragBar: false,
           showClose: false,
-          backgroundColor: $r('app.color.surface'),
+          backgroundColor: ModalChromeHelper.getSheetBackgroundColor(),
+          maskColor: ModalChromeHelper.getMaskColor(),
+          blurStyle: ModalChromeHelper.getSheetBlurStyle(),
           onDisappear: () => {
             this.isBookmarkSheetVisible = false;
             this.editingTopic = null;
           }
         })
       }
+      .width('100%')
+      .height('100%')
     }
-    .backgroundColor($r('app.color.background'))
+    .backgroundColor(ThemeManager.getCurrentAccentBackgroundColorHex())
     .titleMode(HdsNavDestinationTitleMode.MINI)
     .titleBar(ImmersiveHdsTitleBarHelper.buildImmersiveTitleBarWithMenu(
       $r('app.string.profile_my_bookmarks'),
@@ -650,7 +657,7 @@ export struct BookmarksPage {
       }
     }
     .width('100%')
-    .backgroundColor($r('app.color.card_background'))
+    .backgroundColor(ThemeManager.getCurrentAccentSurfaceColorHex())
     .borderRadius(16)
     .margin({ bottom: 10 })
   }
@@ -663,7 +670,8 @@ export struct BookmarksPage {
         }
         .width('100%')
         .height('100%')
-        .backgroundColor('#66000000')
+        .backgroundColor(ModalChromeHelper.getMaskColor())
+        .backgroundBlurStyle(ModalChromeHelper.getDialogBlurStyle())
         .onClick(() => {
           this.closeTopicPreview();
         })
@@ -701,7 +709,8 @@ export struct BookmarksPage {
             .width('88%')
             .constraintSize({ maxWidth: 520 })
             .margin({ top: 12 })
-            .backgroundColor($r('app.color.surface'))
+            .backgroundColor(ModalChromeHelper.getDialogBackgroundColor())
+            .backgroundBlurStyle(ModalChromeHelper.getDialogBlurStyle())
             .borderRadius(20)
             .shadow({ radius: 12, color: this.getPreviewMenuShadowColor(), offsetX: 0, offsetY: 6 })
           }

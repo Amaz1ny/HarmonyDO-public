@@ -5,6 +5,7 @@ import { RouterManager } from '../../common/utils/RouterManager';
 import { ToastService } from '../../common/utils/ToastService';
 import { HdsNavDestination, HdsNavDestinationTitleMode } from '@kit.UIDesignKit';
 import { ImmersiveHdsTitleBarHelper } from '../components/ImmersiveHdsTitleBarHelper';
+import { ThemeManager } from '../../common/theme/ThemeManager';
 
 const TAG: string = 'AboutAppPage';
 const PREF_KEY_DEVELOPER_MODE: string = 'about_app_developer_mode_enabled';
@@ -99,7 +100,7 @@ export struct AboutAppPage {
   private getFooterLines(): string[] {
     return [
       'LDO社区是 Linux.do 的第三方鸿蒙客户端',
-      '灵感来自 FluxDO，感谢社区与开源作者'
+      '感谢 Linux.do 社区与开源生态'
     ];
   }
 
@@ -136,7 +137,7 @@ export struct AboutAppPage {
   private resolveItemSubtitle(itemKey: AboutAppItemKey): string {
     switch (itemKey) {
       case 'openSource':
-        return '查看 LDO社区与 FluxDO 的开源说明';
+        return '查看 LDO社区的开源说明';
       case 'sourceCode':
         return 'GitHub';
       case 'appLogs':
@@ -197,7 +198,7 @@ export struct AboutAppPage {
     Text(title)
       .fontSize(14)
       .fontWeight(FontWeight.Bold)
-      .fontColor($r('app.color.primary'))
+      .fontColor(ThemeManager.getCurrentAccentColorHex())
       .margin({ left: 24, right: 24, top: 8, bottom: 8 });
   }
 
@@ -326,6 +327,8 @@ export struct AboutAppPage {
             this.FooterSection();
           }
           .width('100%')
+          .constraintSize({ minHeight: '100%' })
+          .justifyContent(FlexAlign.Start)
           .padding({ bottom: 16 });
         }
         .scrollBar(BarState.Off)
@@ -333,11 +336,11 @@ export struct AboutAppPage {
       }
       .width('100%')
       .height('100%')
-      .backgroundColor($r('app.color.background'));
+      .backgroundColor(ThemeManager.getCurrentAccentBackgroundColorHex());
     }
     .titleMode(HdsNavDestinationTitleMode.MINI)
     .titleBar(ImmersiveHdsTitleBarHelper.buildImmersiveTitleBar($r('app.string.profile_about_app')))
-    .backgroundColor($r('app.color.background'))
+    .backgroundColor(ThemeManager.getCurrentAccentBackgroundColorHex())
     .hideTitleBar(false)
     .hideBackButton(false)
     .hideToolBar(true)

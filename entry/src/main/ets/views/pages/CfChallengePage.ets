@@ -11,6 +11,7 @@ import { CfChallengeService, CfVerifyContext } from '../../services/network/CfCh
 import { CfClearanceRefreshService } from '../../services/network/CfClearanceRefreshService';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { ImmersiveHdsTitleBarHelper } from '../components/ImmersiveHdsTitleBarHelper';
+import { ThemeManager } from '../../common/theme/ThemeManager';
 
 const TAG: string = 'CfChallengePage';
 const VERIFY_URL: string = `${AppConstants.BASE_URL}/challenge`;
@@ -1139,7 +1140,7 @@ export struct CfChallengePage {
       if (this.errorMessage.length > 0) {
         Text($r('app.string.cf_challenge_reload'))
           .fontSize(14)
-          .fontColor($r('app.color.primary'))
+          .fontColor(ThemeManager.getCurrentAccentColorHex())
           .margin({ right: 12 })
           .onClick(() => {
             this.onRetry();
@@ -1149,7 +1150,7 @@ export struct CfChallengePage {
     .width('100%')
     .height(56)
     .padding({ left: 8, right: 8, top: WindowManager.getSystemAvoidAreaTopVp() })
-    .backgroundColor($r('app.color.background'))
+    .backgroundColor(ThemeManager.getCurrentAccentBackgroundColorHex())
     .alignItems(VerticalAlign.Center)
   }
 
@@ -1163,7 +1164,7 @@ export struct CfChallengePage {
         if (this.progress > 0 && this.progress < 100 && this.errorMessage.length === 0) {
           Progress({ value: this.progress, total: 100 })
             .height(2)
-            .color($r('app.color.primary'))
+            .color(ThemeManager.getCurrentAccentColorHex())
         }
 
         Stack() {
@@ -1267,7 +1268,7 @@ export struct CfChallengePage {
             .height('100%')
             .justifyContent(FlexAlign.Center)
             .alignItems(HorizontalAlign.Center)
-            .backgroundColor($r('app.color.background'))
+            .backgroundColor(ThemeManager.getCurrentAccentBackgroundColorHex())
           }
         }
         .width('100%')
@@ -1275,7 +1276,7 @@ export struct CfChallengePage {
       }
       .width('100%')
       .height('100%')
-      .backgroundColor($r('app.color.background'))
+      .backgroundColor(ThemeManager.getCurrentAccentBackgroundColorHex())
   }
 
   build() {
@@ -1306,7 +1307,7 @@ export struct CfChallengePage {
         this.onCancel();
         return true;
       })
-      .backgroundColor($r('app.color.background'))
+      .backgroundColor(ThemeManager.getCurrentAccentBackgroundColorHex())
     }
   }
 }

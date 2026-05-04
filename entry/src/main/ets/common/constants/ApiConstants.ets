@@ -21,6 +21,16 @@ export class ApiConstants {
     return `/t/${id}/posts.json`;
   }
 
+  /** 获取树形视图根帖子 */
+  static nestedTopic(id: number): string {
+    return `/n/topic/${id}.json`;
+  }
+
+  /** 获取树形视图子回复 */
+  static nestedTopicChildren(id: number, postNumber: number): string {
+    return `/n/topic/${id}/children/${postNumber}.json`;
+  }
+
   /** 更新话题通知级别 */
   static topicNotificationLevel(id: number): string {
     return `/t/${id}/notifications`;
@@ -88,6 +98,12 @@ export class ApiConstants {
   /** 搜索 */
   static readonly SEARCH: string = '/search.json';
 
+  /** 最近搜索（服务端记录） */
+  static readonly RECENT_SEARCHES: string = '/u/recent-searches.json';
+
+  /** AI 语义搜索（Discourse AI 插件） */
+  static readonly SEMANTIC_SEARCH: string = '/discourse-ai/embeddings/semantic-search';
+
   /** 用户动态（user_actions） */
   static readonly USER_ACTIONS: string = '/user_actions.json';
 
@@ -97,6 +113,16 @@ export class ApiConstants {
   /** 切换帖子回应（discourse-reactions 插件） */
   static togglePostReaction(postId: number, reactionId: string): string {
     return `/discourse-reactions/posts/${postId}/custom-reactions/${encodeURIComponent(reactionId)}/toggle.json`;
+  }
+
+  /** 创建楼层简短回复（discourse-boosts 插件） */
+  static postBoosts(postId: number): string {
+    return `/discourse-boosts/posts/${postId}/boosts`;
+  }
+
+  /** 获取 / 删除楼层简短回复（discourse-boosts 插件） */
+  static boost(boostId: number): string {
+    return `/discourse-boosts/boosts/${boostId}`;
   }
 
   /** 获取帖子回复列表 */
@@ -170,6 +196,21 @@ export class ApiConstants {
   /** 获取当前用户创建的话题 */
   static userCreatedTopics(username: string): string {
     return `/topics/created-by/${username}.json`;
+  }
+
+  /** 获取私信收件箱 */
+  static privateMessages(username: string): string {
+    return `/topics/private-messages/${username}.json`;
+  }
+
+  /** 获取已发送私信 */
+  static privateMessagesSent(username: string): string {
+    return `/topics/private-messages-sent/${username}.json`;
+  }
+
+  /** 获取归档私信 */
+  static privateMessagesArchive(username: string): string {
+    return `/topics/private-messages-archive/${username}.json`;
   }
 
   /** 获取用户徽章 */

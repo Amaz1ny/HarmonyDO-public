@@ -49,6 +49,16 @@ export class EmojiResolver {
     }
   }
 
+  static registerEmojiUrl(nameRaw: string, urlRaw: string): void {
+    const name: string = EmojiResolver.normalizeEmojiName(nameRaw);
+    const url: string = urlRaw !== undefined && urlRaw !== null ? urlRaw.toString().trim() : '';
+    if (name.length === 0 || url.length === 0) return;
+    if (!EmojiResolver.customEmojiMap.has(name)) {
+      EmojiResolver.customEmojiMap.set(name, url);
+    }
+    EmojiResolver.hasConfigured = true;
+  }
+
   /**
    * 从 /site.json 提取 custom emoji 映射
    * 兼容结构：
@@ -156,14 +166,15 @@ export class EmojiResolver {
     const name: string = EmojiResolver.normalizeEmojiName(raw);
     if (name.length === 0) return '';
 
-    // Unicode emoji（如 🤷‍♀️）不走图片路径，交给 UI 文本兜底，避免拼出无效 URL
-    if (!EmojiResolver.isAsciiEmojiName(name)) {
-      return '';
-    }
-
     if (EmojiResolver.hasConfigured && EmojiResolver.customEmojiMap.has(name)) {
       const mapped: string = EmojiResolver.customEmojiMap.get(name) as string;
       return UrlUtils.resolveUrl(mapped);
+    }
+
+    // Unicode emoji（如 🤷‍♀️）不走图片路径，交给 UI 文本兜底；
+    // 但自定义表情可能包含中文名（如 :b站:），已在上方 customEmojiMap 优先命中。
+    if (!EmojiResolver.isAsciiEmojiName(name)) {
+      return '';
     }
 
     // 标准 twitter emoji 路径（Discourse 默认）

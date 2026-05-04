@@ -3,6 +3,8 @@ import { AppLogEntry, AppLogService } from '../../common/utils/AppLogService';
 import { ClipboardService } from '../../common/utils/ClipboardService';
 import { ToastService } from '../../common/utils/ToastService';
 import { ImmersiveHdsTitleBarHelper } from '../components/ImmersiveHdsTitleBarHelper';
+import { ModalChromeHelper } from '../components/ModalChromeHelper';
+import { ThemeManager } from '../../common/theme/ThemeManager';
 
 export type AppLogsFilterType = 'all' | 'error' | 'lifecycle' | 'general';
 
@@ -76,7 +78,7 @@ export struct AppLogsPage {
       .fontColor(this.filter === value ? Color.White : $r('app.color.on_surface'))
       .padding({ left: 12, right: 12, top: 6, bottom: 6 })
       .borderRadius(14)
-      .backgroundColor(this.filter === value ? $r('app.color.primary') : $r('app.color.surface_variant'))
+      .backgroundColor(this.filter === value ? ThemeManager.getCurrentAccentColorHex() : $r('app.color.surface_variant'))
       .onClick(() => {
         this.filter = value;
       });
@@ -190,13 +192,15 @@ export struct AppLogsPage {
         }
         .width('100%')
         .padding(16)
-        .backgroundColor($r('app.color.background'))
+        .backgroundColor(ModalChromeHelper.getDialogBackgroundColor())
+        .backgroundBlurStyle(ModalChromeHelper.getDialogBlurStyle())
         .borderRadius({ topLeft: 16, topRight: 16 });
       }
       .position({ x: 0, y: 0 })
       .width('100%')
       .height('100%')
-      .backgroundColor('#66000000');
+      .backgroundColor(ModalChromeHelper.getMaskColor())
+      .backgroundBlurStyle(ModalChromeHelper.getDialogBlurStyle());
     }
   }
 
@@ -228,13 +232,15 @@ export struct AppLogsPage {
         }
         .width('100%')
         .padding(16)
-        .backgroundColor($r('app.color.background'))
+        .backgroundColor(ModalChromeHelper.getDialogBackgroundColor())
+        .backgroundBlurStyle(ModalChromeHelper.getDialogBlurStyle())
         .borderRadius({ topLeft: 16, topRight: 16 });
       }
       .position({ x: 0, y: 0 })
       .width('100%')
       .height('100%')
-      .backgroundColor('#66000000');
+      .backgroundColor(ModalChromeHelper.getMaskColor())
+      .backgroundBlurStyle(ModalChromeHelper.getDialogBlurStyle());
     }
   }
 
@@ -258,11 +264,13 @@ export struct AppLogsPage {
             }
           }
           .width('100%')
+          .constraintSize({ minHeight: '100%' })
+          .justifyContent(FlexAlign.Start)
           .padding({ bottom: 16 })
         }
         .width('100%')
         .height('100%')
-        .backgroundColor($r('app.color.background'))
+        .backgroundColor(ThemeManager.getCurrentAccentBackgroundColorHex())
         .scrollBar(BarState.Off)
         .edgeEffect(EdgeEffect.Spring);
 
@@ -290,6 +298,6 @@ export struct AppLogsPage {
       { statusBarContentColor: ImmersiveHdsTitleBarHelper.getStatusBarContentColor() },
       { statusBarContentColor: ImmersiveHdsTitleBarHelper.getStatusBarContentColor() }
     )
-    .backgroundColor($r('app.color.background'));
+    .backgroundColor(ThemeManager.getCurrentAccentBackgroundColorHex());
   }
 }

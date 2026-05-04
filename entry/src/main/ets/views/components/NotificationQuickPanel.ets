@@ -32,6 +32,7 @@ import { AuthService } from '../../services/auth/AuthService';
 import { NotificationTrackingService } from '../../services/messagebus/NotificationTrackingService';
 import { LoadingSpinner } from './LoadingSpinner';
 import { SmartAvatar } from './SmartAvatar';
+import { ThemeManager } from '../../common/theme/ThemeManager';
 
 const MODAL_TITLE_BAR_SCROLL_EFFECT_START_OFFSET_VP: number = 0;
 const MODAL_TITLE_BAR_SCROLL_EFFECT_END_OFFSET_VP: number = 56;
@@ -382,7 +383,7 @@ export struct NotificationQuickPanel {
             .height(34)
             .padding({ left: 12, right: 12 })
             .borderRadius(17)
-            .backgroundColor($r('app.color.search_background'))
+            .backgroundColor(ThemeManager.getCurrentAccentSurfaceVariantColorHex())
             .enabled(this.notifications.length > 0 && !this.isMarkingAllRead)
             .opacity(this.notifications.length > 0 ? 1 : 0.36)
             .justifyContent(FlexAlign.Center)
@@ -406,7 +407,7 @@ export struct NotificationQuickPanel {
             .height(34)
             .padding({ left: 12, right: 8 })
             .borderRadius(17)
-            .backgroundColor($r('app.color.search_background'))
+            .backgroundColor(ThemeManager.getCurrentAccentSurfaceVariantColorHex())
             .onClick(() => {
               this.onViewAll();
             })
@@ -434,7 +435,7 @@ export struct NotificationQuickPanel {
                 .fontColor($r('app.color.on_surface_secondary'))
               Text('点击重试')
                 .fontSize(13)
-                .fontColor($r('app.color.primary'))
+                .fontColor(ThemeManager.getCurrentAccentColorHex())
                 .margin({ top: 12 })
             }
             .width('100%')
@@ -475,7 +476,7 @@ export struct NotificationQuickPanel {
     }
     .width('100%')
     .height('100%')
-    .backgroundColor($r('app.color.surface'))
+    .backgroundColor(ThemeManager.getCurrentAccentSurfaceColorHex())
     .titleBar(this.buildModalTitleBar())
     .titleMode(HdsNavigationTitleMode.MODAL)
     .bindToScrollable([this.modalScroller])
@@ -521,7 +522,7 @@ export struct NotificationQuickPanel {
               Circle()
                 .width(8)
                 .height(8)
-                .fill($r('app.color.primary'))
+                .fill(ThemeManager.getCurrentAccentColorHex())
                 .margin({ left: 8, top: 4 })
             }
           }

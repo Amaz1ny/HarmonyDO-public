@@ -12,6 +12,8 @@ import {
   ReadLaterService
 } from '../../services/storage/ReadLaterService';
 import { HoldingHandService, HoldingHandState } from '../../services/device/HoldingHandService';
+import { ModalChromeHelper } from './ModalChromeHelper';
+import { ThemeManager } from '../../common/theme/ThemeManager';
 
 const DOCK_HEIGHT: number = 48;
 const DOCK_COLLAPSED_WIDTH: number = 72;
@@ -232,12 +234,12 @@ export struct ReadLaterBubble {
         Row() {
           SymbolGlyph($r('sys.symbol.clock'))
             .fontSize(18)
-            .fontColor([$r('app.color.primary')])
+            .fontColor([ThemeManager.getCurrentAccentColorHex()])
         }
         .width(30)
         .height(30)
         .borderRadius(15)
-        .backgroundColor($r('app.color.search_background'))
+        .backgroundColor(ThemeManager.getCurrentAccentSurfaceVariantColorHex())
         .justifyContent(FlexAlign.Center)
         .alignItems(VerticalAlign.Center)
 
@@ -260,10 +262,10 @@ export struct ReadLaterBubble {
             Text(this.getCollapsedCountLabel())
               .fontSize(11)
               .fontWeight(FontWeight.Bold)
-              .fontColor($r('app.color.primary'))
+              .fontColor(ThemeManager.getCurrentAccentColorHex())
           }
           .padding({ left: 8, right: 8, top: 4, bottom: 4 })
-          .backgroundColor($r('app.color.search_background'))
+          .backgroundColor(ThemeManager.getCurrentAccentSurfaceVariantColorHex())
           .borderRadius(10)
 
           SymbolGlyph($r('sys.symbol.chevron_right'))
@@ -278,7 +280,7 @@ export struct ReadLaterBubble {
       .height(DOCK_HEIGHT)
       .padding({ left: 10, right: 12 })
       .borderRadius(24)
-      .backgroundColor($r('app.color.surface'))
+      .backgroundColor(ThemeManager.getCurrentAccentSurfaceColorHex())
       .border({ width: 0.5, color: $r('app.color.fab_glass_stroke') })
       .shadow({ radius: 16, color: '#22000000', offsetX: 0, offsetY: 8 })
       .clip(true)
@@ -292,7 +294,9 @@ export struct ReadLaterBubble {
         height: SheetSize.FIT_CONTENT,
         dragBar: true,
         showClose: false,
-        backgroundColor: $r('app.color.surface'),
+        backgroundColor: ModalChromeHelper.getSheetBackgroundColor(),
+        maskColor: ModalChromeHelper.getMaskColor(),
+        blurStyle: ModalChromeHelper.getSheetBlurStyle(),
         onDisappear: () => {
           this.closeSheet();
         }
@@ -345,7 +349,7 @@ export struct ReadLaterBubble {
     }
     .width('100%')
     .padding({ left: 16, right: 16, top: 14, bottom: 14 })
-    .backgroundColor($r('app.color.surface'))
+    .backgroundColor(ThemeManager.getCurrentAccentSurfaceColorHex())
     .border({
       width: { bottom: 0.5 },
       color: $r('app.color.divider')

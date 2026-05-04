@@ -262,7 +262,7 @@ export struct MyBadgesPage {
             }
             .width('100%')
             .height('100%')
-            .backgroundColor($r('app.color.background'))
+            .backgroundColor(ThemeManager.getCurrentAccentBackgroundColorHex())
             .scrollBar(BarState.Off)
           }
         }
@@ -275,9 +275,9 @@ export struct MyBadgesPage {
       }
       .width('100%')
       .height('100%')
-      .backgroundColor($r('app.color.background'))
+      .backgroundColor(ThemeManager.getCurrentAccentBackgroundColorHex())
     }
-    .backgroundColor($r('app.color.background'))
+    .backgroundColor(ThemeManager.getCurrentAccentBackgroundColorHex())
     .titleMode(HdsNavDestinationTitleMode.MINI)
     .titleBar(ImmersiveHdsTitleBarHelper.buildImmersiveTitleBar($r('app.string.profile_my_badges')))
     .hideTitleBar(false)
@@ -336,7 +336,7 @@ export struct MyBadgesPage {
     }
     .width('100%')
     .height(this.getHeroHeight())
-    .backgroundColor($r('app.color.surface'))
+    .backgroundColor(ThemeManager.getCurrentAccentSurfaceColorHex())
     .linearGradient({
       angle: 135,
       colors: [
@@ -358,7 +358,7 @@ export struct MyBadgesPage {
       .width(72)
       .height(72)
       .borderRadius(36)
-      .backgroundColor($r('app.color.surface'))
+      .backgroundColor(ThemeManager.getCurrentAccentSurfaceColorHex())
       .justifyContent(FlexAlign.Center)
       .alignItems(VerticalAlign.Center)
 
@@ -461,7 +461,7 @@ export struct MyBadgesPage {
     }
     .width('48%')
     .height(BADGE_CARD_HEIGHT)
-    .backgroundColor($r('app.color.surface'))
+    .backgroundColor(ThemeManager.getCurrentAccentSurfaceColorHex())
     .linearGradient({
       angle: 135,
       colors: [

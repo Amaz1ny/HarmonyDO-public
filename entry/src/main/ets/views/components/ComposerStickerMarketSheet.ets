@@ -1,6 +1,7 @@
 import { StickerGroup } from '../../models/Sticker';
 import { StickerMarketService } from '../../services/network/StickerMarketService';
 import { ComposerStickerPreferences } from '../../services/storage/ComposerStickerPreferences';
+import { ThemeManager } from '../../common/theme/ThemeManager';
 
 @ComponentV2
 export struct ComposerStickerMarketSheet {
@@ -160,7 +161,7 @@ export struct ComposerStickerMarketSheet {
       }
       .height(40)
       .padding({ left: 14, right: 10 })
-      .backgroundColor($r('app.color.search_background'))
+      .backgroundColor(ThemeManager.getCurrentAccentSurfaceVariantColorHex())
       .borderRadius(20)
       .layoutWeight(1)
       .alignItems(VerticalAlign.Center)
@@ -168,13 +169,13 @@ export struct ComposerStickerMarketSheet {
       Button() {
         Text('完成')
           .fontSize(14)
-          .fontColor($r('app.color.primary'))
+          .fontColor(ThemeManager.getCurrentAccentColorHex())
           .fontWeight(FontWeight.Medium)
       }
       .height(40)
       .padding({ left: 16, right: 16 })
       .borderRadius(20)
-      .backgroundColor($r('app.color.badge_background_light'))
+      .backgroundColor(ThemeManager.getCurrentAccentSelectedBackgroundColorHex())
       .margin({ left: 10 })
       .onClick(() => {
         this.onDone();
@@ -204,7 +205,7 @@ export struct ComposerStickerMarketSheet {
       .height(40)
       .justifyContent(FlexAlign.Center)
       .alignItems(VerticalAlign.Center)
-      .backgroundColor($r('app.color.surface_variant'))
+      .backgroundColor(ThemeManager.getCurrentAccentSurfaceVariantColorHex())
       .borderRadius(10)
     }
   }
@@ -240,25 +241,25 @@ export struct ComposerStickerMarketSheet {
                   Text('✓')
                     .fontSize(13)
                     .fontWeight(FontWeight.Bold)
-                    .fontColor($r('app.color.primary'))
+                    .fontColor(ThemeManager.getCurrentAccentColorHex())
                     .margin({ right: 4 })
                 } else {
                   SymbolGlyph($r('sys.symbol.plus'))
                     .fontSize(14)
-                    .fontColor([$r('app.color.primary')])
+                    .fontColor([ThemeManager.getCurrentAccentColorHex()])
                     .margin({ right: 4 })
                 }
 
                 Text(this.isSubscribed(group.id) ? '已添加' : '添加')
                   .fontSize(13)
                   .fontWeight(FontWeight.Medium)
-                  .fontColor($r('app.color.primary'))
+                  .fontColor(ThemeManager.getCurrentAccentColorHex())
               }
             }
             .height(36)
             .padding({ left: 12, right: 12 })
             .backgroundColor(this.isSubscribed(group.id)
-              ? $r('app.color.badge_background_light')
+              ? ThemeManager.getCurrentAccentSelectedBackgroundColorHex()
               : Color.Transparent)
             .borderRadius(18)
             .border(this.isSubscribed(group.id)
@@ -325,7 +326,7 @@ export struct ComposerStickerMarketSheet {
         .type(ButtonType.Capsule)
         .height(36)
         .margin({ top: 12 })
-        .backgroundColor($r('app.color.primary'))
+        .backgroundColor(ThemeManager.getCurrentAccentColorHex())
         .fontColor(Color.White)
         .onClick(() => {
           this.loadData().catch((_: Object) => {
@@ -370,6 +371,6 @@ export struct ComposerStickerMarketSheet {
     }
     .width('100%')
     .height('100%')
-    .backgroundColor($r('app.color.surface'))
+    .backgroundColor(ThemeManager.getCurrentAccentSurfaceColorHex())
   }
 }

@@ -12,6 +12,7 @@ export class RouteConstants {
   static readonly PAGE_SETTINGS: string = 'Settings';
   static readonly PAGE_BOOKMARKS: string = 'Bookmarks';
   static readonly PAGE_DRAFTS: string = 'Drafts';
+  static readonly PAGE_PRIVATE_MESSAGES: string = 'PrivateMessages';
   static readonly PAGE_MY_TOPICS: string = 'MyTopics';
   static readonly PAGE_MY_BADGES: string = 'MyBadges';
   static readonly PAGE_BROWSING_HISTORY: string = 'BrowsingHistory';
@@ -26,6 +27,7 @@ export class RouteConstants {
   static readonly PAGE_ABOUT_APP: string = 'AboutApp';
   static readonly PAGE_OPEN_SOURCE_INFO: string = 'OpenSourceInfo';
   static readonly PAGE_APP_LOGS: string = 'AppLogs';
+  static readonly PAGE_APPEARANCE_SETTINGS: string = 'AppearanceSettings';
   static readonly PAGE_FEATURE_SETTINGS: string = 'FeatureSettings';
   static readonly PAGE_DATA_MANAGEMENT: string = 'DataManagement';
 }
@@ -244,6 +246,10 @@ export class RouterManager {
     RouterManager.pushPath(RouteConstants.PAGE_DRAFTS);
   }
 
+  static pushPrivateMessages(): void {
+    RouterManager.pushPath(RouteConstants.PAGE_PRIVATE_MESSAGES);
+  }
+
   static pushMyTopics(): void {
     RouterManager.pushPath(RouteConstants.PAGE_MY_TOPICS);
   }
@@ -274,6 +280,10 @@ export class RouterManager {
 
   static pushAppLogs(): void {
     RouterManager.pushPath(RouteConstants.PAGE_APP_LOGS);
+  }
+
+  static pushAppearanceSettings(): void {
+    RouterManager.pushPath(RouteConstants.PAGE_APPEARANCE_SETTINGS);
   }
 
   static pushFeatureSettings(): void {

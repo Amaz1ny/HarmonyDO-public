@@ -15,7 +15,10 @@ import { HdsNavDestination, HdsNavDestinationTitleMode } from '@kit.UIDesignKit'
 import { WindowManager } from '../../common/utils/WindowManager';
 import { TopicTrackingService } from '../../services/messagebus/TopicTrackingService';
 import { TopicListPreferences } from '../../services/storage/TopicListPreferences';
+import { AppearanceSettingsService, AppearanceSettingsState } from '../../services/storage/AppearanceSettingsService';
 import { ImmersiveHdsTitleBarHelper } from '../components/ImmersiveHdsTitleBarHelper';
+import { ModalChromeHelper } from '../components/ModalChromeHelper';
+import { ThemeManager } from '../../common/theme/ThemeManager';
 
 const TAG: string = 'CategoryTopicPage';
 
@@ -51,13 +54,22 @@ export struct CategoryTopicPage {
   @Local previewParentCategory: Category | null = null;
   @Local isTopicPreviewVisible: boolean = false;
 
+  @Local accentColorHex: string = ThemeManager.getCurrentAccentColorHex();
+  @Local accentBackgroundColorHex: string = ThemeManager.getCurrentAccentBackgroundColorHex();
+  @Local accentSurfaceColorHex: string = ThemeManager.getCurrentAccentSurfaceColorHex();
+  @Local accentSurfaceVariantColorHex: string = ThemeManager.getCurrentAccentSurfaceVariantColorHex();
+  @Local accentSelectedBackgroundColorHex: string = ThemeManager.getCurrentAccentSelectedBackgroundColorHex();
+  @Local appearanceThemeRevision: number = 0;
+
   private contentScroller: Scroller = new Scroller();
   private trackingListener: (() => void) | null = null;
   private authStateListener: (() => void) | null = null;
+  private appearanceSettingsListener: ((state: AppearanceSettingsState) => void) | null = null;
   private isResetLoading: boolean = false;
 
   aboutToAppear(): void {
     this.attachAuthStateListener();
+    this.attachAppearanceSettingsListener();
     this.bootstrapPage().catch((err: Object) => {
       hilog.error(0x0000, TAG, 'Bootstrap page failed: %{public}s', JSON.stringify(err));
       this.isLoading = false;
@@ -77,6 +89,36 @@ export struct CategoryTopicPage {
       AuthService.getInstance().removeListener(this.authStateListener);
       this.authStateListener = null;
     }
+    this.detachAppearanceSettingsListener();
+  }
+
+  private applyAppearanceSettingsState(state: AppearanceSettingsState): void {
+    this.accentColorHex = ThemeManager.getAccentColorHex(state.accentColor);
+    this.accentBackgroundColorHex = ThemeManager.getAccentBackgroundColorHex(state.accentColor);
+    this.accentSurfaceColorHex = ThemeManager.getAccentSurfaceColorHex(state.accentColor);
+    this.accentSurfaceVariantColorHex = ThemeManager.getAccentSurfaceVariantColorHex(state.accentColor);
+    this.accentSelectedBackgroundColorHex = ThemeManager.getAccentSelectedBackgroundColorHex(state.accentColor);
+    this.appearanceThemeRevision = this.appearanceThemeRevision + 1;
+  }
+
+  private attachAppearanceSettingsListener(): void {
+    if (this.appearanceSettingsListener !== null) {
+      return;
+    }
+    const service: AppearanceSettingsService = AppearanceSettingsService.getInstance();
+    this.applyAppearanceSettingsState(service.getSnapshot());
+    this.appearanceSettingsListener = (state: AppearanceSettingsState) => {
+      this.applyAppearanceSettingsState(state);
+    };
+    service.addListener(this.appearanceSettingsListener);
+  }
+
+  private detachAppearanceSettingsListener(): void {
+    if (this.appearanceSettingsListener === null) {
+      return;
+    }
+    AppearanceSettingsService.getInstance().removeListener(this.appearanceSettingsListener);
+    this.appearanceSettingsListener = null;
   }
 
   private attachAuthStateListener(): void {
@@ -397,7 +439,8 @@ export struct CategoryTopicPage {
         }
         .width('100%')
         .height('100%')
-        .backgroundColor('#66000000')
+        .backgroundColor(ModalChromeHelper.getMaskColor())
+        .backgroundBlurStyle(ModalChromeHelper.getDialogBlurStyle())
         .onClick(() => {
           this.closeTopicPreview();
         })
@@ -424,6 +467,12 @@ export struct CategoryTopicPage {
     Row() {
       PillMenuButton({
         value: this.currentFilter,
+        accentColorHex: this.accentColorHex,
+        accentSurfaceColorHex: this.accentSurfaceColorHex,
+        accentSurfaceVariantColorHex: this.accentSurfaceVariantColorHex,
+        accentSelectedBackgroundColorHex: this.accentSelectedBackgroundColorHex,
+        themeRevision: this.appearanceThemeRevision,
+
         valueLabel: this.getFilterLabel(this.currentFilter),
         options: this.getFilterOptions(),
         menuWidth: 160,
@@ -436,6 +485,12 @@ export struct CategoryTopicPage {
 
       PillMenuButton({
         value: this.currentOrder,
+        accentColorHex: this.accentColorHex,
+        accentSurfaceColorHex: this.accentSurfaceColorHex,
+        accentSurfaceVariantColorHex: this.accentSurfaceVariantColorHex,
+        accentSelectedBackgroundColorHex: this.accentSelectedBackgroundColorHex,
+        themeRevision: this.appearanceThemeRevision,
+
         valueLabel: this.getOrderLabel(this.currentOrder),
         options: SORT_ORDER_OPTIONS,
         menuWidth: 190,
@@ -450,6 +505,8 @@ export struct CategoryTopicPage {
       if (this.selectedTags.length === 0) {
         PillIconButton({
           rightSymbol: $r('sys.symbol.label'),
+          accentSurfaceColorHex: this.accentSurfaceColorHex,
+          themeRevision: this.appearanceThemeRevision,
           onAction: () => {
             this.openTagSheet();
           }
@@ -460,6 +517,8 @@ export struct CategoryTopicPage {
             ForEach(this.selectedTags, (t: string) => {
               TagChip({
                 tagName: t,
+                accentSurfaceVariantColorHex: this.accentSurfaceVariantColorHex,
+                themeRevision: this.appearanceThemeRevision,
                 onRemove: () => {
                   this.removeTag(t);
                 }
@@ -467,6 +526,8 @@ export struct CategoryTopicPage {
             })
             PillIconButton({
               rightSymbol: $r('sys.symbol.label'),
+              accentSurfaceColorHex: this.accentSurfaceColorHex,
+              themeRevision: this.appearanceThemeRevision,
               onAction: () => {
                 this.openTagSheet();
               }
@@ -654,6 +715,12 @@ export struct CategoryTopicPage {
   TagSheetBuilder() {
     TagSelectionSheet({
       title: '选择标签',
+      accentColorHex: this.accentColorHex,
+      accentSurfaceColorHex: this.accentSurfaceColorHex,
+      accentSurfaceVariantColorHex: this.accentSurfaceVariantColorHex,
+      accentSelectedBackgroundColorHex: this.accentSelectedBackgroundColorHex,
+      themeRevision: this.appearanceThemeRevision,
+
       doneText: '确定',
       availableTags: this.availableTags,
       selectedTags: this.draftSelectedTags,
@@ -720,6 +787,12 @@ export struct CategoryTopicPage {
                       if (topic.pinned) {
                         CompactTopicCard({
                           topic: topic,
+                          accentColorHex: this.accentColorHex,
+                          accentSurfaceColorHex: this.accentSurfaceColorHex,
+                          accentSurfaceVariantColorHex: this.accentSurfaceVariantColorHex,
+                          accentSelectedBackgroundColorHex: this.accentSelectedBackgroundColorHex,
+                          themeRevision: this.appearanceThemeRevision,
+
                           category: this.getCategory(topic),
                           onCardClick: (t: Topic) => {
                             RouterManager.pushTopicDetail(t.id);
@@ -731,6 +804,12 @@ export struct CategoryTopicPage {
                       } else {
                         TopicCard({
                           topic: topic,
+                          accentColorHex: this.accentColorHex,
+                          accentSurfaceColorHex: this.accentSurfaceColorHex,
+                          accentSurfaceVariantColorHex: this.accentSurfaceVariantColorHex,
+                          accentSelectedBackgroundColorHex: this.accentSelectedBackgroundColorHex,
+                          themeRevision: this.appearanceThemeRevision,
+
                           category: this.getCategory(topic),
                           opAvatarUrl: this.getOpAvatarUrl(topic),
                           onCardClick: (t: Topic) => {
@@ -760,11 +839,13 @@ export struct CategoryTopicPage {
                   .padding({ left: 12, right: 12, top: 8, bottom: 12 + WindowManager.getSystemAvoidAreaBottomVp() })
                 }
                 .width('100%')
-                .backgroundColor($r('app.color.background'))
+                .constraintSize({ minHeight: '100%' })
+                .justifyContent(FlexAlign.Start)
+                .backgroundColor(this.accentBackgroundColorHex)
               }
               .width('100%')
               .height('100%')
-              .backgroundColor($r('app.color.background'))
+              .backgroundColor(this.accentBackgroundColorHex)
               .scrollBar(BarState.Off)
               .edgeEffect(EdgeEffect.Spring)
               .onReachEnd(() => {
@@ -779,21 +860,23 @@ export struct CategoryTopicPage {
         }
         .width('100%')
         .height('100%')
-        .backgroundColor($r('app.color.background'))
+        .backgroundColor(this.accentBackgroundColorHex)
 
         this.TopicPreviewOverlay()
       }
       .width('100%')
       .height('100%')
-      .backgroundColor($r('app.color.background'))
+      .backgroundColor(this.accentBackgroundColorHex)
       .bindSheet($$this.isTagSheetVisible, this.TagSheetBuilder, {
         height: SheetSize.LARGE,
         dragBar: false,
         showClose: false,
-        backgroundColor: $r('app.color.surface')
+        backgroundColor: ModalChromeHelper.getSheetBackgroundColor(),
+        maskColor: ModalChromeHelper.getMaskColor(),
+        blurStyle: ModalChromeHelper.getSheetBlurStyle()
       })
     }
-    .backgroundColor($r('app.color.background'))
+    .backgroundColor(this.accentBackgroundColorHex)
     .titleMode(HdsNavDestinationTitleMode.MINI)
     .titleBar(ImmersiveHdsTitleBarHelper.buildImmersiveTitleBarWithMenu(
       this.getCategoryTitle(),

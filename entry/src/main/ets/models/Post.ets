@@ -276,6 +276,146 @@ export class PostReactionState {
 /**
  * 帖子（回复）数据模型
  */
+
+export class PostBoostUser {
+  id: number = 0;
+  username: string = '';
+  name: string | null = null;
+  avatarTemplate: string = '';
+
+  constructor() {
+  }
+
+  static fromJson(json: Record<string, Object>): PostBoostUser {
+    const out: PostBoostUser = new PostBoostUser();
+    const idVal = json['id'];
+    out.id = idVal !== undefined && idVal !== null ? Number(idVal.toString()) : 0;
+    if (isNaN(out.id) || out.id < 0) {
+      out.id = 0;
+    }
+
+    const usernameVal = json['username'];
+    out.username = usernameVal !== undefined && usernameVal !== null ? usernameVal.toString() : '';
+
+    const nameVal = json['name'];
+    const nameText: string = nameVal !== undefined && nameVal !== null ? nameVal.toString().trim() : '';
+    out.name = nameText.length > 0 ? nameText : null;
+
+    const avatarVal = json['avatar_template'];
+    out.avatarTemplate = avatarVal !== undefined && avatarVal !== null ? avatarVal.toString() : '';
+    return out;
+  }
+
+  static cloneValue(source: PostBoostUser | null | undefined): PostBoostUser | null {
+    if (source === null || source === undefined) {
+      return null;
+    }
+    const out: PostBoostUser = new PostBoostUser();
+    out.id = source.id;
+    out.username = source.username;
+    out.name = source.name;
+    out.avatarTemplate = source.avatarTemplate;
+    return out;
+  }
+}
+
+export class PostBoost {
+  id: number = 0;
+  raw: string = '';
+  cooked: string = '';
+  user: PostBoostUser | null = null;
+  canDelete: boolean = false;
+  canFlag: boolean = false;
+  availableFlags: string[] = [];
+  userFlagStatus: string | null = null;
+
+  constructor() {
+  }
+
+  static fromJson(json: Record<string, Object>): PostBoost {
+    const out: PostBoost = new PostBoost();
+
+    const idVal = json['id'];
+    out.id = idVal !== undefined && idVal !== null ? Number(idVal.toString()) : 0;
+    if (isNaN(out.id) || out.id < 0) {
+      out.id = 0;
+    }
+
+    const rawVal = json['raw'];
+    out.raw = rawVal !== undefined && rawVal !== null ? rawVal.toString() : '';
+
+    const cookedVal = json['cooked'];
+    out.cooked = cookedVal !== undefined && cookedVal !== null ? cookedVal.toString() : '';
+
+    const userVal = json['user'];
+    if (userVal !== undefined && userVal !== null && typeof userVal === 'object') {
+      out.user = PostBoostUser.fromJson(userVal as Record<string, Object>);
+    }
+
+    const canDeleteVal = json['can_delete'];
+    out.canDelete = canDeleteVal !== undefined && canDeleteVal !== null ? canDeleteVal as boolean : false;
+
+    const canFlagVal = json['can_flag'];
+    out.canFlag = canFlagVal !== undefined && canFlagVal !== null ? canFlagVal as boolean : false;
+
+    const flagsVal = json['available_flags'];
+    if (flagsVal !== undefined && flagsVal !== null && Array.isArray(flagsVal)) {
+      const arr: Object[] = flagsVal as Object[];
+      const flags: string[] = [];
+      for (let i = 0; i < arr.length; i++) {
+        const item: Object = arr[i];
+        if (item === undefined || item === null) {
+          continue;
+        }
+        const text: string = item.toString().trim();
+        if (text.length > 0) {
+          flags.push(text);
+        }
+      }
+      out.availableFlags = flags;
+    }
+
+    const flagStatusVal = json['user_flag_status'];
+    const flagStatus: string = flagStatusVal !== undefined && flagStatusVal !== null ? flagStatusVal.toString().trim() : '';
+    out.userFlagStatus = flagStatus.length > 0 ? flagStatus : null;
+    return out;
+  }
+
+  static cloneValue(source: PostBoost | null | undefined): PostBoost | null {
+    if (source === null || source === undefined) {
+      return null;
+    }
+    const out: PostBoost = new PostBoost();
+    out.id = source.id;
+    out.raw = source.raw;
+    out.cooked = source.cooked;
+    out.user = PostBoostUser.cloneValue(source.user);
+    out.canDelete = source.canDelete;
+    out.canFlag = source.canFlag;
+    const flags: string[] = [];
+    for (let i = 0; i < source.availableFlags.length; i++) {
+      flags.push(source.availableFlags[i]);
+    }
+    out.availableFlags = flags;
+    out.userFlagStatus = source.userFlagStatus;
+    return out;
+  }
+
+  static cloneList(source: PostBoost[] | null | undefined): PostBoost[] {
+    if (source === null || source === undefined || source.length === 0) {
+      return [];
+    }
+    const out: PostBoost[] = [];
+    for (let i = 0; i < source.length; i++) {
+      const cloned: PostBoost | null = PostBoost.cloneValue(source[i]);
+      if (cloned !== null) {
+        out.push(cloned);
+      }
+    }
+    return out;
+  }
+}
+
 export class Post {
   id: number = 0;
   name: string | null = null;
@@ -339,6 +479,10 @@ export class Post {
   // discourse-reactions 插件回应
   reactions: PostReaction[] | null = null;
   currentUserReaction: PostReaction | null = null;
+
+  // discourse-boosts 简短回复
+  boosts: PostBoost[] | null = null;
+  canBoost: boolean = false;
 
   // 相关链接（reflection links）
   linkCounts: LinkCount[] | null = null;
@@ -537,6 +681,26 @@ export class Post {
     if (post.currentUserReaction !== null) {
       post.liked = (post.currentUserReaction as PostReaction).id === 'heart';
     }
+
+    const boostsVal = json['boosts'];
+    if (boostsVal !== undefined && boostsVal !== null && Array.isArray(boostsVal)) {
+      const arr: Object[] = boostsVal as Object[];
+      const boosts: PostBoost[] = [];
+      for (let i = 0; i < arr.length; i++) {
+        const item: Object = arr[i];
+        if (item === null || item === undefined || typeof item !== 'object') {
+          continue;
+        }
+        const boost: PostBoost = PostBoost.fromJson(item as Record<string, Object>);
+        if (boost.id > 0 || boost.raw.trim().length > 0 || boost.cooked.trim().length > 0) {
+          boosts.push(boost);
+        }
+      }
+      post.boosts = boosts.length > 0 ? boosts : null;
+    }
+
+    const canBoostVal = json['can_boost'];
+    post.canBoost = canBoostVal !== undefined && canBoostVal !== null ? canBoostVal as boolean : false;
 
     const badgesVal = json['badges_granted'];
     if (badgesVal !== undefined && badgesVal !== null) {

@@ -5,6 +5,7 @@ import {
 import { FeatureSettingsService, FeatureSettingsState } from '../../services/storage/FeatureSettingsService';
 import { ToastService } from '../../common/utils/ToastService';
 import { ImmersiveHdsTitleBarHelper } from '../components/ImmersiveHdsTitleBarHelper';
+import { ThemeManager } from '../../common/theme/ThemeManager';
 
 const PAGE_HORIZONTAL_PADDING: number = 16;
 const CARD_CORNER_RADIUS: number = 20;
@@ -285,7 +286,7 @@ export struct FeatureSettingsPage {
         text: this.stickerSourceDraft,
         placeholder: $r('app.string.feature_settings_sticker_source_placeholder')
       })
-        .backgroundColor($r('app.color.surface_variant'))
+        .backgroundColor(ThemeManager.getCurrentAccentSurfaceVariantColorHex())
         .borderRadius(INPUT_CORNER_RADIUS)
         .border({ width: 1, color: $r('app.color.input_border') })
         .padding({ left: 12, right: 12 })
@@ -316,7 +317,7 @@ export struct FeatureSettingsPage {
         })
           .enabled(!this.isSavingStickerSource)
           .layoutWeight(1)
-          .backgroundColor($r('app.color.primary'))
+          .backgroundColor(ThemeManager.getCurrentAccentColorHex())
           .fontColor('#FFFFFF')
           .onClick(() => {
             this.saveStickerSource().catch(() => {});
@@ -373,7 +374,9 @@ export struct FeatureSettingsPage {
             }, (section: FeatureSettingsSection) => section.keys.join('_'));
           }
           .width('100%')
+          .constraintSize({ minHeight: '100%' })
           .padding({ left: PAGE_HORIZONTAL_PADDING, right: PAGE_HORIZONTAL_PADDING, top: 16, bottom: 24 })
+          .justifyContent(FlexAlign.Start)
           .alignItems(HorizontalAlign.Start);
         }
         .width('100%')
@@ -381,7 +384,7 @@ export struct FeatureSettingsPage {
       }
       .width('100%')
       .height('100%')
-      .backgroundColor($r('app.color.background'));
+      .backgroundColor(ThemeManager.getCurrentAccentBackgroundColorHex());
     }
     .titleMode(HdsNavDestinationTitleMode.MINI)
     .titleBar(ImmersiveHdsTitleBarHelper.buildImmersiveTitleBar($r('app.string.profile_feature_settings')))
@@ -394,6 +397,6 @@ export struct FeatureSettingsPage {
       { statusBarContentColor: ImmersiveHdsTitleBarHelper.getStatusBarContentColor() },
       { statusBarContentColor: ImmersiveHdsTitleBarHelper.getStatusBarContentColor() }
     )
-    .backgroundColor($r('app.color.background'));
+    .backgroundColor(ThemeManager.getCurrentAccentBackgroundColorHex());
   }
 }

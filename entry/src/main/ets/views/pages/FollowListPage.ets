@@ -7,6 +7,7 @@ import { SmartAvatar } from '../components/SmartAvatar';
 import { RouterManager } from '../../common/utils/RouterManager';
 import { WindowManager } from '../../common/utils/WindowManager';
 import { ImmersiveHdsTitleBarHelper } from '../components/ImmersiveHdsTitleBarHelper';
+import { ThemeManager } from '../../common/theme/ThemeManager';
 
 @ComponentV2
 export struct FollowListPage {
@@ -15,23 +16,30 @@ export struct FollowListPage {
 
   @Local users: FollowUser[] = [];
   @Local isLoading: boolean = true;
+  @Local isRefreshing: boolean = false;
   @Local errorMessage: string = '';
 
   private contentScroller: Scroller = new Scroller();
 
   aboutToAppear(): void {
-    this.loadUsers();
+    this.loadUsers(false).catch(() => {
+    });
   }
 
-  private async loadUsers(): Promise<void> {
+  private async loadUsers(isRefresh: boolean = false): Promise<void> {
     const target: string = this.username.trim();
     if (target.length === 0) {
       this.errorMessage = '无效的用户名';
       this.isLoading = false;
+      this.isRefreshing = false;
       return;
     }
 
-    this.isLoading = true;
+    if (isRefresh) {
+      this.isRefreshing = true;
+    } else {
+      this.isLoading = true;
+    }
     this.errorMessage = '';
     try {
       const api: ApiClient = ApiClient.getInstance();
@@ -44,6 +52,7 @@ export struct FollowListPage {
         : '加载失败';
     } finally {
       this.isLoading = false;
+      this.isRefreshing = false;
     }
   }
 
@@ -52,13 +61,17 @@ export struct FollowListPage {
   }
 
   private getNavigationTitle(): string {
-    return `${this.username} 的${this.getTitle()}`;
+    return this.getTitle();
+  }
+
+  private getContentTopSpacerHeight(): number {
+    return ImmersiveHdsTitleBarHelper.getContentTopSpacerHeightVp();
   }
 
   build() {
     HdsNavDestination() {
       Column() {
-        Refresh({ refreshing: false }) {
+        Refresh({ refreshing: this.isRefreshing }) {
           if (this.isLoading && this.users.length === 0) {
             Column() {
               LoadingSpinner({ message: '' })
@@ -74,7 +87,8 @@ export struct FollowListPage {
                 message: this.errorMessage,
                 showRetry: true,
                 onRetry: () => {
-                  this.loadUsers();
+                  this.loadUsers(false).catch(() => {
+                  });
                 }
               })
             }
@@ -82,53 +96,59 @@ export struct FollowListPage {
             .height('100%')
             .justifyContent(FlexAlign.Center)
             .alignItems(HorizontalAlign.Center)
-          } else {
-            Scroll(this.contentScroller) {
-              Column() {
-                Blank()
-                  .height(ImmersiveHdsTitleBarHelper.getContentTopSpacerHeightVp())
-                  .width('100%')
-
-                if (!this.isLoading && this.users.length === 0) {
-                  Column() {
-                    SymbolGlyph($r('sys.symbol.person'))
-                      .fontSize(30)
-                      .fontColor([$r('app.color.on_surface_tertiary')])
-                      .margin({ bottom: 12 })
-                    Text(`暂无${this.getTitle()}`)
-                      .fontSize(14)
-                      .fontColor($r('app.color.on_surface_secondary'))
-                  }
-                  .width('100%')
-                  .padding({ top: 80, bottom: 80 })
-                  .alignItems(HorizontalAlign.Center)
-                } else {
-                  ForEach(this.users, (user: FollowUser) => {
-                    this.UserRow(user)
-                  }, (user: FollowUser) => `${user.id}_${user.username}`)
-                }
-              }
-              .width('100%')
-              .padding({ left: 16, right: 16, top: 12, bottom: 12 + WindowManager.getSystemAvoidAreaBottomVp() })
-              .alignItems(HorizontalAlign.Center)
+          } else if (!this.isLoading && this.users.length === 0) {
+            Column() {
+              SymbolGlyph($r('sys.symbol.person'))
+                .fontSize(30)
+                .fontColor([$r('app.color.on_surface_tertiary')])
+                .margin({ bottom: 12 })
+              Text(`暂无${this.getTitle()}`)
+                .fontSize(14)
+                .fontColor($r('app.color.on_surface_secondary'))
             }
             .width('100%')
             .height('100%')
-            .backgroundColor($r('app.color.background'))
+            .justifyContent(FlexAlign.Center)
+            .alignItems(HorizontalAlign.Center)
+          } else {
+            List({ scroller: this.contentScroller }) {
+              ListItem() {
+                Row()
+                  .width('100%')
+                  .height(this.getContentTopSpacerHeight())
+              }
+
+              ForEach(this.users, (user: FollowUser) => {
+                ListItem() {
+                  this.UserRow(user)
+                }
+              }, (user: FollowUser) => `${user.id}_${user.username}`)
+
+              ListItem() {
+                Row()
+                  .width('100%')
+                  .height(12 + WindowManager.getSystemAvoidAreaBottomVp())
+              }
+            }
+            .width('100%')
+            .height('100%')
+            .padding({ left: 16, right: 16, top: 12 })
+            .backgroundColor(ThemeManager.getCurrentAccentBackgroundColorHex())
             .scrollBar(BarState.Off)
             .edgeEffect(EdgeEffect.Spring)
           }
         }
         .onRefreshing(() => {
-          this.loadUsers();
+          this.loadUsers(true).catch(() => {
+          });
         })
         .layoutWeight(1)
       }
       .width('100%')
       .height('100%')
-      .backgroundColor($r('app.color.background'))
+      .backgroundColor(ThemeManager.getCurrentAccentBackgroundColorHex())
     }
-    .backgroundColor($r('app.color.background'))
+    .backgroundColor(ThemeManager.getCurrentAccentBackgroundColorHex())
     .titleMode(HdsNavDestinationTitleMode.MINI)
     .titleBar(ImmersiveHdsTitleBarHelper.buildImmersiveTitleBar(this.getNavigationTitle()))
     .hideTitleBar(false)
@@ -176,7 +196,7 @@ export struct FollowListPage {
     }
     .width('100%')
     .padding({ left: 14, right: 14, top: 14, bottom: 14 })
-    .backgroundColor($r('app.color.surface'))
+    .backgroundColor(ThemeManager.getCurrentAccentSurfaceColorHex())
     .borderRadius(16)
     .margin({ bottom: 12 })
     .alignItems(VerticalAlign.Center)

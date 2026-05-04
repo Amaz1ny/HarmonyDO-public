@@ -1,3 +1,4 @@
+import { ThemeManager } from '../../common/theme/ThemeManager';
 /**
  * 加载指示器组件
  */
@@ -10,7 +11,7 @@ export struct LoadingSpinner {
       LoadingProgress()
         .width(48)
         .height(48)
-        .color($r('app.color.primary'))
+        .color(ThemeManager.getCurrentAccentColorHex())
 
       if (this.message.length > 0) {
         Text(this.message)

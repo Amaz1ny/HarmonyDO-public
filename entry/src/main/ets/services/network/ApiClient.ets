@@ -9,7 +9,8 @@ import { SearchResult } from '../../models/SearchResult';
 import { Draft, DraftData, DraftListResponse } from '../../models/Draft';
 import { Badge, BadgeDetailResponse, UserBadgeListResponse } from '../../models/Badge';
 import { NotificationListResponse } from '../../models/Notification';
-import { Poll, Post, PostReactionState } from '../../models/Post';
+import { Poll, Post, PostBoost, PostReactionState } from '../../models/Post';
+import { NestedChildrenResponse, NestedRootsResponse } from '../../models/NestedTopic';
 import { UserActionResponse, UserReactionsResponse } from '../../models/UserAction';
 import { Emoji } from '../../models/Emoji';
 import { UploadedImage } from '../../models/UploadedImage';
@@ -493,7 +494,8 @@ export class ApiClient {
     postNumber: number = 0,
     filter: string = '',
     usernameFilters: string = '',
-    trackVisit: boolean = false
+    trackVisit: boolean = false,
+    filterTopLevelReplies: boolean = false
   ): Promise<string> {
     const params: Record<string, Object> = {};
     const f: string = filter.trim();
@@ -501,6 +503,7 @@ export class ApiClient {
     if (f.length > 0) params['filter'] = f;
     if (uf.length > 0) params['username_filters'] = uf;
     if (trackVisit) params['track_visit'] = 'true';
+    if (filterTopLevelReplies) params['filter_top_level_replies'] = 'true';
 
     const path: string = ApiConstants.topicDetail(id, postNumber > 0 ? postNumber : 0);
 
@@ -512,6 +515,52 @@ export class ApiClient {
     }
 
     return await this.http.get(path, Object.keys(params).length > 0 ? params : null, null, null, null, extraHeaders);
+  }
+
+  /**
+   * 获取树形视图根帖子
+   */
+  async getNestedRoots(
+    topicId: number,
+    sort: string = 'old',
+    page: number = 0,
+    trackVisit: boolean = false
+  ): Promise<NestedRootsResponse> {
+    const params: Record<string, Object> = {};
+    params['sort'] = sort.length > 0 ? sort : 'old';
+    params['page'] = Math.max(0, page).toString();
+    if (trackVisit) params['track_visit'] = 'true';
+
+    let extraHeaders: Record<string, string> | null = null;
+    if (trackVisit) {
+      extraHeaders = {} as Record<string, string>;
+      extraHeaders['Discourse-Track-View'] = '1';
+      extraHeaders['Discourse-Track-View-Topic-Id'] = topicId.toString();
+    }
+
+    const raw: string = await this.http.get(ApiConstants.nestedTopic(topicId), params, null, null, null, extraHeaders);
+    const json: Record<string, Object> = JSON.parse(raw) as Record<string, Object>;
+    return NestedRootsResponse.fromJson(json);
+  }
+
+  /**
+   * 获取树形视图子回复
+   */
+  async getNestedChildren(
+    topicId: number,
+    postNumber: number,
+    sort: string = 'old',
+    page: number = 0,
+    depth: number = 1
+  ): Promise<NestedChildrenResponse> {
+    const params: Record<string, Object> = {};
+    params['sort'] = sort.length > 0 ? sort : 'old';
+    params['page'] = Math.max(0, page).toString();
+    params['depth'] = Math.max(1, depth).toString();
+
+    const raw: string = await this.http.get(ApiConstants.nestedTopicChildren(topicId, postNumber), params);
+    const json: Record<string, Object> = JSON.parse(raw) as Record<string, Object>;
+    return NestedChildrenResponse.fromJson(json);
   }
 
   /**
@@ -656,6 +705,80 @@ export class ApiClient {
     }
 
     throw new Error('未知响应格式');
+  }
+
+
+  private parseBoostResponse(json: Record<string, Object>): PostBoost {
+    const boostVal = json['boost'];
+    if (boostVal !== undefined && boostVal !== null && typeof boostVal === 'object') {
+      return PostBoost.fromJson(boostVal as Record<string, Object>);
+    }
+
+    const idVal = json['id'];
+    const rawVal = json['raw'];
+    if (idVal !== undefined || rawVal !== undefined) {
+      return PostBoost.fromJson(json);
+    }
+
+    const successVal = json['success'];
+    if (successVal !== undefined && successVal !== null && successVal.toString() === 'false') {
+      const errorsVal = json['errors'];
+      if (errorsVal !== undefined && errorsVal !== null && Array.isArray(errorsVal)) {
+        const errs: Object[] = errorsVal as Object[];
+        let message: string = '';
+        for (let i = 0; i < errs.length; i++) {
+          const part: string = errs[i] !== undefined && errs[i] !== null ? errs[i].toString() : '';
+          if (part.length === 0) continue;
+          message = message.length > 0 ? `${message}
+${part}` : part;
+        }
+        throw new Error(message.length > 0 ? message : '简短回复失败');
+      }
+      throw new Error('简短回复失败');
+    }
+
+    throw new Error('未知简短回复响应');
+  }
+
+  /**
+   * 创建简短回复（discourse-boosts）
+   */
+  async createBoost(postId: number, raw: string): Promise<PostBoost> {
+    if (postId <= 0) {
+      throw new Error('无效楼层ID');
+    }
+    const text: string = raw !== undefined && raw !== null ? raw.trim() : '';
+    if (text.length === 0) {
+      throw new Error('请输入简短回复');
+    }
+
+    const form: Record<string, Object> = {};
+    form['raw'] = text;
+    const rawText: string = await this.http.postFormText(ApiConstants.postBoosts(postId), form);
+    const json: Record<string, Object> = JSON.parse(rawText) as Record<string, Object>;
+    return this.parseBoostResponse(json);
+  }
+
+  /**
+   * 获取简短回复（discourse-boosts）
+   */
+  async getBoost(boostId: number): Promise<PostBoost> {
+    if (boostId <= 0) {
+      throw new Error('无效简短回复ID');
+    }
+    const rawText: string = await this.http.get(ApiConstants.boost(boostId));
+    const json: Record<string, Object> = JSON.parse(rawText) as Record<string, Object>;
+    return this.parseBoostResponse(json);
+  }
+
+  /**
+   * 删除简短回复（discourse-boosts）
+   */
+  async deleteBoost(boostId: number): Promise<void> {
+    if (boostId <= 0) {
+      throw new Error('无效简短回复ID');
+    }
+    await this.http.delete(ApiConstants.boost(boostId));
   }
 
   /**
@@ -1121,6 +1244,66 @@ export class ApiClient {
     return SearchResult.fromJson(json);
   }
 
+  /**
+   * AI 语义搜索（Discourse AI 插件）
+   */
+  async semanticSearch(query: string): Promise<SearchResult> {
+    const params: Record<string, Object> = {};
+    params['q'] = query;
+    const raw: string = await this.http.get(ApiConstants.SEMANTIC_SEARCH, params);
+    const json: Record<string, Object> = JSON.parse(raw) as Record<string, Object>;
+    return SearchResult.fromJson(json);
+  }
+
+  /**
+   * 获取服务端最近搜索记录
+   */
+  async getRecentSearches(): Promise<string[]> {
+    try {
+      const raw: string = await this.http.get(ApiConstants.RECENT_SEARCHES);
+      const parsed: Object = JSON.parse(raw) as Object;
+      const out: string[] = [];
+
+      if (parsed !== null && parsed !== undefined && typeof parsed === 'object') {
+        const json: Record<string, Object> = parsed as Record<string, Object>;
+        const searchesVal = json['recent_searches'];
+        if (searchesVal !== undefined && searchesVal !== null && Array.isArray(searchesVal)) {
+          const arr: Object[] = searchesVal as Object[];
+          for (let i = 0; i < arr.length; i++) {
+            const item: Object = arr[i];
+            if (typeof item === 'string') {
+              const text: string = (item as string).trim();
+              if (text.length > 0) {
+                out.push(text);
+              }
+            } else if (item !== null && item !== undefined && typeof item === 'object') {
+              const itemJson: Record<string, Object> = item as Record<string, Object>;
+              const queryVal: Object | undefined = itemJson['query'] !== undefined ? itemJson['query'] : itemJson['term'];
+              if (queryVal !== undefined && queryVal !== null) {
+                const text: string = queryVal.toString().trim();
+                if (text.length > 0) {
+                  out.push(text);
+                }
+              }
+            }
+          }
+        }
+      }
+
+      return out;
+    } catch (err) {
+      hilog.error(0x0000, TAG, 'Get recent searches failed: %{public}s', JSON.stringify(err));
+      return [];
+    }
+  }
+
+  /**
+   * 清空服务端最近搜索记录
+   */
+  async clearRecentSearches(): Promise<void> {
+    await this.http.delete(ApiConstants.RECENT_SEARCHES);
+  }
+
   async getCurrentUser(): Promise<User | null> {
     if (this.hasFreshCurrentUserCache()) {
       return this.currentUserCache;
@@ -1473,6 +1656,51 @@ export class ApiClient {
     return TopicListResponse.fromJson(json);
   }
 
+  async getPrivateMessages(username: string, page: number = 0, forceRefresh: boolean = false): Promise<TopicListResponse> {
+    let params: Record<string, Object> | null = null;
+    if (page > 0) {
+      const query: Record<string, Object> = {};
+      query['page'] = page.toString();
+      params = query;
+    }
+    const path: string = ApiConstants.privateMessages(encodeURIComponent(username));
+    const raw: string = forceRefresh
+      ? await this.http.getNoCache(path, params)
+      : await this.http.get(path, params);
+    const json: Record<string, Object> = JSON.parse(raw) as Record<string, Object>;
+    return TopicListResponse.fromJson(json);
+  }
+
+  async getPrivateMessagesSent(username: string, page: number = 0, forceRefresh: boolean = false): Promise<TopicListResponse> {
+    let params: Record<string, Object> | null = null;
+    if (page > 0) {
+      const query: Record<string, Object> = {};
+      query['page'] = page.toString();
+      params = query;
+    }
+    const path: string = ApiConstants.privateMessagesSent(encodeURIComponent(username));
+    const raw: string = forceRefresh
+      ? await this.http.getNoCache(path, params)
+      : await this.http.get(path, params);
+    const json: Record<string, Object> = JSON.parse(raw) as Record<string, Object>;
+    return TopicListResponse.fromJson(json);
+  }
+
+  async getPrivateMessagesArchive(username: string, page: number = 0, forceRefresh: boolean = false): Promise<TopicListResponse> {
+    let params: Record<string, Object> | null = null;
+    if (page > 0) {
+      const query: Record<string, Object> = {};
+      query['page'] = page.toString();
+      params = query;
+    }
+    const path: string = ApiConstants.privateMessagesArchive(encodeURIComponent(username));
+    const raw: string = forceRefresh
+      ? await this.http.getNoCache(path, params)
+      : await this.http.get(path, params);
+    const json: Record<string, Object> = JSON.parse(raw) as Record<string, Object>;
+    return TopicListResponse.fromJson(json);
+  }
+
   /**
    * 获取用户动态（/user_actions.json）
    */
@@ -1590,23 +1818,41 @@ export class ApiClient {
     await this.http.post(path, JSON.stringify(body));
   }
 
-  /**
-   * 获取关注列表
-   */
-  async getFollowing(username: string): Promise<FollowUser[]> {
-    const trimmed: string = username !== undefined && username !== null ? username.trim() : '';
-    if (trimmed.length === 0) {
-      return [];
-    }
-    const path: string = ApiConstants.userFollowing(trimmed);
-    const raw: string = await this.http.get(path);
+  private parseFollowUsers(raw: string): FollowUser[] {
     const parsed: Object = JSON.parse(raw) as Object;
-    if (parsed === null || typeof parsed !== 'object') {
-      return [];
-    }
-    const root: Record<string, Object> = parsed as Record<string, Object>;
-    const usersVal = root['users'];
     const list: FollowUser[] = [];
+    if (parsed === null || parsed === undefined) {
+      return list;
+    }
+
+    if (Array.isArray(parsed)) {
+      const arr: Object[] = parsed as Object[];
+      for (let i = 0; i < arr.length; i++) {
+        const item: Object = arr[i];
+        if (item === null || item === undefined || typeof item !== 'object') {
+          continue;
+        }
+        list.push(FollowUser.fromJson(item as Record<string, Object>));
+      }
+      return list;
+    }
+
+    if (typeof parsed !== 'object') {
+      return list;
+    }
+
+    const root: Record<string, Object> = parsed as Record<string, Object>;
+    let usersVal: Object | undefined = root['users'];
+    if ((usersVal === undefined || usersVal === null) && root['following'] !== undefined) {
+      usersVal = root['following'];
+    }
+    if ((usersVal === undefined || usersVal === null) && root['followers'] !== undefined) {
+      usersVal = root['followers'];
+    }
+    if ((usersVal === undefined || usersVal === null) && root['data'] !== undefined) {
+      usersVal = root['data'];
+    }
+
     if (Array.isArray(usersVal)) {
       const arr: Object[] = usersVal as Object[];
       for (let i = 0; i < arr.length; i++) {
@@ -1621,6 +1867,19 @@ export class ApiClient {
   }
 
   /**
+   * 获取关注列表
+   */
+  async getFollowing(username: string): Promise<FollowUser[]> {
+    const trimmed: string = username !== undefined && username !== null ? username.trim() : '';
+    if (trimmed.length === 0) {
+      return [];
+    }
+    const path: string = ApiConstants.userFollowing(trimmed);
+    const raw: string = await this.http.get(path);
+    return this.parseFollowUsers(raw);
+  }
+
+  /**
    * 获取粉丝列表
    */
   async getFollowers(username: string): Promise<FollowUser[]> {
@@ -1630,24 +1889,7 @@ export class ApiClient {
     }
     const path: string = ApiConstants.userFollowers(trimmed);
     const raw: string = await this.http.get(path);
-    const parsed: Object = JSON.parse(raw) as Object;
-    if (parsed === null || typeof parsed !== 'object') {
-      return [];
-    }
-    const root: Record<string, Object> = parsed as Record<string, Object>;
-    const usersVal = root['users'];
-    const list: FollowUser[] = [];
-    if (Array.isArray(usersVal)) {
-      const arr: Object[] = usersVal as Object[];
-      for (let i = 0; i < arr.length; i++) {
-        const item: Object = arr[i];
-        if (item === null || item === undefined || typeof item !== 'object') {
-          continue;
-        }
-        list.push(FollowUser.fromJson(item as Record<string, Object>));
-      }
-    }
-    return list;
+    return this.parseFollowUsers(raw);
   }
 
   /**

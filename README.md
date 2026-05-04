@@ -40,7 +40,7 @@ LDO社区是为 [Linux.do](https://linux.do/) 社区打造的第三方鸿蒙客�
 1. 克隆仓库
 
    ```bash
-   git clone https://github.com/Amaz1ny/HarmonyDO-public.git
+   git clone https://github.com/Amaz1ny/HarmonyDo.git
    ```
 
 2. 使用 DevEco Studio 打开项目根目录
@@ -72,20 +72,26 @@ LDO社区是为 [Linux.do](https://linux.do/) 社区打造的第三方鸿蒙客�
   - 高级搜索筛选
   - 多种排序方式
   - 用户与话题结果展示
+  - 服务端最近搜索同步与清空
 
 - **话题详情**
   - 富文本内容阅读
   - 图片预览
   - 跳楼与楼层定位
+  - 热门 / 题主 / 顶层回复筛选
+  - 树形回复视图与最旧 / 最新 / 热门排序
+  - 小火箭简短回复：发布、删除、表情输入、两排折叠与同文聚合
   - 书签、稍后读、分享等常用操作
 
 - **账号与社区能力**
   - 登录态恢复
   - 个人中心
   - 他人主页
-  - 我的话题、我的徽章、浏览历史、关注列表
+  - 私信：最新、已发送与归档列表
+  - 我的话题、我的徽章、浏览历史、关注 / 粉丝列表与用户主页跳转
   - 信任要求
   - 邀请链接
+  - 外观设置：主题模式（跟随系统 / 浅色 / 深色）与预设主题色彩（含轻微背景染色），字体保持跟随系统
   
 - **创作能力**
   - 创建话题
@@ -211,7 +217,7 @@ HarmonyDO/
 - `TopicListPage` / `CategoryTopicPage` / `SearchPage`：首页话题流、分类浏览与搜索
 - `TopicDetailPage` / `ImagePreviewPage` / `WebViewPage`：话题详情、图片预览与应用内网页
 - `ProfilePage` / `UserProfilePage` / `FollowListPage`：个人中心、他人主页与关注关系页
-- `NotificationsPage` / `BookmarksPage` / `DraftsPage` / `BrowsingHistoryPage`：通知、书签、草稿与浏览历史
+- `NotificationsPage` / `PrivateMessagesPage` / `BookmarksPage` / `DraftsPage` / `BrowsingHistoryPage`：通知、私信、书签、草稿与浏览历史
 - `MyTopicsPage` / `MyBadgesPage` / `BadgeDetailPage`：我的话题、我的徽章与徽章详情
 - `LoginPage` / `CfChallengePage`：登录页与 Cloudflare 验证页
 - `TrustLevelPage` / `InviteLinksPage`：信任等级与邀请链接页
@@ -238,4 +244,4 @@ LDO社区希望为 Linux.do 社区提供更贴近鸿蒙生态的原生客户端�
 - 感谢 Linux.do 社区成员的讨论、反馈、建议与支持
 - [Linux.do](https://linux.do/)
 - [FluxDO](https://github.com/Lingyan000/fluxdo)
-- [LDO社区 / HarmonyDO-public](https://github.com/Amaz1ny/HarmonyDO-public)
+- [LDO社区 / HarmonyDo](https://github.com/Amaz1ny/HarmonyDo)

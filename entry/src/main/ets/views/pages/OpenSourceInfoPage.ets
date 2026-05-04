@@ -3,6 +3,7 @@ import { WindowManager } from '../../common/utils/WindowManager';
 import { ExternalLinkService } from '../../common/utils/ExternalLinkService';
 import { ToastService } from '../../common/utils/ToastService';
 import { ImmersiveHdsTitleBarHelper } from '../components/ImmersiveHdsTitleBarHelper';
+import { ThemeManager } from '../../common/theme/ThemeManager';
 import {
   buildOpenSourceSections,
   OpenSourceInfoItem,
@@ -28,7 +29,7 @@ export struct OpenSourceInfoPage {
     Text(title)
       .fontSize(14)
       .fontWeight(FontWeight.Bold)
-      .fontColor($r('app.color.primary'))
+      .fontColor(ThemeManager.getCurrentAccentColorHex())
       .margin({ left: 24, right: 24, top: 8, bottom: 8 });
   }
 
@@ -97,6 +98,8 @@ export struct OpenSourceInfoPage {
             }, (section: OpenSourceInfoSection) => section.title);
           }
           .width('100%')
+          .constraintSize({ minHeight: '100%' })
+          .justifyContent(FlexAlign.Start)
           .padding({ top: 12, bottom: 20 + WindowManager.getSystemAvoidAreaBottomVp() });
         }
         .scrollBar(BarState.Off)
@@ -106,9 +109,9 @@ export struct OpenSourceInfoPage {
       }
       .width('100%')
       .height('100%')
-      .backgroundColor($r('app.color.background'));
+      .backgroundColor(ThemeManager.getCurrentAccentBackgroundColorHex());
     }
-    .backgroundColor($r('app.color.background'))
+    .backgroundColor(ThemeManager.getCurrentAccentBackgroundColorHex())
     .titleMode(HdsNavDestinationTitleMode.MINI)
     .titleBar(ImmersiveHdsTitleBarHelper.buildImmersiveTitleBar('开源信息'))
     .hideTitleBar(false)

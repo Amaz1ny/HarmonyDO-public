@@ -16,6 +16,7 @@ import { PostRichContent } from './PostRichContent';
 import { Emoji } from '../../models/Emoji';
 import { ComposerImageUploadService } from '../../common/utils/ComposerImageUploadService';
 import { FeatureSettingsService } from '../../services/storage/FeatureSettingsService';
+import { ModalChromeHelper } from './ModalChromeHelper';
 
 @ComponentV2
 export struct CreateTopicComposerSheet {
@@ -726,7 +727,7 @@ export struct CreateTopicComposerSheet {
     }
     .width('100%')
     .padding({ left: 16, right: 16, top: 12, bottom: 12 })
-    .backgroundColor($r('app.color.surface_variant'))
+    .backgroundColor(ThemeManager.getCurrentAccentSurfaceVariantColorHex())
     .borderRadius(16)
     .alignItems(VerticalAlign.Center)
     .onClick(() => {
@@ -739,18 +740,18 @@ export struct CreateTopicComposerSheet {
     Row() {
       SymbolGlyph($r('sys.symbol.plus'))
         .fontSize(18)
-        .fontColor([$r('app.color.primary')])
+        .fontColor([ThemeManager.getCurrentAccentColorHex()])
         .margin({ right: 8 })
 
       Text(this.selectedTags.length > 0 ? '编辑标签' : '添加标签')
         .fontSize(14)
         .fontWeight(FontWeight.Medium)
-        .fontColor($r('app.color.primary'))
+        .fontColor(ThemeManager.getCurrentAccentColorHex())
         .layoutWeight(1)
     }
     .width('100%')
     .padding({ left: 16, right: 16, top: 12, bottom: 12 })
-    .backgroundColor($r('app.color.surface'))
+    .backgroundColor(ThemeManager.getCurrentAccentSurfaceColorHex())
     .border({ width: 1, color: $r('app.color.divider_light') })
     .borderRadius(16)
     .alignItems(VerticalAlign.Center)
@@ -769,14 +770,14 @@ export struct CreateTopicComposerSheet {
           Row() {
             Text(tag)
               .fontSize(12)
-              .fontColor($r('app.color.primary'))
+              .fontColor(ThemeManager.getCurrentAccentColorHex())
             Text('×')
               .fontSize(12)
-              .fontColor($r('app.color.primary'))
+              .fontColor(ThemeManager.getCurrentAccentColorHex())
               .margin({ left: 6 })
           }
           .padding({ left: 12, right: 10, top: 7, bottom: 7 })
-          .backgroundColor($r('app.color.badge_background_light'))
+          .backgroundColor(ThemeManager.getCurrentAccentSelectedBackgroundColorHex())
           .borderRadius(12)
           .margin({ right: 8, top: 10 })
           .onClick(() => {
@@ -864,7 +865,7 @@ export struct CreateTopicComposerSheet {
               if (this.selectedCategoryId === category.id) {
                 SymbolGlyph($r('sys.symbol.checkmark'))
                   .fontSize(16)
-                  .fontColor([$r('app.color.primary')])
+                  .fontColor([ThemeManager.getCurrentAccentColorHex()])
               }
             }
             .width('100%')
@@ -886,7 +887,7 @@ export struct CreateTopicComposerSheet {
     }
     .width('100%')
     .height('100%')
-    .backgroundColor($r('app.color.surface'))
+    .backgroundColor(ThemeManager.getCurrentAccentSurfaceColorHex())
   }
 
   @Builder
@@ -922,7 +923,8 @@ export struct CreateTopicComposerSheet {
         }
         .width('100%')
         .height('100%')
-        .backgroundColor('#66000000')
+        .backgroundColor(ModalChromeHelper.getMaskColor())
+        .backgroundBlurStyle(ModalChromeHelper.getDialogBlurStyle())
 
         Column() {
           Text('恢复草稿？')
@@ -942,7 +944,7 @@ export struct CreateTopicComposerSheet {
               .type(ButtonType.Capsule)
               .layoutWeight(1)
               .height(44)
-              .backgroundColor($r('app.color.surface_variant'))
+              .backgroundColor(ThemeManager.getCurrentAccentSurfaceVariantColorHex())
               .fontColor($r('app.color.on_surface_secondary'))
               .onClick(() => {
                 this.discardPendingRestoreDraft().catch((_: Object) => {
@@ -955,7 +957,7 @@ export struct CreateTopicComposerSheet {
               .type(ButtonType.Capsule)
               .layoutWeight(1)
               .height(44)
-              .backgroundColor($r('app.color.primary'))
+              .backgroundColor(ThemeManager.getCurrentAccentColorHex())
               .fontColor(Color.White)
               .onClick(() => {
                 this.restorePendingDraft();
@@ -966,7 +968,8 @@ export struct CreateTopicComposerSheet {
         }
         .width('88%')
         .padding({ left: 20, right: 20, top: 22, bottom: 20 })
-        .backgroundColor($r('app.color.surface'))
+        .backgroundColor(ModalChromeHelper.getDialogBackgroundColor())
+        .backgroundBlurStyle(ModalChromeHelper.getDialogBlurStyle())
         .borderRadius(24)
       }
       .width('100%')
@@ -982,7 +985,8 @@ export struct CreateTopicComposerSheet {
         }
         .width('100%')
         .height('100%')
-        .backgroundColor('#66000000')
+        .backgroundColor(ModalChromeHelper.getMaskColor())
+        .backgroundBlurStyle(ModalChromeHelper.getDialogBlurStyle())
         .onClick(() => {
           this.cancelDiscardDraft();
         })
@@ -1005,7 +1009,7 @@ export struct CreateTopicComposerSheet {
               .type(ButtonType.Capsule)
               .layoutWeight(1)
               .height(44)
-              .backgroundColor($r('app.color.surface_variant'))
+              .backgroundColor(ThemeManager.getCurrentAccentSurfaceVariantColorHex())
               .fontColor($r('app.color.on_surface_secondary'))
               .onClick(() => {
                 this.cancelDiscardDraft();
@@ -1029,7 +1033,8 @@ export struct CreateTopicComposerSheet {
         }
         .width('88%')
         .padding({ left: 20, right: 20, top: 22, bottom: 20 })
-        .backgroundColor($r('app.color.surface'))
+        .backgroundColor(ModalChromeHelper.getDialogBackgroundColor())
+        .backgroundBlurStyle(ModalChromeHelper.getDialogBlurStyle())
         .borderRadius(24)
       }
       .width('100%')
@@ -1081,7 +1086,7 @@ export struct CreateTopicComposerSheet {
             .type(ButtonType.Capsule)
             .height(42)
             .enabled(!this.isSubmitting)
-            .backgroundColor($r('app.color.primary'))
+            .backgroundColor(ThemeManager.getCurrentAccentColorHex())
             .fontColor(Color.White)
             .margin({ left: 8 })
             .onClick(() => {
@@ -1151,7 +1156,7 @@ export struct CreateTopicComposerSheet {
       }
       .width('100%')
       .height('100%')
-      .backgroundColor($r('app.color.surface'))
+      .backgroundColor(ThemeManager.getCurrentAccentSurfaceColorHex())
 
       if (this.isEmojiPanelVisible && !this.isPreview) {
         Column() {
@@ -1167,7 +1172,7 @@ export struct CreateTopicComposerSheet {
         }
         .width('100%')
         .margin({ bottom: this.getToolbarHeight() })
-        .backgroundColor($r('app.color.surface'))
+        .backgroundColor(ThemeManager.getCurrentAccentSurfaceColorHex())
       }
 
       Column() {
@@ -1208,7 +1213,7 @@ export struct CreateTopicComposerSheet {
       }
       .width('100%')
       .padding({ bottom: WindowManager.getSystemAvoidAreaBottomVp() })
-      .backgroundColor($r('app.color.surface'))
+      .backgroundColor(ThemeManager.getCurrentAccentSurfaceColorHex())
 
       Column() {
       }
@@ -1218,7 +1223,9 @@ export struct CreateTopicComposerSheet {
         detents: [SheetSize.MEDIUM, SheetSize.LARGE],
         showClose: false,
         enableFloatingDragBar: true,
-        backgroundColor: $r('app.color.surface')
+        backgroundColor: ModalChromeHelper.getSheetBackgroundColor(),
+        maskColor: ModalChromeHelper.getMaskColor(),
+        blurStyle: ModalChromeHelper.getSheetBlurStyle()
       })
 
       Column() {
@@ -1229,7 +1236,9 @@ export struct CreateTopicComposerSheet {
         detents: [SheetSize.MEDIUM, SheetSize.LARGE],
         showClose: false,
         enableFloatingDragBar: true,
-        backgroundColor: $r('app.color.surface')
+        backgroundColor: ModalChromeHelper.getSheetBackgroundColor(),
+        maskColor: ModalChromeHelper.getMaskColor(),
+        blurStyle: ModalChromeHelper.getSheetBlurStyle()
       })
 
       if (this.isLoadingDraft || this.isLoadingCategories) {
@@ -1252,6 +1261,6 @@ export struct CreateTopicComposerSheet {
     }
     .width('100%')
     .height('100%')
-    .backgroundColor($r('app.color.surface'))
+    .backgroundColor(ThemeManager.getCurrentAccentSurfaceColorHex())
   }
 }

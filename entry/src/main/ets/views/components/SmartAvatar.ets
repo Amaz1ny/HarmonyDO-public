@@ -11,6 +11,7 @@
 import { UrlUtils } from '../../common/utils/UrlUtils';
 import { PreloadedDataService } from '../../services/messagebus/PreloadedDataService';
 import { AnimatedGifImage } from './AnimatedGifImage';
+import { ThemeManager } from '../../common/theme/ThemeManager';
 
 @ComponentV2
 export struct SmartAvatar {
@@ -19,7 +20,7 @@ export struct SmartAvatar {
   @Param avatarRadius: number = -1;
   @Param fallbackText: string = '';
   @Param bgColor: string = '';
-  @Param fallbackFontColor: string | Resource = $r('app.color.primary');
+  @Param fallbackFontColor: string | Resource = ThemeManager.getCurrentAccentColorHex();
   @Param useNeutralPlaceholderResource: boolean = true;
   @Local private displayUrl: string = '';
   @Local private failedUrl: string = '';
@@ -132,7 +133,7 @@ export struct SmartAvatar {
           .width(this.avatarSize)
           .height(this.avatarSize)
           .borderRadius(this.getRadius())
-          .backgroundColor($r('app.color.badge_background_light'))
+          .backgroundColor(ThemeManager.getCurrentAccentSelectedBackgroundColorHex())
           .textAlign(TextAlign.Center)
           .fontSize(this.avatarSize * 0.45)
           .fontWeight(FontWeight.Bold)

@@ -12,6 +12,8 @@ import { PreloadedDataService } from '../../services/messagebus/PreloadedDataSer
 import { LinkCount, MentionedUser, Poll, PollOption, Post } from '../../models/Post';
 import { SmartAvatar } from './SmartAvatar';
 import { ExpandedMenuOptions, SelectionMenu } from '@kit.ArkUI';
+import { ModalChromeHelper } from './ModalChromeHelper';
+import { ThemeManager } from '../../common/theme/ThemeManager';
 
 enum RichBlockType {
   Text = 0,
@@ -3440,7 +3442,7 @@ export struct PostRichContent {
                 Text(this.getQuoteHeaderTitleText(block))
                   .fontSize(13)
                   .fontWeight(FontWeight.Medium)
-                  .fontColor($r('app.color.primary'))
+                  .fontColor(ThemeManager.getCurrentAccentColorHex())
                   .maxLines(1)
                   .textOverflow({ overflow: TextOverflow.Ellipsis })
                   .layoutWeight(1)
@@ -3516,7 +3518,7 @@ export struct PostRichContent {
         }
       }
       .width('100%')
-      .backgroundColor($r('app.color.surface_variant'))
+      .backgroundColor(ThemeManager.getCurrentAccentSurfaceVariantColorHex())
       .borderRadius({ topLeft: 4, bottomLeft: 4, topRight: 8, bottomRight: 8 })
       .borderWidth({ left: 4, top: 0, right: 0, bottom: 0 })
       .borderColor({ left: $r('app.color.on_surface_secondary') })
@@ -3710,7 +3712,7 @@ export struct PostRichContent {
       .fontColor($r('app.color.on_surface_secondary'))
       .fontWeight(FontWeight.Medium)
       .textBackgroundStyle({
-        color: $r('app.color.surface_variant'),
+        color: ThemeManager.getCurrentAccentSurfaceVariantColorHex(),
         radius: 10
       })
   }
@@ -3745,7 +3747,7 @@ export struct PostRichContent {
             })
         } else if (t.type === RichSpanTokenType.Mention) {
           Span(t.text)
-            .fontColor($r('app.color.primary'))
+            .fontColor(ThemeManager.getCurrentAccentColorHex())
             .fontWeight(FontWeight.Bold)
             .onClick(() => {
               if (t.href !== null && (t.href as string).length > 0) {
@@ -3764,7 +3766,7 @@ export struct PostRichContent {
           }
         } else if (t.type === RichSpanTokenType.FootnoteRef) {
           Span(t.text)
-            .fontColor($r('app.color.primary'))
+            .fontColor(ThemeManager.getCurrentAccentColorHex())
             .fontSize(Math.max(10, this.getHeadingFontSize(level) - 5))
             .fontWeight(FontWeight.Bold)
             .onClick(() => {
@@ -3782,12 +3784,12 @@ export struct PostRichContent {
             .fontColor($r('app.color.on_surface'))
             .fontFamily('monospace')
             .fontSize(this.getHeadingFontSize(level) - 2)
-            .backgroundColor($r('app.color.surface_variant'))
+            .backgroundColor(ThemeManager.getCurrentAccentSurfaceVariantColorHex())
         } else if (t.type === RichSpanTokenType.ClickCount) {
           this.ClickCountInline(t.text, this.getHeadingFontSize(level))
         } else if (t.href !== null && (t.href as string).length > 0) {
           Span(t.text)
-            .fontColor($r('app.color.primary'))
+            .fontColor(ThemeManager.getCurrentAccentColorHex())
             .onClick(() => {
               this.onOpenLink(t.href as string);
             })
@@ -3859,7 +3861,7 @@ export struct PostRichContent {
         }
         .width('100%')
         .padding({ left: 12, right: 12, top: 8, bottom: 8 })
-        .backgroundColor($r('app.color.surface_variant'))
+        .backgroundColor(ThemeManager.getCurrentAccentSurfaceVariantColorHex())
 
         Blank()
           .width('100%')
@@ -3880,7 +3882,7 @@ export struct PostRichContent {
                   .padding({ left: 8, right: 8, top: 12, bottom: 12 })
               }
               .width(this.getCodeLineNumberWidthVp(text))
-              .backgroundColor($r('app.color.surface_variant'))
+              .backgroundColor(ThemeManager.getCurrentAccentSurfaceVariantColorHex())
 
               Blank()
                 .width(0.5)
@@ -3919,7 +3921,7 @@ export struct PostRichContent {
                 .padding({ left: 8, right: 8, top: 12, bottom: 12 })
             }
             .width(this.getCodeLineNumberWidthVp(text))
-            .backgroundColor($r('app.color.surface_variant'))
+            .backgroundColor(ThemeManager.getCurrentAccentSurfaceVariantColorHex())
 
             Blank()
               .width(0.5)
@@ -3944,7 +3946,7 @@ export struct PostRichContent {
         }
       }
       .width('100%')
-      .backgroundColor($r('app.color.surface'))
+      .backgroundColor(ThemeManager.getCurrentAccentSurfaceColorHex())
       .border({ width: 0.5, color: $r('app.color.divider_light') })
       .borderRadius(10)
       .margin({ top: marginTop })
@@ -4058,7 +4060,7 @@ export struct PostRichContent {
             })
         } else if (t.type === RichSpanTokenType.Mention) {
           Span(t.text)
-            .fontColor($r('app.color.primary'))
+            .fontColor(ThemeManager.getCurrentAccentColorHex())
             .fontWeight(FontWeight.Medium)
             .onClick(() => {
               if (t.href !== null && (t.href as string).length > 0) {
@@ -4078,7 +4080,7 @@ export struct PostRichContent {
           }
         } else if (t.type === RichSpanTokenType.FootnoteRef) {
           Span(t.text)
-            .fontColor($r('app.color.primary'))
+            .fontColor(ThemeManager.getCurrentAccentColorHex())
             .fontSize(this.getBodySupFontSize())
             .fontWeight(FontWeight.Bold)
             .onClick(() => {
@@ -4096,12 +4098,12 @@ export struct PostRichContent {
             .fontColor($r('app.color.on_surface'))
             .fontFamily('monospace')
             .fontSize(this.getBodyFontSize() - 1)
-            .backgroundColor($r('app.color.surface_variant'))
+            .backgroundColor(ThemeManager.getCurrentAccentSurfaceVariantColorHex())
         } else if (t.type === RichSpanTokenType.ClickCount) {
           this.ClickCountInline(t.text, this.getBodyFontSize())
         } else if (t.href !== null && (t.href as string).length > 0) {
           Span(t.text)
-            .fontColor($r('app.color.primary'))
+            .fontColor(ThemeManager.getCurrentAccentColorHex())
             .onClick(() => {
               this.onOpenLink(t.href as string);
             })
@@ -4209,7 +4211,7 @@ export struct PostRichContent {
             .height(76)
             .objectFit(ImageFit.Cover)
             .borderRadius(10)
-            .backgroundColor($r('app.color.surface_variant'))
+            .backgroundColor(ThemeManager.getCurrentAccentSurfaceVariantColorHex())
         } else if (this.getOneboxIconUrl(b).length > 0) {
           Column() {
             Image(this.getOneboxIconUrl(b))
@@ -4221,7 +4223,7 @@ export struct PostRichContent {
           .height(76)
           .justifyContent(FlexAlign.Center)
           .alignItems(HorizontalAlign.Center)
-          .backgroundColor($r('app.color.surface_variant'))
+          .backgroundColor(ThemeManager.getCurrentAccentSurfaceVariantColorHex())
           .borderRadius(10)
         }
 
@@ -4235,7 +4237,7 @@ export struct PostRichContent {
               .layoutWeight(1)
               .fontSize(15)
               .fontWeight(FontWeight.Bold)
-              .fontColor($r('app.color.primary'))
+              .fontColor(ThemeManager.getCurrentAccentColorHex())
               .maxLines(2)
               .textOverflow({ overflow: TextOverflow.Ellipsis })
 
@@ -4275,7 +4277,7 @@ export struct PostRichContent {
     }
     .width('100%')
     .padding({ left: 14, right: 14, top: 12, bottom: 12 })
-    .backgroundColor($r('app.color.surface'))
+    .backgroundColor(ThemeManager.getCurrentAccentSurfaceColorHex())
     .border({ width: 1, color: this.getOneboxBorderColor() })
     .borderRadius(14)
     .margin({ top: marginTop })
@@ -4322,7 +4324,7 @@ export struct PostRichContent {
         }
         .width('100%')
         .padding({ left: 12, right: 12, top: 12, bottom: 12 })
-        .backgroundColor($r('app.color.surface_variant'))
+        .backgroundColor(ThemeManager.getCurrentAccentSurfaceVariantColorHex())
         .borderRadius(8)
         .onClick(() => {
           this.revealBlockSpoiler(b.key);
@@ -4406,7 +4408,7 @@ export struct PostRichContent {
               }
               .width(this.getTableCellWidthVp(rows))
               .padding(8)
-              .backgroundColor(cell.header ? $r('app.color.surface_variant') : $r('app.color.surface'))
+              .backgroundColor(cell.header ? ThemeManager.getCurrentAccentSurfaceVariantColorHex() : ThemeManager.getCurrentAccentSurfaceColorHex())
               .border({ width: 0.5, color: $r('app.color.divider_light') })
 
               if (cellIndex < row.cells.length - 1) {
@@ -4437,7 +4439,7 @@ export struct PostRichContent {
         Blank().layoutWeight(1)
         Text('关闭')
           .fontSize(13)
-          .fontColor($r('app.color.primary'))
+          .fontColor(ThemeManager.getCurrentAccentColorHex())
           .onClick(() => {
             this.isFootnoteSheetVisible = false;
           })
@@ -4481,7 +4483,7 @@ export struct PostRichContent {
     .width('100%')
     .height('100%')
     .padding(16)
-    .backgroundColor($r('app.color.surface'))
+    .backgroundColor(ThemeManager.getCurrentAccentSurfaceColorHex())
   }
 
   build() {
@@ -4620,7 +4622,9 @@ export struct PostRichContent {
     .bindSheet($$this.isFootnoteSheetVisible, this.FootnoteSheetBuilder, {
       height: SheetSize.MEDIUM,
       dragBar: true,
-      backgroundColor: $r('app.color.surface'),
+      backgroundColor: ModalChromeHelper.getSheetBackgroundColor(),
+      maskColor: ModalChromeHelper.getMaskColor(),
+      blurStyle: ModalChromeHelper.getSheetBlurStyle(),
       onDisappear: () => {
         this.isFootnoteSheetVisible = false;
       }
@@ -4778,7 +4782,7 @@ struct RichMathBlock {
           .height(this.getMathHeight())
           .justifyContent(FlexAlign.Center)
           .alignItems(HorizontalAlign.Center)
-          .backgroundColor($r('app.color.surface_variant'))
+          .backgroundColor(ThemeManager.getCurrentAccentSurfaceVariantColorHex())
         }
 
         if (this.hasError) {
@@ -4792,7 +4796,7 @@ struct RichMathBlock {
           .width('100%')
           .height(this.getMathHeight())
           .scrollable(ScrollDirection.Horizontal)
-          .backgroundColor($r('app.color.surface_variant'))
+          .backgroundColor(ThemeManager.getCurrentAccentSurfaceVariantColorHex())
         }
       }
       .width('100%')
@@ -4876,7 +4880,7 @@ struct RichWebEmbedBlock {
           .height(this.getEmbedHeight())
           .justifyContent(FlexAlign.Center)
           .alignItems(HorizontalAlign.Center)
-          .backgroundColor($r('app.color.surface_variant'))
+          .backgroundColor(ThemeManager.getCurrentAccentSurfaceVariantColorHex())
         }
 
         if (this.hasError) {
@@ -4887,7 +4891,7 @@ struct RichWebEmbedBlock {
               .fontColor($r('app.color.on_surface'))
             Text('浏览器打开')
               .fontSize(12)
-              .fontColor($r('app.color.primary'))
+              .fontColor(ThemeManager.getCurrentAccentColorHex())
               .margin({ top: 8 })
               .onClick(() => {
                 if (this.src.length > 0) {
@@ -4899,7 +4903,7 @@ struct RichWebEmbedBlock {
           .height(this.getEmbedHeight())
           .justifyContent(FlexAlign.Center)
           .alignItems(HorizontalAlign.Center)
-          .backgroundColor($r('app.color.surface_variant'))
+          .backgroundColor(ThemeManager.getCurrentAccentSurfaceVariantColorHex())
         }
       }
       .width('100%')
@@ -4917,7 +4921,7 @@ struct RichWebEmbedBlock {
           .textOverflow({ overflow: TextOverflow.Ellipsis })
         Text('浏览器打开')
           .fontSize(12)
-          .fontColor($r('app.color.primary'))
+          .fontColor(ThemeManager.getCurrentAccentColorHex())
           .margin({ left: 12 })
           .onClick(() => {
             if (this.src.length > 0) {
@@ -5047,7 +5051,7 @@ struct RichLazyVideoBlock {
           if (this.videoUrl.length > 0) {
             Text('打开')
               .fontSize(12)
-              .fontColor($r('app.color.primary'))
+              .fontColor(ThemeManager.getCurrentAccentColorHex())
               .margin({ left: 12 })
               .onClick(() => {
                 this.onOpenLink(this.videoUrl);
@@ -5057,7 +5061,7 @@ struct RichLazyVideoBlock {
         .width('100%')
         .padding({ left: 12, right: 12, top: 10, bottom: 10 })
         .alignItems(VerticalAlign.Center)
-        .backgroundColor($r('app.color.surface_variant'))
+        .backgroundColor(ThemeManager.getCurrentAccentSurfaceVariantColorHex())
       }
       .width('100%')
       .borderRadius(8)
@@ -5141,7 +5145,7 @@ struct RichChatTranscriptBlock {
       }
     }
     .padding({ left: 6, right: 6, top: 3, bottom: 3 })
-    .backgroundColor($r('app.color.surface'))
+    .backgroundColor(ThemeManager.getCurrentAccentSurfaceColorHex())
     .borderRadius(10)
     .border({ width: 0.5, color: $r('app.color.divider_light') })
   }
@@ -5251,7 +5255,7 @@ struct RichChatTranscriptBlock {
     }
     .width('100%')
     .padding(12)
-    .backgroundColor($r('app.color.surface_variant'))
+    .backgroundColor(ThemeManager.getCurrentAccentSurfaceVariantColorHex())
     .borderRadius(this.info.isChained ? 8 : 4)
     .borderWidth(
       this.info.isChained
@@ -5349,7 +5353,7 @@ struct RichMermaidBlock {
           .fontSize(12)
           .fontColor($r('app.color.on_surface_secondary'))
           .padding({ left: 8, right: 8, top: 4, bottom: 4 })
-          .backgroundColor($r('app.color.surface'))
+          .backgroundColor(ThemeManager.getCurrentAccentSurfaceColorHex())
           .borderRadius(6)
           .onClick(() => {
             this.showCode = !this.showCode;
@@ -5412,7 +5416,7 @@ struct RichMermaidBlock {
             .width('100%')
             .height(this.getDiagramHeight())
             .objectFit(ImageFit.Contain)
-            .backgroundColor($r('app.color.surface'))
+            .backgroundColor(ThemeManager.getCurrentAccentSurfaceColorHex())
             .onError(() => {
               this.imageFailed = true;
             })
@@ -5427,7 +5431,7 @@ struct RichMermaidBlock {
               .fontColor($r('app.color.on_surface'))
             Text('重试')
               .fontSize(12)
-              .fontColor($r('app.color.primary'))
+              .fontColor(ThemeManager.getCurrentAccentColorHex())
               .margin({ top: 8 })
               .onClick(() => {
                 this.imageFailed = false;
@@ -5438,12 +5442,12 @@ struct RichMermaidBlock {
           .height(this.getDiagramHeight())
           .justifyContent(FlexAlign.Center)
           .alignItems(HorizontalAlign.Center)
-          .backgroundColor($r('app.color.surface'))
+          .backgroundColor(ThemeManager.getCurrentAccentSurfaceColorHex())
         }
       }
     }
     .width('100%')
-    .backgroundColor($r('app.color.surface_variant'))
+    .backgroundColor(ThemeManager.getCurrentAccentSurfaceVariantColorHex())
     .borderRadius(10)
     .clip(true)
     .border({ width: 0.5, color: $r('app.color.divider_light') })
@@ -5545,7 +5549,7 @@ struct RichDetailsBlock {
       }
     }
     .width('100%')
-    .backgroundColor($r('app.color.surface_variant'))
+    .backgroundColor(ThemeManager.getCurrentAccentSurfaceVariantColorHex())
     .border({ width: 0.5, color: $r('app.color.divider_light') })
     .borderRadius(12)
     .margin({ top: this.marginTop })
@@ -5776,7 +5780,7 @@ struct RichPollBlock {
           : (danger ? $r('app.color.error') : $r('app.color.on_surface_secondary'))
       )
       .padding({ left: 10, right: 10, top: 6, bottom: 6 })
-      .backgroundColor(primary ? $r('app.color.primary') : $r('app.color.surface'))
+      .backgroundColor(primary ? ThemeManager.getCurrentAccentColorHex() : ThemeManager.getCurrentAccentSurfaceColorHex())
       .borderRadius(14)
       .border(primary ? { width: 0 } : { width: 0.5, color: $r('app.color.divider_light') })
       .onClick(() => {
@@ -5813,7 +5817,7 @@ struct RichPollBlock {
                     : (this.isMultiple() ? (this.hasVoted(option.id) ? '☑' : '☐') : (this.hasVoted(option.id) ? '◉' : '○'))
                 )
                   .fontSize(16)
-                  .fontColor(this.hasVoted(option.id) ? $r('app.color.primary') : $r('app.color.on_surface_secondary'))
+                  .fontColor(this.hasVoted(option.id) ? ThemeManager.getCurrentAccentColorHex() : $r('app.color.on_surface_secondary'))
                   .margin({ right: 10 })
 
                 Text(this.buildOptionText(option))
@@ -5826,7 +5830,7 @@ struct RichPollBlock {
                   Text(this.showPercentage ? `${Math.round(this.getOptionPercentage(option))}%` : `${option.votes}`)
                     .fontSize(12)
                     .fontWeight(FontWeight.Medium)
-                    .fontColor($r('app.color.primary'))
+                    .fontColor(ThemeManager.getCurrentAccentColorHex())
                 }
               }
               .width('100%')
@@ -5835,16 +5839,16 @@ struct RichPollBlock {
               if (this.showResults) {
                 Progress({ value: this.getOptionPercentage(option), total: 100 })
                   .height(4)
-                  .color(this.hasVoted(option.id) ? $r('app.color.primary') : $r('app.color.on_surface_tertiary'))
+                  .color(this.hasVoted(option.id) ? ThemeManager.getCurrentAccentColorHex() : $r('app.color.on_surface_tertiary'))
                   .margin({ top: 8 })
               }
             }
             .width('100%')
             .padding({ left: 12, right: 12, top: 10, bottom: 10 })
-            .backgroundColor(this.hasVoted(option.id) ? $r('app.color.badge_background_light') : $r('app.color.surface'))
+            .backgroundColor(this.hasVoted(option.id) ? ThemeManager.getCurrentAccentSelectedBackgroundColorHex() : ThemeManager.getCurrentAccentSurfaceColorHex())
             .border({
               width: 0.5,
-              color: this.hasVoted(option.id) ? $r('app.color.primary') : $r('app.color.divider_light')
+              color: this.hasVoted(option.id) ? ThemeManager.getCurrentAccentColorHex() : $r('app.color.divider_light')
             })
             .borderRadius(8)
             .margin({ top: index === 0 ? 0 : 8 })
@@ -5895,7 +5899,7 @@ struct RichPollBlock {
     }
     .width('100%')
     .padding(this.hasPollData() ? 12 : 0)
-    .backgroundColor(this.hasPollData() ? $r('app.color.surface_variant') : Color.Transparent)
+    .backgroundColor(this.hasPollData() ? ThemeManager.getCurrentAccentSurfaceVariantColorHex() : Color.Transparent)
     .border(this.hasPollData() ? { width: 0.5, color: $r('app.color.divider_light') } : { width: 0, color: Color.Transparent })
     .borderRadius(10)
     .margin({ top: this.marginTop })

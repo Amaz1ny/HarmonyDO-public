@@ -256,7 +256,7 @@ export struct BadgeDetailPage {
             }
             .width('100%')
             .height('100%')
-            .backgroundColor($r('app.color.background'))
+            .backgroundColor(ThemeManager.getCurrentAccentBackgroundColorHex())
             .scrollBar(BarState.Off)
             .edgeEffect(EdgeEffect.Spring)
           }
@@ -270,9 +270,9 @@ export struct BadgeDetailPage {
       }
       .width('100%')
       .height('100%')
-      .backgroundColor($r('app.color.background'))
+      .backgroundColor(ThemeManager.getCurrentAccentBackgroundColorHex())
     }
-    .backgroundColor($r('app.color.background'))
+    .backgroundColor(ThemeManager.getCurrentAccentBackgroundColorHex())
     .titleMode(HdsNavDestinationTitleMode.MINI)
     .titleBar(ImmersiveHdsTitleBarHelper.buildImmersiveTitleBar(this.getNavigationTitle()))
     .hideTitleBar(false)
@@ -362,7 +362,7 @@ export struct BadgeDetailPage {
         }
         .width('100%')
         .padding({ left: 12, right: 12, top: 12, bottom: 12 })
-        .backgroundColor($r('app.color.surface_variant'))
+        .backgroundColor(ThemeManager.getCurrentAccentSurfaceVariantColorHex())
         .borderRadius(16)
         .margin({ top: 14 })
         .alignItems(HorizontalAlign.Start)
@@ -389,7 +389,7 @@ export struct BadgeDetailPage {
     }
     .width('100%')
     .padding({ left: 20, right: 20, top: 24, bottom: 22 })
-    .backgroundColor($r('app.color.surface'))
+    .backgroundColor(ThemeManager.getCurrentAccentSurfaceColorHex())
     .border({
       width: 1,
       color: ThemeManager.hexWithAlpha('#A7B0BE', 0.18)
@@ -403,7 +403,7 @@ export struct BadgeDetailPage {
     Row() {
       SymbolGlyph($r('sys.symbol.person_2'))
         .fontSize(18)
-        .fontColor([$r('app.color.primary')])
+        .fontColor([ThemeManager.getCurrentAccentColorHex()])
         .margin({ right: 8 })
 
       Text('获得者')
@@ -418,7 +418,7 @@ export struct BadgeDetailPage {
         .fontWeight(FontWeight.Bold)
         .fontColor($r('app.color.on_surface_secondary'))
         .padding({ left: 8, right: 8, top: 3, bottom: 3 })
-        .backgroundColor($r('app.color.surface_variant'))
+        .backgroundColor(ThemeManager.getCurrentAccentSurfaceVariantColorHex())
         .borderRadius(12)
     }
     .width('100%')
@@ -497,7 +497,7 @@ export struct BadgeDetailPage {
           }
           .width('100%')
           .padding({ left: 10, right: 10, top: 8, bottom: 8 })
-          .backgroundColor($r('app.color.surface_variant'))
+          .backgroundColor(ThemeManager.getCurrentAccentSurfaceVariantColorHex())
           .borderRadius(12)
           .margin({ top: 10 })
           .alignItems(VerticalAlign.Center)
@@ -509,7 +509,7 @@ export struct BadgeDetailPage {
     }
     .width('100%')
     .padding({ left: 14, right: 14, top: 14, bottom: 14 })
-    .backgroundColor($r('app.color.surface'))
+    .backgroundColor(ThemeManager.getCurrentAccentSurfaceColorHex())
     .border({
       width: 1,
       color: ThemeManager.hexWithAlpha('#A7B0BE', 0.16)

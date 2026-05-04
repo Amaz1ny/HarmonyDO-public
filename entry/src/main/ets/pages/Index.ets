@@ -13,6 +13,7 @@ import { CfChallengePage } from '../views/pages/CfChallengePage';
 import { NotificationsPage } from '../views/pages/NotificationsPage';
 import { BookmarksPage } from '../views/pages/BookmarksPage';
 import { DraftsPage } from '../views/pages/DraftsPage';
+import { PrivateMessagesPage } from '../views/pages/PrivateMessagesPage';
 import { MyTopicsPage } from '../views/pages/MyTopicsPage';
 import { MyBadgesPage } from '../views/pages/MyBadgesPage';
 import { BrowsingHistoryPage } from '../views/pages/BrowsingHistoryPage';
@@ -21,6 +22,7 @@ import { InviteLinksPage } from '../views/pages/InviteLinksPage';
 import { AboutAppPage } from '../views/pages/AboutAppPage';
 import { OpenSourceInfoPage } from '../views/pages/OpenSourceInfoPage';
 import { AppLogsPage } from '../views/pages/AppLogsPage';
+import { AppearanceSettingsPage } from '../views/pages/AppearanceSettingsPage';
 import { FeatureSettingsPage } from '../views/pages/FeatureSettingsPage';
 import { DataManagementPage } from '../views/pages/DataManagementPage';
 import { CfRefreshHost } from '../views/components/CfRefreshHost';
@@ -32,6 +34,7 @@ import { TopicTrackingService } from '../services/messagebus/TopicTrackingServic
 import { PreloadedDataService } from '../services/messagebus/PreloadedDataService';
 import { NotificationTrackingService } from '../services/messagebus/NotificationTrackingService';
 import { AuthService } from '../services/auth/AuthService';
+import { AppearanceSettingsService, AppearanceSettingsState } from '../services/storage/AppearanceSettingsService';
 import { CfChallengeService } from '../services/network/CfChallengeService';
 import {
   RouterManager,
@@ -52,6 +55,7 @@ import {
   hdsMaterial
 } from '@kit.UIDesignKit';
 import { WindowManager } from '../common/utils/WindowManager';
+import { ThemeManager } from '../common/theme/ThemeManager';
 import {
   FLOATING_TAB_BAR_HEIGHT_VP,
   FLOATING_TAB_BAR_MARGIN_H_VP,
@@ -91,9 +95,12 @@ struct Index {
   @Local currentTabUsername: string = '';
   @Local showCfChallengeOverlay: boolean = false;
   @Local rootWidthVp: number = 0;
+  @Local accentColorHex: string = ThemeManager.getCurrentAccentColorHex();
+  @Local accentBackgroundColorHex: string = ThemeManager.getCurrentAccentBackgroundColorHex();
 
   private tabsController: HdsTabsController = new HdsTabsController();
   private authStateListener: (() => void) | null = null;
+  private appearanceSettingsListener: ((state: AppearanceSettingsState) => void) | null = null;
   private backgroundSessionSyncId: number = 0;
   private backgroundSessionBootstrapped: boolean = false;
   private lastBackgroundLoggedIn: boolean | null = null;
@@ -104,6 +111,7 @@ struct Index {
       this.showCfChallengeOverlay = visible;
     });
     this.attachAuthStateListener();
+    this.attachAppearanceSettingsListener();
     this.syncProfileTabUser().catch(() => {
     });
     this.syncBackgroundSessionSafely();
@@ -112,6 +120,7 @@ struct Index {
   aboutToDisappear(): void {
     CfChallengeService.getInstance().setOverlayVisibilityListener(null);
     this.detachAuthStateListener();
+    this.detachAppearanceSettingsListener();
   }
 
   private getEffectiveTabBarVisibility(): number {
@@ -162,6 +171,40 @@ struct Index {
       return FLOATING_TAB_BAR_WIDTH_MEDIUM_VP;
     }
     return FLOATING_TAB_BAR_WIDTH_LARGE_VP;
+  }
+
+  private applyAppearanceSettingsState(state: AppearanceSettingsState): void {
+    this.accentColorHex = ThemeManager.getAccentColorHex(state.accentColor);
+    this.accentBackgroundColorHex = ThemeManager.getAccentBackgroundColorHex(state.accentColor);
+  }
+
+  private attachAppearanceSettingsListener(): void {
+    if (this.appearanceSettingsListener !== null) {
+      return;
+    }
+    const service: AppearanceSettingsService = AppearanceSettingsService.getInstance();
+    this.applyAppearanceSettingsState(service.getSnapshot());
+    this.appearanceSettingsListener = (state: AppearanceSettingsState) => {
+      this.applyAppearanceSettingsState(state);
+    };
+    service.addListener(this.appearanceSettingsListener);
+    service.loadSettings().then((state: AppearanceSettingsState) => {
+      this.applyAppearanceSettingsState(state);
+    }).catch((err: Object) => {
+      hilog.warn(0x0000, TAG, 'Load appearance settings in root failed. Cause: %{public}s', JSON.stringify(err));
+    });
+  }
+
+  private detachAppearanceSettingsListener(): void {
+    if (this.appearanceSettingsListener === null) {
+      return;
+    }
+    AppearanceSettingsService.getInstance().removeListener(this.appearanceSettingsListener);
+    this.appearanceSettingsListener = null;
+  }
+
+  private getSelectedTabPillColor(): string {
+    return ThemeManager.hexWithAlpha(this.accentColorHex, WindowManager.isDarkMode() ? 0.20 : 0.12);
   }
 
   private getHdsTabsFloatingStyle(): HdsTabsFloatingStyle {
@@ -426,6 +469,8 @@ struct Index {
       BookmarksPage()
     } else if (name === RouteConstants.PAGE_DRAFTS) {
       DraftsPage()
+    } else if (name === RouteConstants.PAGE_PRIVATE_MESSAGES) {
+      PrivateMessagesPage()
     } else if (name === RouteConstants.PAGE_MY_TOPICS) {
       MyTopicsPage()
     } else if (name === RouteConstants.PAGE_MY_BADGES) {
@@ -469,6 +514,8 @@ struct Index {
       OpenSourceInfoPage()
     } else if (name === RouteConstants.PAGE_APP_LOGS) {
       AppLogsPage()
+    } else if (name === RouteConstants.PAGE_APPEARANCE_SETTINGS) {
+      AppearanceSettingsPage()
     } else if (name === RouteConstants.PAGE_FEATURE_SETTINGS) {
       FeatureSettingsPage()
     } else if (name === RouteConstants.PAGE_DATA_MANAGEMENT) {
@@ -528,7 +575,7 @@ struct Index {
       .hideToolBar(true)
       .width('100%')
       .height('100%')
-      .backgroundColor($r('app.color.background'))
+      .backgroundColor(this.accentBackgroundColorHex)
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
 
       if (this.showCfChallengeOverlay) {
@@ -540,7 +587,7 @@ struct Index {
     }
     .width('100%')
     .height('100%')
-    .backgroundColor($r('app.color.background'))
+    .backgroundColor(this.accentBackgroundColorHex)
     .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
   }
 
@@ -583,13 +630,13 @@ struct Index {
           } else {
             SymbolGlyph(selectedIcon)
               .fontSize(22)
-              .fontColor([$r('app.color.primary')])
+              .fontColor([this.accentColorHex])
           }
         }
         .width(56)
         .height(30)
         .borderRadius(15)
-        .backgroundColor($r('app.color.tab_selected_pill'))
+        .backgroundColor(this.getSelectedTabPillColor())
         .justifyContent(FlexAlign.Center)
         .alignItems(HorizontalAlign.Center)
       } else {
@@ -609,7 +656,7 @@ struct Index {
       }
       Text(label)
         .fontSize(11)
-        .fontColor(this.currentIndex === index ? $r('app.color.primary') : $r('app.color.on_surface_secondary'))
+        .fontColor(this.currentIndex === index ? this.accentColorHex : $r('app.color.on_surface_secondary'))
         .margin({ top: 2 })
     }
     .width('100%')

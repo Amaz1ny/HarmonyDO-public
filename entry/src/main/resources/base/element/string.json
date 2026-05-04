@@ -21,6 +21,30 @@
       "value": "通知"
     },
     {
+      "name": "private_messages_title",
+      "value": "私信"
+    },
+    {
+      "name": "private_messages_inbox",
+      "value": "最新"
+    },
+    {
+      "name": "private_messages_sent",
+      "value": "已发送"
+    },
+    {
+      "name": "private_messages_archive",
+      "value": "归档"
+    },
+    {
+      "name": "private_messages_empty",
+      "value": "暂无私信"
+    },
+    {
+      "name": "private_messages_load_more_failed",
+      "value": "加载更多失败，点击重试"
+    },
+    {
       "name": "tab_profile",
       "value": "我的"
     },
@@ -401,6 +425,10 @@
       "value": "我的草稿"
     },
     {
+      "name": "profile_private_messages",
+      "value": "私信"
+    },
+    {
       "name": "profile_my_badges",
       "value": "我的徽章"
     },
@@ -455,6 +483,10 @@
     {
       "name": "profile_workspace_drafts_hint",
       "value": "未完成内容"
+    },
+    {
+      "name": "profile_growth_messages_hint",
+      "value": "查看收件箱与已发送"
     },
     {
       "name": "profile_workspace_badges_hint",
@@ -847,6 +879,98 @@
     {
       "name": "invite_restriction_hint",
       "value": "仅允许该邮箱或域名的用户使用（可选）"
+    },
+    {
+      "name": "appearance_settings_section_theme_title",
+      "value": "主题模式"
+    },
+    {
+      "name": "appearance_settings_section_theme_subtitle",
+      "value": "选择应用跟随系统、浅色或深色显示"
+    },
+    {
+      "name": "appearance_settings_section_accent_title",
+      "value": "主题色彩"
+    },
+    {
+      "name": "appearance_settings_section_accent_subtitle",
+      "value": "选择应用强调色，支持多组预设色"
+    },
+    {
+      "name": "appearance_settings_accent_blue",
+      "value": "蓝色"
+    },
+    {
+      "name": "appearance_settings_accent_purple",
+      "value": "紫色"
+    },
+    {
+      "name": "appearance_settings_accent_green",
+      "value": "绿色"
+    },
+    {
+      "name": "appearance_settings_accent_orange",
+      "value": "橙色"
+    },
+    {
+      "name": "appearance_settings_accent_pink",
+      "value": "粉色"
+    },
+    {
+      "name": "appearance_settings_accent_teal",
+      "value": "青色"
+    },
+    {
+      "name": "appearance_settings_accent_red",
+      "value": "红色"
+    },
+    {
+      "name": "appearance_settings_accent_indigo",
+      "value": "靛蓝"
+    },
+    {
+      "name": "appearance_settings_accent_amber",
+      "value": "琥珀"
+    },
+    {
+      "name": "appearance_settings_accent_cyan",
+      "value": "青蓝"
+    },
+    {
+      "name": "appearance_settings_theme_mode_system",
+      "value": "跟随系统"
+    },
+    {
+      "name": "appearance_settings_theme_mode_system_subtitle",
+      "value": "根据系统深浅色自动切换"
+    },
+    {
+      "name": "appearance_settings_theme_mode_light",
+      "value": "浅色"
+    },
+    {
+      "name": "appearance_settings_theme_mode_light_subtitle",
+      "value": "始终使用浅色界面"
+    },
+    {
+      "name": "appearance_settings_theme_mode_dark",
+      "value": "深色"
+    },
+    {
+      "name": "appearance_settings_theme_mode_dark_subtitle",
+      "value": "始终使用深色界面"
+    },
+    {
+      "name": "appearance_settings_pending_note",
+      "value": "字体保持跟随系统；语言、应用图标、动态色与配色风格暂不在本版开放。"
+    },
+    {
+      "name": "appearance_settings_save_failed",
+      "value": "外观设置保存失败"
+    },
+    {
+      "name": "appearance_settings_load_failed",
+      "value": "外观设置加载失败"
     }
   ]
 }

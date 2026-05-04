@@ -5,6 +5,7 @@
  *
  * 目标：复用首页/分类页一致的“最新/默认/+”样式与菜单样式。
  */
+import { ThemeManager } from '../../common/theme/ThemeManager';
 
 // 筛选选项：游客态仅显示 最新/排行榜/热门
 export const SORT_FILTER_OPTIONS: string[] = ['最新', '排行榜', '热门'];
@@ -20,6 +21,11 @@ export struct PillMenuButton {
   @Param options: string[] = [];
   @Param menuWidth: number = 200;
   @Param rightMargin: number = 0;
+  @Param accentColorHex: string = ThemeManager.getCurrentAccentColorHex();
+  @Param accentSurfaceColorHex: string = ThemeManager.getCurrentAccentSurfaceColorHex();
+  @Param accentSurfaceVariantColorHex: string = ThemeManager.getCurrentAccentSurfaceVariantColorHex();
+  @Param accentSelectedBackgroundColorHex: string = ThemeManager.getCurrentAccentSelectedBackgroundColorHex();
+  @Param themeRevision: number = 0;
 
   // 胶囊样式（默认用于筛选栏；紧凑模式可覆盖）
   // 默认胶囊尺寸：padding(10,6) + radius(8) + font(13)
@@ -50,7 +56,7 @@ export struct PillMenuButton {
             if (this.value === opt) {
               SymbolGlyph($r('sys.symbol.checkmark'))
                 .fontSize(16)
-                .fontColor([$r('app.color.primary')])
+                .fontColor([this.accentColorHex])
             } else {
               Blank()
                 .width(16)
@@ -80,7 +86,7 @@ export struct PillMenuButton {
       }, (opt: string) => opt)
     }
     .width(this.menuWidth)
-    .backgroundColor($r('app.color.search_bar_background'))
+    .backgroundColor(this.accentSurfaceVariantColorHex)
     .borderRadius(this.menuRadius)
     .shadow({ radius: 10, color: '#22000000', offsetX: 0, offsetY: 6 })
   }
@@ -102,7 +108,7 @@ export struct PillMenuButton {
       top: this.paddingTop,
       bottom: this.paddingBottom
     })
-    .backgroundColor($r('app.color.search_bar_background'))
+    .backgroundColor(this.accentSurfaceVariantColorHex)
     .borderRadius(this.radius)
     .margin({ right: this.rightMargin })
     .alignItems(VerticalAlign.Center)
@@ -116,6 +122,8 @@ export struct PillIconButton {
   @Param rightSymbol: Resource = $r('sys.symbol.message');
   @Param symbolSize: number = 14;
   @Param rightMargin: number = 0;
+  @Param accentSurfaceColorHex: string = ThemeManager.getCurrentAccentSurfaceColorHex();
+  @Param themeRevision: number = 0;
   @Event onAction: () => void = () => {};
 
   build() {
@@ -135,7 +143,7 @@ export struct PillIconButton {
     .padding({ left: 8, right: 8 })
     .borderRadius(6)
     .border({ width: 1, color: $r('app.color.divider_light') })
-    .backgroundColor($r('app.color.surface'))
+    .backgroundColor(this.accentSurfaceColorHex)
     .margin({ right: this.rightMargin })
     .onClick(() => {
       this.onAction();

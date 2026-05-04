@@ -2,6 +2,8 @@ import { StickerGroup, StickerGroupDetail, StickerItem } from '../../models/Stic
 import { StickerMarketService } from '../../services/network/StickerMarketService';
 import { ComposerStickerPreferences } from '../../services/storage/ComposerStickerPreferences';
 import { ComposerStickerMarketSheet } from './ComposerStickerMarketSheet';
+import { ModalChromeHelper } from './ModalChromeHelper';
+import { ThemeManager } from '../../common/theme/ThemeManager';
 
 class StickerTabItem {
   key: string = '';
@@ -281,7 +283,7 @@ export struct ComposerStickerPanel {
         SymbolGlyph($r('sys.symbol.clock'))
           .fontSize(16)
           .fontColor([this.selectedGroupKey === tab.key
-            ? $r('app.color.primary')
+            ? ThemeManager.getCurrentAccentColorHex()
             : $r('app.color.on_surface_secondary')])
       }
       .width(24)
@@ -300,7 +302,7 @@ export struct ComposerStickerPanel {
           .fontSize(14)
           .fontWeight(FontWeight.Medium)
           .fontColor(this.selectedGroupKey === tab.key
-            ? $r('app.color.primary')
+            ? ThemeManager.getCurrentAccentColorHex()
             : $r('app.color.on_surface_secondary'))
       }
       .width(24)
@@ -335,15 +337,15 @@ export struct ComposerStickerPanel {
                 .fontSize(12)
                 .fontWeight(this.selectedGroupKey === tab.key ? FontWeight.Medium : FontWeight.Regular)
                 .fontColor(this.selectedGroupKey === tab.key
-                  ? $r('app.color.primary')
+                  ? ThemeManager.getCurrentAccentColorHex()
                   : $r('app.color.on_surface_secondary'))
                 .margin({ left: 6 })
                 .maxLines(1)
             }
             .padding({ left: 10, right: 12, top: 8, bottom: 8 })
             .backgroundColor(this.selectedGroupKey === tab.key
-              ? $r('app.color.badge_background_light')
-              : $r('app.color.surface_variant'))
+              ? ThemeManager.getCurrentAccentSelectedBackgroundColorHex()
+              : ThemeManager.getCurrentAccentSurfaceVariantColorHex())
             .borderRadius(18)
             .margin({ right: 8 })
             .onClick(() => {
@@ -365,7 +367,7 @@ export struct ComposerStickerPanel {
         Row() {
           SymbolGlyph($r('sys.symbol.plus_circle'))
             .fontSize(18)
-            .fontColor([$r('app.color.primary')])
+            .fontColor([ThemeManager.getCurrentAccentColorHex()])
         }
         .width(40)
         .height(40)
@@ -450,7 +452,7 @@ export struct ComposerStickerPanel {
         .type(ButtonType.Capsule)
         .height(36)
         .margin({ top: 12 })
-        .backgroundColor($r('app.color.primary'))
+        .backgroundColor(ThemeManager.getCurrentAccentColorHex())
         .fontColor(Color.White)
         .onClick(() => {
           this.isMarketSheetVisible = true;
@@ -473,7 +475,7 @@ export struct ComposerStickerPanel {
         .type(ButtonType.Capsule)
         .height(36)
         .margin({ top: 12 })
-        .backgroundColor($r('app.color.primary'))
+        .backgroundColor(ThemeManager.getCurrentAccentColorHex())
         .fontColor(Color.White)
         .onClick(() => {
           this.loadSubscribedGroups().catch((_: Object) => {
@@ -509,7 +511,8 @@ export struct ComposerStickerPanel {
         }
         .width('100%')
         .height('100%')
-        .backgroundColor('#66000000')
+        .backgroundColor(ModalChromeHelper.getMaskColor())
+        .backgroundBlurStyle(ModalChromeHelper.getDialogBlurStyle())
         .onClick(() => {
           this.hideStickerPreview();
         })
@@ -537,7 +540,8 @@ export struct ComposerStickerPanel {
         }
         .width(220)
         .padding({ left: 16, right: 16, top: 18, bottom: 16 })
-        .backgroundColor($r('app.color.surface'))
+        .backgroundColor(ModalChromeHelper.getDialogBackgroundColor())
+        .backgroundBlurStyle(ModalChromeHelper.getDialogBlurStyle())
         .borderRadius(24)
         .shadow({ radius: 18, color: '#26000000', offsetX: 0, offsetY: 10 })
         .onClick(() => {
@@ -582,7 +586,9 @@ export struct ComposerStickerPanel {
           height: SheetSize.LARGE,
           dragBar: false,
           showClose: false,
-          backgroundColor: $r('app.color.surface')
+          backgroundColor: ModalChromeHelper.getSheetBackgroundColor(),
+          maskColor: ModalChromeHelper.getMaskColor(),
+          blurStyle: ModalChromeHelper.getSheetBlurStyle()
         })
       }
       .width('100%')
@@ -592,6 +598,6 @@ export struct ComposerStickerPanel {
     }
     .width('100%')
     .height(this.panelHeight)
-    .backgroundColor($r('app.color.surface'))
+    .backgroundColor(ThemeManager.getCurrentAccentSurfaceColorHex())
   }
 }

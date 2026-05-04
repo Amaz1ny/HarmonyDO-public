@@ -12,6 +12,8 @@ import { ReplyComposerSheet } from '../components/ReplyComposerSheet';
 import { PrivateMessageComposerSheet } from '../components/PrivateMessageComposerSheet';
 import { CreateTopicComposerSheet } from '../components/CreateTopicComposerSheet';
 import { ImmersiveHdsTitleBarHelper } from '../components/ImmersiveHdsTitleBarHelper';
+import { ModalChromeHelper } from '../components/ModalChromeHelper';
+import { ThemeManager } from '../../common/theme/ThemeManager';
 
 @ComponentV2
 export struct DraftsPage {
@@ -310,7 +312,7 @@ export struct DraftsPage {
                   if (this.loadMoreFailed) {
                     Text('加载更多失败，点击重试')
                       .fontSize(13)
-                      .fontColor($r('app.color.primary'))
+                      .fontColor(ThemeManager.getCurrentAccentColorHex())
                       .width('100%')
                       .textAlign(TextAlign.Center)
                       .padding({ top: 12, bottom: 12 })
@@ -339,12 +341,14 @@ export struct DraftsPage {
                   }
                 }
                 .width('100%')
+                .constraintSize({ minHeight: '100%' })
+                .justifyContent(FlexAlign.Start)
                 .alignItems(HorizontalAlign.Center)
               }
               .width('100%')
               .height('100%')
               .padding({ left: 16, right: 16, top: 12, bottom: 12 + WindowManager.getSystemAvoidAreaBottomVp() })
-              .backgroundColor($r('app.color.background'))
+              .backgroundColor(ThemeManager.getCurrentAccentBackgroundColorHex())
               .scrollBar(BarState.Off)
               .onReachEnd(() => {
                 this.loadDrafts(false, false).catch(() => {
@@ -360,7 +364,7 @@ export struct DraftsPage {
         }
         .width('100%')
         .height('100%')
-        .backgroundColor($r('app.color.background'))
+        .backgroundColor(ThemeManager.getCurrentAccentBackgroundColorHex())
 
         this.DeleteConfirmOverlay()
 
@@ -372,7 +376,9 @@ export struct DraftsPage {
           height: SheetSize.LARGE,
           dragBar: false,
           showClose: false,
-          backgroundColor: $r('app.color.surface')
+          backgroundColor: ModalChromeHelper.getSheetBackgroundColor(),
+          maskColor: ModalChromeHelper.getMaskColor(),
+          blurStyle: ModalChromeHelper.getSheetBlurStyle()
         })
 
         Column() {
@@ -383,7 +389,9 @@ export struct DraftsPage {
           height: SheetSize.LARGE,
           dragBar: false,
           showClose: false,
-          backgroundColor: $r('app.color.surface')
+          backgroundColor: ModalChromeHelper.getSheetBackgroundColor(),
+          maskColor: ModalChromeHelper.getMaskColor(),
+          blurStyle: ModalChromeHelper.getSheetBlurStyle()
         })
 
         Column() {
@@ -394,11 +402,13 @@ export struct DraftsPage {
           height: SheetSize.LARGE,
           dragBar: false,
           showClose: false,
-          backgroundColor: $r('app.color.surface')
+          backgroundColor: ModalChromeHelper.getSheetBackgroundColor(),
+          maskColor: ModalChromeHelper.getMaskColor(),
+          blurStyle: ModalChromeHelper.getSheetBlurStyle()
         })
       }
     }
-    .backgroundColor($r('app.color.background'))
+    .backgroundColor(ThemeManager.getCurrentAccentBackgroundColorHex())
     .titleMode(HdsNavDestinationTitleMode.MINI)
     .titleBar(ImmersiveHdsTitleBarHelper.buildImmersiveTitleBar($r('app.string.profile_my_drafts')))
     .hideTitleBar(false)
@@ -427,9 +437,9 @@ export struct DraftsPage {
         Row() {
           Text(this.getDraftTypeLabel(draft))
             .fontSize(11)
-            .fontColor($r('app.color.primary'))
+            .fontColor(ThemeManager.getCurrentAccentColorHex())
             .padding({ left: 8, right: 8, top: 3, bottom: 3 })
-            .backgroundColor($r('app.color.badge_background_light'))
+            .backgroundColor(ThemeManager.getCurrentAccentSelectedBackgroundColorHex())
             .borderRadius(10)
 
           if (draft.updatedAt !== null) {
@@ -462,9 +472,9 @@ export struct DraftsPage {
           Text('继续编辑')
             .fontSize(12)
             .fontWeight(FontWeight.Medium)
-            .fontColor($r('app.color.primary'))
+            .fontColor(ThemeManager.getCurrentAccentColorHex())
             .padding({ left: 8, right: 8, top: 4, bottom: 4 })
-            .backgroundColor($r('app.color.badge_background_light'))
+            .backgroundColor(ThemeManager.getCurrentAccentSelectedBackgroundColorHex())
             .borderRadius(10)
             .onClick(() => {
               this.openDraft(draft).catch(() => {
@@ -492,7 +502,7 @@ export struct DraftsPage {
     }
     .width('100%')
     .padding({ left: 14, right: 14, top: 14, bottom: 14 })
-    .backgroundColor($r('app.color.surface'))
+    .backgroundColor(ThemeManager.getCurrentAccentSurfaceColorHex())
     .borderRadius(16)
     .margin({ bottom: 12 })
     .alignItems(VerticalAlign.Top)
@@ -506,7 +516,8 @@ export struct DraftsPage {
         }
         .width('100%')
         .height('100%')
-        .backgroundColor('#66000000')
+        .backgroundColor(ModalChromeHelper.getMaskColor())
+        .backgroundBlurStyle(ModalChromeHelper.getDialogBlurStyle())
         .onClick(() => {
           this.dismissDeleteConfirm();
         })
@@ -539,7 +550,7 @@ export struct DraftsPage {
               .layoutWeight(1)
               .height(44)
               .enabled(this.deletingDraftKey.length === 0)
-              .backgroundColor($r('app.color.surface_variant'))
+              .backgroundColor(ThemeManager.getCurrentAccentSurfaceVariantColorHex())
               .fontColor($r('app.color.on_surface_secondary'))
               .onClick(() => {
                 this.dismissDeleteConfirm();
@@ -565,7 +576,8 @@ export struct DraftsPage {
         .width('84%')
         .constraintSize({ maxWidth: 420 })
         .padding({ left: 20, right: 20, top: 20, bottom: 20 })
-        .backgroundColor($r('app.color.surface'))
+        .backgroundColor(ModalChromeHelper.getDialogBackgroundColor())
+        .backgroundBlurStyle(ModalChromeHelper.getDialogBlurStyle())
         .borderRadius(22)
         .shadow({ radius: 18, color: '#26000000', offsetX: 0, offsetY: 10 })
       }

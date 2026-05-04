@@ -9,6 +9,7 @@ import { InviteLinkDetails, InviteLinkResponse } from '../../models/InviteLink';
 import { TimeUtils } from '../../common/utils/TimeUtils';
 import { AppConstants } from '../../common/constants/AppConstants';
 import { ImmersiveHdsTitleBarHelper } from '../components/ImmersiveHdsTitleBarHelper';
+import { ThemeManager } from '../../common/theme/ThemeManager';
 
 const TAG: string = 'InviteLinksPage';
 const PAGE_HORIZONTAL_PADDING: number = 16;
@@ -268,9 +269,9 @@ export struct InviteLinksPage {
         Text('L3+')
           .fontSize(11)
           .fontWeight(FontWeight.Medium)
-          .fontColor($r('app.color.primary'))
+          .fontColor(ThemeManager.getCurrentAccentColorHex())
           .padding({ left: 10, right: 10, top: 5, bottom: 5 })
-          .backgroundColor($r('app.color.badge_background_light'))
+          .backgroundColor(ThemeManager.getCurrentAccentSelectedBackgroundColorHex())
           .borderRadius(12)
       }
       .width('100%')
@@ -296,7 +297,7 @@ export struct InviteLinksPage {
       .width('100%')
       .padding({ left: 14, right: 14, top: 14, bottom: 14 })
       .margin({ top: 16 })
-      .backgroundColor($r('app.color.surface_variant'))
+      .backgroundColor(ThemeManager.getCurrentAccentSurfaceVariantColorHex())
       .borderRadius(18)
       .border({ width: 1, color: $r('app.color.divider_light') })
 
@@ -334,11 +335,11 @@ export struct InviteLinksPage {
         Text(this.showAdvancedOptions ? $r('app.string.invite_collapse_options') : $r('app.string.invite_expand_options'))
           .fontSize(13)
           .fontWeight(FontWeight.Medium)
-          .fontColor($r('app.color.primary'))
+          .fontColor(ThemeManager.getCurrentAccentColorHex())
         Blank().layoutWeight(1)
         SymbolGlyph(this.showAdvancedOptions ? $r('sys.symbol.chevron_up') : $r('sys.symbol.chevron_down'))
           .fontSize(14)
-          .fontColor([$r('app.color.primary')])
+          .fontColor([ThemeManager.getCurrentAccentColorHex()])
       }
       .width('100%')
       .margin({ top: 14 })
@@ -377,7 +378,7 @@ export struct InviteLinksPage {
           placeholder: $r('app.string.invite_description')
         })
           .maxLength(100)
-          .backgroundColor($r('app.color.surface_variant'))
+          .backgroundColor(ThemeManager.getCurrentAccentSurfaceVariantColorHex())
           .borderRadius(CARD_INNER_RADIUS)
           .border({ width: 1, color: $r('app.color.input_border') })
           .padding({ left: 12, right: 12 })
@@ -404,7 +405,7 @@ export struct InviteLinksPage {
           text: this.emailText,
           placeholder: $r('app.string.invite_restriction_hint')
         })
-          .backgroundColor($r('app.color.surface_variant'))
+          .backgroundColor(ThemeManager.getCurrentAccentSurfaceVariantColorHex())
           .borderRadius(CARD_INNER_RADIUS)
           .border({ width: 1, color: $r('app.color.input_border') })
           .padding({ left: 12, right: 12 })
@@ -439,7 +440,7 @@ export struct InviteLinksPage {
         }
         .width('100%')
         .padding({ left: 14, right: 14, top: 12, bottom: 12 })
-        .backgroundColor($r('app.color.surface_variant'))
+        .backgroundColor(ThemeManager.getCurrentAccentSurfaceVariantColorHex())
         .borderRadius(CARD_INNER_RADIUS)
         .border({ width: 1, color: $r('app.color.divider_light') })
       }
@@ -504,13 +505,13 @@ export struct InviteLinksPage {
     Text(label)
       .fontSize(13)
       .fontWeight(this.selectedExpiryPreset === index ? FontWeight.Medium : FontWeight.Regular)
-      .fontColor(this.selectedExpiryPreset === index ? $r('app.color.primary') : $r('app.color.on_surface_secondary'))
+      .fontColor(this.selectedExpiryPreset === index ? ThemeManager.getCurrentAccentColorHex() : $r('app.color.on_surface_secondary'))
       .padding({ left: 12, right: 12, top: 8, bottom: 8 })
-      .backgroundColor(this.selectedExpiryPreset === index ? $r('app.color.badge_background_light') : $r('app.color.surface_variant'))
+      .backgroundColor(this.selectedExpiryPreset === index ? ThemeManager.getCurrentAccentSelectedBackgroundColorHex() : $r('app.color.surface_variant'))
       .borderRadius(12)
       .border({
         width: 1,
-        color: this.selectedExpiryPreset === index ? $r('app.color.primary') : $r('app.color.divider_light')
+        color: this.selectedExpiryPreset === index ? ThemeManager.getCurrentAccentColorHex() : $r('app.color.divider_light')
       })
       .margin({ right: 8, bottom: 8 })
       .onClick(() => {
@@ -528,13 +529,13 @@ export struct InviteLinksPage {
       Text(value)
         .fontSize(12)
         .fontWeight(FontWeight.Medium)
-        .fontColor(emphasized ? $r('app.color.primary') : $r('app.color.on_surface'))
+        .fontColor(emphasized ? ThemeManager.getCurrentAccentColorHex() : $r('app.color.on_surface'))
         .margin({ top: 4 })
         .maxLines(2)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
     }
     .padding({ left: 12, right: 12, top: 10, bottom: 10 })
-    .backgroundColor($r('app.color.surface_variant'))
+    .backgroundColor(ThemeManager.getCurrentAccentSurfaceVariantColorHex())
     .borderRadius(14)
     .border({ width: 1, color: $r('app.color.divider_light') })
     .layoutWeight(1)
@@ -601,7 +602,7 @@ export struct InviteLinksPage {
       .width('100%')
       .padding({ left: 14, right: 14, top: 14, bottom: 14 })
       .margin({ top: 16 })
-      .backgroundColor($r('app.color.surface_variant'))
+      .backgroundColor(ThemeManager.getCurrentAccentSurfaceVariantColorHex())
       .borderRadius(18)
       .border({ width: 1, color: $r('app.color.divider_light') })
 
@@ -625,7 +626,7 @@ export struct InviteLinksPage {
         })
           .layoutWeight(1)
           .height(40)
-          .backgroundColor($r('app.color.surface_variant'))
+          .backgroundColor(ThemeManager.getCurrentAccentSurfaceVariantColorHex())
           .fontColor($r('app.color.on_surface'))
           .borderRadius(20)
           .onClick(() => {
@@ -701,11 +702,14 @@ export struct InviteLinksPage {
 
         Blank().height(32)
       }
+      .width('100%')
+      .constraintSize({ minHeight: '100%' })
       .padding({
         left: PAGE_HORIZONTAL_PADDING,
         right: PAGE_HORIZONTAL_PADDING,
         bottom: 16 + WindowManager.getSystemAvoidAreaBottomVp()
       })
+      .justifyContent(FlexAlign.Start)
     }
     .scrollBar(BarState.Off)
     .edgeEffect(EdgeEffect.Spring)
@@ -720,9 +724,9 @@ export struct InviteLinksPage {
       }
       .width('100%')
       .height('100%')
-      .backgroundColor($r('app.color.background'))
+      .backgroundColor(ThemeManager.getCurrentAccentBackgroundColorHex())
     }
-    .backgroundColor($r('app.color.background'))
+    .backgroundColor(ThemeManager.getCurrentAccentBackgroundColorHex())
     .titleMode(HdsNavDestinationTitleMode.MINI)
     .titleBar(ImmersiveHdsTitleBarHelper.buildImmersiveTitleBar($r('app.string.invite_page_title')))
     .hideTitleBar(false)

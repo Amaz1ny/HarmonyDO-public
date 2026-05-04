@@ -705,6 +705,8 @@ export struct TrustLevelPage {
                   .width('100%')
               }
               .width('100%')
+              .constraintSize({ minHeight: '100%' })
+              .justifyContent(FlexAlign.Start)
             }
             .width('100%')
             .height('100%')
@@ -720,7 +722,7 @@ export struct TrustLevelPage {
       .width('100%')
       .height('100%')
     }
-    .backgroundColor($r('app.color.background'))
+    .backgroundColor(ThemeManager.getCurrentAccentBackgroundColorHex())
     .titleMode(HdsNavDestinationTitleMode.MINI)
     .titleBar(ImmersiveHdsTitleBarHelper.buildImmersiveTitleBar($r('app.string.trust_level_page_title')))
     .hideTitleBar(false)
@@ -809,7 +811,7 @@ export struct TrustLevelPage {
           this.RingsContent(data.rings)
         }
         .width('100%')
-        .backgroundColor($r('app.color.surface'))
+        .backgroundColor(ThemeManager.getCurrentAccentSurfaceColorHex())
         .borderRadius(16)
         .shadow({ radius: 8, color: $r('app.color.shadow_light'), offsetX: 0, offsetY: 2 })
       }
@@ -827,7 +829,7 @@ export struct TrustLevelPage {
           this.BarsContent(data.bars)
         }
         .width('100%')
-        .backgroundColor($r('app.color.surface'))
+        .backgroundColor(ThemeManager.getCurrentAccentSurfaceColorHex())
         .borderRadius(16)
         .shadow({ radius: 8, color: $r('app.color.shadow_light'), offsetX: 0, offsetY: 2 })
       }
@@ -845,7 +847,7 @@ export struct TrustLevelPage {
           this.ComplianceContent(data.quotas, data.vetos)
         }
         .width('100%')
-        .backgroundColor($r('app.color.surface'))
+        .backgroundColor(ThemeManager.getCurrentAccentSurfaceColorHex())
         .borderRadius(16)
         .shadow({ radius: 8, color: $r('app.color.shadow_light'), offsetX: 0, offsetY: 2 })
       }
