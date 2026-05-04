@@ -4,6 +4,7 @@
 
 ## 2026.05.04
 
+- **09:34** `chore(default-branch): 核对 GitHub 远端 HEAD 后确认 https://github.com/Amaz1ny/HarmonyDo 的默认分支为 opensource，而 main 只是普通分支；本轮改为将当前本地完整提交历史快进推送到默认分支 origin/opensource，并准备把本地后续工作分支切到 opensource 跟踪远端默认分支。next: 后续提交默认走 opensource；如仍需保留 main 仅作为普通同步分支，需显式说明，否则不再把 main 当默认发布分支。`
 - **09:22** `chore(repo-target-migration): 按要求将项目后续提交目标从公开仓库 https://github.com/Amaz1ny/HarmonyDO-public 迁移到 https://github.com/Amaz1ny/HarmonyDo：README 的 clone 与致谢仓库链接改为 HarmonyDo，AppConstants 的 SOURCE_CODE_URL / ISSUES_URL 同步改为 HarmonyDo；用户确认当前大量未提交改动均为预期，准备统一提交并推送到新仓库。build: hvigorw assembleHap BUILD SUCCESSFUL（35 s 334 ms，仅既有 warn）。next: 完成本轮全量未提交文件 commit 并推送到 https://github.com/Amaz1ny/HarmonyDo；后续继续只向 HarmonyDo 推送，不再推送 HarmonyDO-public。`
 - **08:53** `fix(composer-emoji-panel-layout): 修复通用表情面板“最近”分组少量表情时从面板中部开始排列的问题：ComposerEmojiPanel 的 EmojiGrid 滚动内容列补齐 minHeight=100% 与 Start 对齐，避免 Scroll 内容短于可视区域时被居中；该组件被短回复、回复话题、创建话题的 ComposerEmojiStickerPanel 共用，因此三处表情面板同步修复。build: hvigorw assembleHap BUILD SUCCESSFUL（31 s 109 ms，仅既有 warn）。next: 真机分别复测短回复、回帖、发帖的表情面板：最近分组只有 1 个或少量表情时应从左上开始排列；其它表情分组和搜索结果仍应正常滚动。`
 - **08:45** `fix(topic-detail-short-reply-counter): 修复短回复键盘态字数计数仍被输入法工具栏遮挡：移除小火箭输入器下方独立计数行，新增 BoostInputCounter 并放入同一键盘安全工具条，布局顺序调整为“表情按钮 / 输入框 / 计数 / 发送按钮”，确保键盘弹起时所有关键控件一起可见，底部只保留非关键安全区与表情面板空间。build: hvigorw assembleHap BUILD SUCCESSFUL（32 s 172 ms，仅既有 warn）。next: 真机复测短回复键盘态：计数 0/16、16/16 不应再被输入法工具栏遮住；同时确认窄屏下输入框仍可正常输入与提交。`
