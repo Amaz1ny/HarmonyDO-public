@@ -25,6 +25,8 @@ const TITLE_BAR_SCROLL_EFFECT_END_OFFSET_VP: number = 56;
 const TITLE_BAR_HEIGHT_MINI_VP: number = 56;
 const TITLE_BAR_MASK_EXTRA_HEIGHT_VP: number = 20;
 const TITLE_BAR_BLUR_RADIUS: number = 22;
+const TITLE_BAR_TRANSLUCENT_LIGHT: string = '#CCFFFFFF';
+const TITLE_BAR_TRANSLUCENT_DARK: string = '#B31B1D22';
 const LIGHT_STATUS_BAR_CONTENT_COLOR: string = '#FF1A1A1A';
 const DARK_STATUS_BAR_CONTENT_COLOR: string = '#FFE0E0E0';
 
@@ -50,6 +52,10 @@ export class ImmersiveHdsTitleBarHelper {
       textColor: $r('app.color.on_surface')
     };
     return iconItemStyle;
+  }
+
+  private static getTitleBarBackgroundColor(): string {
+    return WindowManager.isDarkMode() ? TITLE_BAR_TRANSLUCENT_DARK : TITLE_BAR_TRANSLUCENT_LIGHT;
   }
 
   private static buildContentStyle(includeMenuStyle: boolean): HdsTitleBarContentStyle {
@@ -82,7 +88,7 @@ export class ImmersiveHdsTitleBarHelper {
       let backgroundStyle: HdsNavigationBackgroundStyle;
       if (includeMaskStyle) {
         backgroundStyle = {
-          backgroundColor: Color.Transparent,
+          backgroundColor: ImmersiveHdsTitleBarHelper.getTitleBarBackgroundColor(),
           maskExtraHeight: TITLE_BAR_MASK_EXTRA_HEIGHT_VP,
           blurRadius: TITLE_BAR_BLUR_RADIUS
         };
@@ -118,7 +124,7 @@ export class ImmersiveHdsTitleBarHelper {
 
   private static buildSystemMaterialParams(): SystemMaterialParams {
     const systemMaterialParams: SystemMaterialParams = {
-      materialType: hdsMaterial.MaterialType.ADAPTIVE,
+      materialType: hdsMaterial.MaterialType.IMMERSIVE,
       materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
     };
     return systemMaterialParams;
@@ -148,6 +154,7 @@ export class ImmersiveHdsTitleBarHelper {
     const style: TitleBarStyleOptions = {
       originalStyle: ImmersiveHdsTitleBarHelper.buildTitleBarStyle(false, false, false),
       scrollEffectStyle: ImmersiveHdsTitleBarHelper.buildTitleBarStyle(false, false, false),
+      systemMaterialEffect: ImmersiveHdsTitleBarHelper.buildSystemMaterialParams(),
       thermoCtrl: true
     };
     const titleBarOptions: HdsNavigationTitleBarOptions = {
